@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>استمارة التقديم</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <section class="hero">
+    <div class="hero-card">
+      <div class="von-mark">
+        <img class="von-image" src="von.png" alt="Von Marokko nach Deutschland">
+      </div>
+
+      <span class="badge">🇩🇪 عرض خاص لحاملي B1 / B2 نحو ألمانيا</span>
+      <h1>اش بان لك تمشي المانيا ب 400 درهم</h1>
+      <p class="subtitle">
+        خدمة موجهة للناس اللي عندهم <strong>B1 أو B2 فالألمانية</strong>
+        وكيقلبو على تكوين مهني وفرص مناسبة فألمانيا.
+      </p>
+
+      <div class="features">
+        <p>✅ تصحيح مجاني ديال السيرة الذاتية والملف كامل</p>
+        <p>✅ نموذج Anschreiben مناسب للبروفايل ديالك</p>
+        <p>✅ اختيار الشركات المناسبة بشكل مركز</p>
+        <p>✅ إرسال منظم ومكثف ديال الطلبات باسمك</p>
+      </div>
+
+      <div class="packs">
+        <div class="pack">
+          <h3>باك 500</h3>
+          <p><strong>200 درهم</strong></p>
+        </div>
+        <div class="pack popular">
+          <h3>باك 1000</h3>
+          <p><strong>400 درهم</strong></p>
+        </div>
+      </div>
+
+      <p class="guarantee">
+        🛡️ إلا ما كان حتى تفاعل أولي، كنزيدو دفعة إضافية مركزة فابور.
+      </p>
+    </div>
+  </section>
+
+  <section class="form-section" id="contact">
+    <main class="page-shell">
+      <section class="form-panel">
+        <div class="panel-copy">
+          <p class="eyebrow">الحجز</p>
+          <h2>عمّر الاستمارة وخلي فريقنا يتكلف بالباقي</h2>
+          <p class="intro">
+            دخل معلوماتك، اختار الباقة المناسبة، ورفع الوثائق ديالك باش نبداو الخدمة بشكل منظم وسريع.
+          </p>
+        </div>
+
+        <form id="candidate-form" class="candidate-form" novalidate>
+          <label class="field">
+            <span>الاسم الكامل</span>
+            <input type="text" id="fullName" name="fullName" placeholder="أدخل الاسم الكامل" required>
+          </label>
+
+          <label class="field">
+            <span>البريد الإلكتروني</span>
+            <input type="email" id="email" name="email" placeholder="name@example.com" required>
+          </label>
+
+          <label class="field">
+            <span>رقم واتساب</span>
+            <input type="tel" id="whatsapp" name="whatsapp" placeholder="+212 600000000" required>
+          </label>
+
+          <label class="field">
+            <span>البنك</span>
+            <select id="bank" name="bank" required>
+              <option value="">اختر البنك</option>
+              <option value="البنك الشعبي">البنك الشعبي</option>
+              <option value="CIH">CIH</option>
+              <option value="كاش بلوس">كاش بلوس</option>
+            </select>
+          </label>
+
+          <fieldset class="field">
+            <legend>هل لديك مستوى B1 أو B2؟</legend>
+            <div class="option-grid">
+              <label class="choice-card">
+                <input type="radio" name="languageLevel" value="B1" required>
+                <span>B1</span>
+              </label>
+              <label class="choice-card">
+                <input type="radio" name="languageLevel" value="B2" required>
+                <span>B2</span>
+              </label>
+            </div>
+            <p class="language-proof" id="language-proof" aria-live="polite"></p>
+          </fieldset>
+
+          <label class="field">
+            <span>المجال</span>
+            <div class="prefix-shell">
+              <span class="prefix-label">ausbildung als</span>
+              <input type="text" id="bereichSuffix" name="bereichSuffix" placeholder="مثال: pflege, it, logistik" required>
+            </div>
+            <small>البداية ثابتة ولا يمكن تغييرها.</small>
+          </label>
+
+          <label class="field">
+            <span>عدد الطلبات</span>
+            <select id="bewerbungen" name="bewerbungen" required>
+              <option value="">اختر العدد</option>
+              <option value="500 Bewerbung">500 Bewerbung</option>
+              <option value="1000 Bewerbung">1000 Bewerbung</option>
+            </select>
+          </label>
+
+          <div class="field field-upload">
+            <span>رفع الوثائق</span>
+            <input class="file-input" type="file" id="documents" name="documents" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png">
+            <label class="upload-box" for="documents" id="upload-box" tabindex="0">
+              <span class="upload-badge">الوثائق</span>
+              <strong>اختر الملفات</strong>
+              <span class="upload-copy">اضغط لاختيار الملفات أو اسحبها إلى هذه المساحة.</span>
+              <span class="upload-button">اختيار الملفات</span>
+            </label>
+            <small>الأنواع المقبولة: PDF و DOC و DOCX و JPG و PNG. الحد الأقصى 10 MB لكل ملف و 25 MB للمجموع.</small>
+          </div>
+
+          <div class="file-list" id="file-list" aria-live="polite"></div>
+          <p class="status-message" id="status-message" aria-live="polite"></p>
+
+          <button type="submit" class="submit-button">إرسال الاستمارة</button>
+        </form>
+      </section>
+    </main>
+  </section>
+
+  <script src="https://www.gstatic.com/firebasejs/12.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.7.0/firebase-storage-compat.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

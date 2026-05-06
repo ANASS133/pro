@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Suchergebnisse - Job Scraper</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 100px 20px 20px;
+        }
+        .navbar {
+            max-width: 1000px;
+            margin: 0 auto 20px;
+            background: #fff;
+            border-radius: 10px;
+            display: flex;
+            gap: 10px;
+            padding: 10px 14px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            position: fixed;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+        }
+        .nav-link {
+            color: #2f3a56;
+            text-decoration: none;
+            font-weight: 700;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+        .nav-link.active {
+            background: #667eea;
+            color: #fff;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            gap: 12px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        .stat-item {
+            text-align: center;
+            min-width: 150px;
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            word-break: break-word;
+        }
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        .search-again {
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .search-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .search-row input,
+        .search-row select {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .search-row .keyword {
+            flex: 2;
+            min-width: 220px;
+        }
+        .search-row .location {
+            flex: 1;
+            min-width: 160px;
+        }
+        .search-row button {
+            padding: 10px 20px;
+            background: #667eea;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .job-card {
+            background: #fff;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+            border-left: 4px solid #667eea;
+        }
+        .job-card:hover {
+            transform: translateX(5px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+        .job-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .job-details {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 10px;
+            color: #666;
+        }
+        .job-link {
+            display: inline-block;
+            padding: 8px 16px;
+            background: #667eea;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+        .job-link:hover {
+            background: #764ba2;
+        }
+        .no-jobs {
+            text-align: center;
+            padding: 50px;
+            background: #fff;
+            border-radius: 10px;
+            color: #666;
+        }
+        .back-button {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #667eea;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='shared_nav.css') }}">
+    <script src="{{ url_for('static', filename='shared_nav.js') }}" defer></script>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="{{ url_for('index') }}" class="nav-link active">E-Mails finden</a>
+        <a href="{{ url_for('firebase_page') }}" class="nav-link">Firebase</a>
+        <a href="{{ url_for('create_anschreibens') }}" class="nav-link">Anschreiben erstellen</a>
+        <a href="{{ url_for('send_emails') }}" class="nav-link">E-Mails senden</a>
+        <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+        <a href="{{ url_for('add') }}" class="nav-link">Add</a>
+        <a href="{{ url_for('ausbildungen') }}" class="nav-link">Ausbildungen</a>
+    </nav>
+    <div class="container">
+        <a href="{{ url_for('index') }}" class="back-button">Zurueck zur Suche</a>
+
+        <div class="header">
+            <h1>Suchergebnisse</h1>
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-number">{{ total }}</div>
+                    <div>Stellen gefunden</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">{{ keyword }}</div>
+                    <div>Suchbegriff</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">{{ location or 'Deutschland' }}</div>
+                    <div>Ort</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" style="font-size: 18px;">
+                        {% if published_since == 'today' %}Heute
+                        {% elif published_since == 'yesterday' %}Gestern
+                        {% elif published_since == '1week' %}1 Woche
+                        {% elif published_since == '2weeks' %}2 Wochen
+                        {% elif published_since == '4weeks' %}4 Wochen
+                        {% else %}Alle anzeigen
+                        {% endif %}
+                    </div>
+                    <div class="stat-label">Veroeffentlicht seit</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="search-again">
+            <form action="{{ url_for('search') }}" method="POST" class="search-row">
+                <input type="text" name="keyword" value="{{ keyword }}" placeholder="Stellentitel" class="keyword" required>
+                <input type="text" name="location" value="{{ location }}" placeholder="Ort" class="location">
+                <select name="published_since" class="location">
+                    <option value="all" {% if published_since == 'all' %}selected{% endif %}>Alle anzeigen</option>
+                    <option value="today" {% if published_since == 'today' %}selected{% endif %}>Heute</option>
+                    <option value="yesterday" {% if published_since == 'yesterday' %}selected{% endif %}>Gestern</option>
+                    <option value="1week" {% if published_since == '1week' %}selected{% endif %}>1 Woche</option>
+                    <option value="2weeks" {% if published_since == '2weeks' %}selected{% endif %}>2 Wochen</option>
+                    <option value="4weeks" {% if published_since == '4weeks' %}selected{% endif %}>4 Wochen</option>
+                </select>
+                <button type="submit">Suchen</button>
+            </form>
+        </div>
+
+        {% if jobs %}
+        <div style="margin-top: 20px; text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+            <form action="/extract_emails" method="POST" style="display: inline;">
+                <button type="submit" class="job-link" style="background: #f39c12; border: none;">
+                    Manuelle Extraktion (CAPTCHAs loesen)
+                </button>
+            </form>
+            <form action="/auto_extract_emails" method="POST" style="display: inline;">
+                <button type="submit" class="job-link" style="background: #2ea44f; border: none;">
+                    Auto-Extraktion (TrueCAPTCHA API)
+                </button>
+            </form>
+        </div>
+        <div style="margin-top: 10px; text-align: center;">
+            <p style="color: #666; margin-top: 10px;">
+                <small>{{ total }} Stellen werden verarbeitet. Der Auto-Modus benoetigt TRUECAPTCHA-Zugangsdaten in den Umgebungsvariablen.</small>
+            </p>
+        </div>
+        {% endif %}
+
+        {% if jobs %}
+            {% for job in jobs %}
+            <div class="job-card">
+                <div class="job-title">{{ job.title }}</div>
+                <div class="job-details">
+                    <div>Unternehmen: {{ job.company or 'k. A.' }}</div>
+                    <div>Ort: {{ job.location or 'k. A.' }}</div>
+                    <div>Erfasst: {{ job.scraped_at or 'k. A.' }}</div>
+                </div>
+                {% if job.url %}
+                <a href="{{ job.url }}" target="_blank" rel="noopener noreferrer" class="job-link">Stelle ansehen</a>
+                {% endif %}
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="no-jobs">
+                <h2>Keine Stellen gefunden</h2>
+                <p>Bitte andere Suchbegriffe oder Orte versuchen.</p>
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html>

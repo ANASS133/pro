@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <title>Fortschritt Auto-E-Mail-Extraktion</title>
+    <style>
+        body { font-family: Arial; padding: 100px 20px 20px; background: #f5f5f5; }
+        .navbar {
+            max-width: 800px;
+            margin: 0 auto 20px;
+            background: #fff;
+            border-radius: 10px;
+            display: flex;
+            gap: 10px;
+            padding: 10px 14px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: fixed;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+        }
+        .nav-link {
+            color: #2f3a56;
+            text-decoration: none;
+            font-weight: 700;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+        .nav-link.active {
+            background: #667eea;
+            color: #fff;
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin: 20px 0;
+        }
+        .progress-container {
+            width: 100%;
+            background: #f0f0f0;
+            border-radius: 5px;
+            margin: 20px 0;
+            height: 30px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #45a049);
+            transition: width 0.3s;
+            text-align: center;
+            line-height: 30px;
+            color: white;
+            font-weight: bold;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+            border-left: 4px solid #4CAF50;
+        }
+        .stat-card.captcha { border-left-color: #f39c12; }
+        .stat-card.email { border-left-color: #2196F3; }
+        .stat-card.failed { border-left-color: #f44336; }
+        .stat-value { font-size: 28px; font-weight: bold; color: #333; }
+        .stat-label { font-size: 14px; color: #666; margin-top: 5px; }
+        .button {
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+            margin: 5px;
+        }
+        .button.blue { background: #2196F3; }
+        .pause-box {
+            display: none;
+            background: #fbeaea;
+            border: 1px solid #f5c2c7;
+            color: #842029;
+            border-radius: 8px;
+            padding: 14px;
+            margin-top: 15px;
+        }
+        .toast {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .toast.success { background: #198754; }
+        .toast.error { background: #dc3545; }
+    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='shared_nav.css') }}">
+    <script src="{{ url_for('static', filename='shared_nav.js') }}" defer></script>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="{{ url_for('index') }}" class="nav-link active">E-Mails finden</a>
+        <a href="{{ url_for('firebase_page') }}" class="nav-link">Firebase</a>
+        <a href="{{ url_for('create_anschreibens') }}" class="nav-link">Anschreiben erstellen</a>
+        <a href="{{ url_for('send_emails') }}" class="nav-link">E-Mails senden</a>
+        <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+        <a href="{{ url_for('add') }}" class="nav-link">Add</a>
+        <a href="{{ url_for('ausbildungen') }}" class="nav-link">Ausbildungen</a>
+    </nav>
+    <div class="container">
+        <h1>Automatische E-Mail-Extraktion</h1>
+        <p>Verwendet die TrueCAPTCHA-API.</p>
+
+        <div class="card">
+            <h2>Fortschritt</h2>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="processed">0</div>
+                    <div class="stat-label">Verarbeitete Stellen</div>
+                </div>
+                <div class="stat-card email">
+                    <div class="stat-value" id="emailsFound">0</div>
+                    <div class="stat-label">Gefundene E-Mails</div>
+                </div>
+                <div class="stat-card captcha">
+                    <div class="stat-value" id="captchasSolved">0</div>
+                    <div class="stat-label">Geloeste CAPTCHAs</div>
+                </div>
+                <div class="stat-card failed">
+                    <div class="stat-value" id="failed">0</div>
+                    <div class="stat-label">Fehler</div>
+                </div>
+            </div>
+
+            <div class="progress-container">
+                <div class="progress-bar" id="progressBar" style="width: 0%">0%</div>
+            </div>
+
+            <p id="statusMessage" style="font-size: 18px;">Initialisierung...</p>
+            <p id="errorMessage" style="color:#b00;"></p>
+            <div id="pauseBox" class="pause-box">
+                <p id="pauseReason">Eine Stelle ist fehlgeschlagen.</p>
+                <button onclick="continueScraping()" class="button" style="background:#198754;">Fortsetzen</button>
+            </div>
+        </div>
+
+        <div style="text-align: center;">
+            <a href="/" class="button">Zurueck zur Suche</a>
+            <button onclick="stopAndDownload()" class="button" style="background: #d9534f;">
+                Stoppen + Ergebnis herunterladen
+            </button>
+            <button onclick="downloadResults()" class="button blue" id="downloadBtn" style="display: none;">
+                Ergebnis herunterladen
+            </button>
+            <button onclick="goToAnschreiben()" class="button" id="toAnschreibenBtn" style="background: #667eea; display: none;">
+                Zu Anschreiben
+            </button>
+        </div>
+    </div>
+    <div id="toast" class="toast"></div>
+
+    <script>
+        let toastTimer = null;
+
+        function showToast(message, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type} show`;
+            if (toastTimer) {
+                clearTimeout(toastTimer);
+            }
+            toastTimer = setTimeout(() => {
+                toast.className = `toast ${type}`;
+            }, 2400);
+        }
+
+        function updateProgress() {
+            fetch('/api/auto_extraction_status')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('processed').textContent = data.current_index;
+                    document.getElementById('emailsFound').textContent = data.emails_found;
+                    document.getElementById('captchasSolved').textContent = data.captchas_solved;
+                    document.getElementById('failed').textContent = data.failed;
+
+                    const percentage = data.percentage || 0;
+                    document.getElementById('progressBar').style.width = percentage + '%';
+                    document.getElementById('progressBar').textContent = Math.round(percentage) + '%';
+
+                    if (data.last_error) {
+                        document.getElementById('errorMessage').textContent = data.last_error;
+                    }
+
+                    let status = '';
+                    if (!data.is_running && data.current_index >= data.total_jobs && data.total_jobs > 0) {
+                        status = 'Extraktion abgeschlossen';
+                        document.getElementById('downloadBtn').style.display = 'inline-block';
+                    } else if (data.stop_requested) {
+                        status = 'Gestoppt';
+                        document.getElementById('downloadBtn').style.display = 'inline-block';
+                        document.getElementById('pauseBox').style.display = 'none';
+                    } else if (data.paused) {
+                        status = 'Pausiert - Fehler';
+                        document.getElementById('pauseReason').textContent = data.last_error
+                            ? `Fehler: ${data.last_error}`
+                            : 'Eine Stelle ist fehlgeschlagen.';
+                        document.getElementById('pauseBox').style.display = 'block';
+                    } else if (data.is_running) {
+                        status = `Verarbeite Stelle ${data.current_index}/${data.total_jobs}...`;
+                        document.getElementById('pauseBox').style.display = 'none';
+                    } else {
+                        status = 'Leerlauf';
+                        document.getElementById('pauseBox').style.display = 'none';
+                    }
+                    document.getElementById('statusMessage').textContent = status;
+
+                    const canGoToAnschreiben = !data.is_running && !data.paused && data.current_index > 0;
+                    document.getElementById('toAnschreibenBtn').style.display = canGoToAnschreiben ? 'inline-block' : 'none';
+                });
+        }
+
+        function continueScraping() {
+            fetch('/api/continue_auto_extraction', { method: 'POST' })
+                .then(async (response) => {
+                    const data = await response.json().catch(() => ({}));
+                    if (response.ok && data.status === 'success') {
+                        showToast(data.message || 'Fortsetzen angefordert.', 'success');
+                    } else {
+                        showToast(data.message || 'Fortsetzen fehlgeschlagen.', 'error');
+                    }
+                })
+                .catch(() => {
+                    showToast('Netzwerkfehler beim Fortsetzen.', 'error');
+                });
+        }
+
+        function stopAndDownload() {
+            fetch('/api/stop_auto_extraction', { method: 'POST' })
+                .then(() => setTimeout(() => {
+                    window.location.href = '/download_auto_results';
+                }, 1200));
+        }
+
+        function downloadResults() {
+            window.location.href = '/download_auto_results';
+        }
+
+        function goToAnschreiben() {
+            window.location.href = '/create-anschreibens?autoload=auto';
+        }
+
+        setInterval(updateProgress, 1500);
+        updateProgress();
+    </script>
+</body>
+</html>

@@ -1,0 +1,1897 @@
+:root {
+    --bg: #eef2f8;
+    --panel: #ffffff;
+    --panel-soft: #f8faff;
+    --border: #d9e2f0;
+    --text: #1f2a44;
+    --muted: #5b6478;
+    --primary: #4f63cf;
+    --primary-dark: #3d51b8;
+    --accent: #0b6e4f;
+    --danger: #c0392b;
+    --warning: #d97706;
+    --shadow: 0 18px 45px rgba(31, 42, 68, 0.08);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    margin: 0;
+    font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+    background:
+        radial-gradient(circle at top right, rgba(79, 99, 207, 0.1), transparent 24%),
+        linear-gradient(180deg, #f6f8fc 0%, #edf2f9 100%);
+    color: var(--text);
+}
+
+a {
+    color: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+}
+
+[hidden] {
+    display: none !important;
+}
+
+.spa-shell {
+    min-height: 100vh;
+}
+
+.shell-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 20px 24px 18px;
+    border-bottom: 1px solid rgba(217, 226, 240, 0.9);
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(16px);
+}
+
+.shell-brand {
+    min-width: 0;
+}
+
+.brand-kicker,
+.section-kicker,
+.sidebar-kicker {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(79, 99, 207, 0.1);
+    color: var(--primary);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.shell-brand h1 {
+    margin: 10px 0 6px;
+    font-size: clamp(1.8rem, 3vw, 2.5rem);
+    line-height: 1.05;
+}
+
+.shell-brand p {
+    margin: 0;
+    color: var(--muted);
+}
+
+.shell-nav {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.shell-nav a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    padding: 0 14px;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--muted);
+    font-weight: 700;
+    text-decoration: none;
+    transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+}
+
+.shell-nav a:hover {
+    transform: translateY(-1px);
+    background: rgba(79, 99, 207, 0.08);
+    color: var(--text);
+}
+
+.shell-nav a.is-active {
+    border-color: rgba(79, 99, 207, 0.18);
+    background: linear-gradient(135deg, rgba(79, 99, 207, 0.14), rgba(79, 99, 207, 0.08));
+    color: var(--primary);
+}
+
+.shell-nav a.external-link {
+    border-color: rgba(217, 226, 240, 0.9);
+    background: #ffffff;
+    color: var(--text);
+}
+
+.shell-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 24px;
+    align-items: start;
+}
+
+.shell-sidebar {
+    position: sticky;
+    top: 122px;
+    display: grid;
+    gap: 16px;
+}
+
+.sidebar-card {
+    padding: 20px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.85);
+    box-shadow: var(--shadow);
+}
+
+.sidebar-card h2 {
+    margin: 12px 0 10px;
+    font-size: 1.2rem;
+}
+
+.sidebar-card p,
+.sidebar-card li {
+    color: var(--muted);
+    line-height: 1.6;
+}
+
+.sidebar-card ul {
+    margin: 12px 0 0;
+    padding-left: 18px;
+}
+
+.sidebar-actions {
+    display: grid;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.sidebar-actions a,
+.hero-actions a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0 14px;
+    border-radius: 12px;
+    text-decoration: none;
+    font-weight: 700;
+    border: 1px solid rgba(79, 99, 207, 0.15);
+    background: #ffffff;
+    color: var(--text);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.sidebar-actions a:hover,
+.hero-actions a:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(31, 42, 68, 0.12);
+}
+
+.sidebar-actions a:first-child,
+.hero-actions a:first-child {
+    background: linear-gradient(135deg, var(--primary), #6a7fe9);
+    border-color: transparent;
+    color: #ffffff;
+}
+
+.shell-content {
+    min-width: 0;
+}
+
+.app-section {
+    display: grid;
+    gap: 20px;
+}
+
+.section-hero {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 28px;
+    border-radius: 24px;
+    background: linear-gradient(135deg, #ffffff 0%, #f5f8ff 100%);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+}
+
+.firebase-hero {
+    background: linear-gradient(135deg, #f4fffb 0%, #ffffff 100%);
+}
+
+.section-hero h2 {
+    margin: 12px 0 8px;
+    font-size: clamp(1.7rem, 2.5vw, 2.3rem);
+}
+
+.section-hero p {
+    margin: 0;
+    max-width: 60ch;
+    color: var(--muted);
+    line-height: 1.6;
+}
+
+.hero-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.section-status,
+.empty-state {
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: #ffffff;
+    box-shadow: var(--shadow);
+}
+
+.section-status.is-error {
+    border-color: #f3b7b1;
+    background: #fff4f2;
+    color: #9f1f1f;
+}
+
+.search-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+}
+
+.search-card,
+.campaign-card,
+.firebase-card,
+.file-card {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 22px;
+    box-shadow: var(--shadow);
+}
+
+.form-group {
+    margin-bottom: 14px;
+}
+
+label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--muted);
+    font-weight: 700;
+}
+
+input,
+select {
+    width: 100%;
+    padding: 11px 12px;
+    border: 1px solid #cfd7e7;
+    border-radius: 12px;
+    font-size: 16px;
+    background: #ffffff;
+    color: var(--text);
+}
+
+input:focus,
+select:focus,
+button:focus-visible,
+a:focus-visible {
+    outline: 2px solid rgba(79, 99, 207, 0.25);
+    outline-offset: 2px;
+}
+
+.search-card button,
+.progress-btn,
+.action-btn,
+.update-btn,
+.stop-btn,
+.auto-btn {
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    font-weight: 700;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.search-card form button {
+    width: 100%;
+    min-height: 46px;
+    background: linear-gradient(135deg, var(--primary), #6a7fe9);
+    color: #ffffff;
+}
+
+.search-card form button:hover,
+.progress-btn:hover,
+.action-btn:hover,
+.update-btn:hover,
+.stop-btn:hover,
+.auto-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(31, 42, 68, 0.12);
+}
+
+.loading {
+    display: none;
+    text-align: center;
+    margin-top: 16px;
+    color: var(--muted);
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    margin: 0 auto 12px;
+    border: 4px solid #edf1f7;
+    border-top: 4px solid var(--primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.info {
+    margin-top: 14px;
+    padding: 12px;
+    border-radius: 12px;
+    background: #f3f7ff;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.results-box {
+    margin-top: 14px;
+    display: none;
+}
+
+.results-box.visible {
+    display: block;
+}
+
+.results-meta {
+    color: var(--muted);
+    font-size: 14px;
+    margin-bottom: 10px;
+}
+
+.results-list {
+    display: grid;
+    gap: 10px;
+    max-height: 420px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.job-item {
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--primary);
+    border-radius: 14px;
+    padding: 12px;
+    background: #ffffff;
+}
+
+.job-title {
+    margin: 0 0 6px;
+    color: var(--text);
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.job-meta {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+    margin-bottom: 8px;
+}
+
+.job-link {
+    color: var(--primary);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.results-error {
+    margin-top: 10px;
+    border: 1px solid #f1b3b3;
+    background: #fde8e8;
+    color: #9f1f1f;
+    border-radius: 10px;
+    padding: 10px;
+    font-size: 14px;
+}
+
+.results-actions {
+    margin-top: 10px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.auto-btn {
+    width: auto;
+    min-height: 42px;
+    padding: 0 14px;
+    background: #1f8f4f;
+    color: #ffffff;
+}
+
+.auto-btn:disabled,
+.progress-btn:disabled,
+.action-btn:disabled,
+.update-btn:disabled,
+.stop-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.progress-panel {
+    margin-top: 12px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 12px;
+    display: none;
+    background: var(--panel-soft);
+}
+
+.progress-panel.visible {
+    display: block;
+}
+
+.progress-title {
+    margin: 0 0 10px;
+    font-size: 16px;
+    color: var(--text);
+}
+
+.progress-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.progress-stat {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 8px;
+    text-align: center;
+}
+
+.progress-stat .value {
+    display: block;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.progress-stat .label {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.progress-track,
+.campaign-progress-track {
+    width: 100%;
+    height: 12px;
+    background: #e5e7eb;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.progress-fill,
+.campaign-progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--primary), #6a7fe9);
+    color: #ffffff;
+    text-align: center;
+    line-height: 12px;
+    font-weight: 700;
+    font-size: 11px;
+    transition: width 0.25s ease;
+}
+
+.progress-status {
+    font-size: 14px;
+    color: var(--text);
+    margin: 8px 0 6px;
+}
+
+.progress-error {
+    display: none;
+    border: 1px solid #f1b3b3;
+    background: #fde8e8;
+    color: #9f1f1f;
+    border-radius: 10px;
+    padding: 8px;
+    margin-top: 8px;
+    font-size: 13px;
+}
+
+.progress-actions,
+.campaign-actions,
+.file-actions {
+    margin-top: 10px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.progress-btn {
+    width: auto;
+    min-height: 40px;
+    padding: 0 12px;
+    color: #ffffff;
+}
+
+.progress-btn.stop,
+.stop-btn {
+    background: var(--danger);
+}
+
+.progress-btn.download {
+    background: #0f7fe0;
+    display: none;
+}
+
+.progress-btn.continue {
+    background: #198754;
+    display: none;
+}
+
+.progress-btn.primary-action {
+    background: linear-gradient(135deg, var(--primary), #6a7fe9);
+}
+
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 16px;
+}
+
+.campaign-card h3,
+.firebase-card h3,
+.file-card h3,
+.file-card h2 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--text);
+}
+
+.campaign-meta,
+.firebase-meta,
+.file-meta {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.campaign-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.campaign-stat {
+    padding: 10px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--panel-soft);
+    text-align: center;
+}
+
+.campaign-stat strong {
+    display: block;
+    color: var(--text);
+    font-size: 1rem;
+}
+
+.campaign-stat span {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0 14px;
+    text-decoration: none;
+    color: #ffffff;
+}
+
+.action-btn.primary {
+    background: linear-gradient(135deg, var(--primary), #6a7fe9);
+}
+
+.action-btn.secondary {
+    background: #eef2ff;
+    color: var(--text);
+    border: 1px solid #d7def8;
+}
+
+.action-btn.warning {
+    background: linear-gradient(135deg, #f59e0b, var(--warning));
+}
+
+.action-btn.danger {
+    background: linear-gradient(135deg, #ef5350, var(--danger));
+}
+
+.action-btn.disabled {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.campaign-progress-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 0 6px;
+    font-size: 13px;
+}
+
+.campaign-progress-status {
+    font-weight: 700;
+}
+
+.campaign-progress-status.sending {
+    color: #1d4ed8;
+}
+
+.campaign-progress-status.paused {
+    color: var(--warning);
+}
+
+.campaign-progress-status.done {
+    color: #15803d;
+}
+
+.campaign-progress-subtext {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--muted);
+    min-height: 16px;
+}
+
+.firebase-card {
+    border-left: 4px solid var(--accent);
+}
+
+.firebase-badge,
+.file-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.firebase-badge {
+    background: rgba(11, 110, 79, 0.12);
+    color: var(--accent);
+}
+
+.file-pill {
+    background: rgba(79, 99, 207, 0.1);
+    color: var(--primary);
+}
+
+.files-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 16px;
+}
+
+.file-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.line-count {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text);
+}
+
+.update-btn {
+    min-height: 42px;
+    padding: 0 14px;
+    background: linear-gradient(135deg, var(--primary), #6a7fe9);
+    color: #ffffff;
+}
+
+.solver-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 42px;
+    padding: 0 14px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #f59e0b, var(--warning));
+    color: #ffffff;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.update-status {
+    min-height: 18px;
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.update-status.error {
+    color: #9f1f1f;
+}
+
+.update-status.success {
+    color: #0b6e4f;
+}
+
+/* Create-anschreibens section */
+.anschreiben-workspace {
+    display: grid;
+    gap: 20px;
+}
+
+.anschreiben-card {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 22px;
+    box-shadow: var(--shadow);
+}
+
+.anschreiben-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.anschreiben-card h3,
+.anschreiben-card h4 {
+    margin: 0;
+    color: var(--text);
+}
+
+.anschreiben-card-head p,
+.anschreiben-design-upload h4 + p,
+.anschreiben-card small,
+.anschreiben-card-head + p {
+    margin: 6px 0 0;
+    color: var(--muted);
+}
+
+.anschreiben-inline-form {
+    display: flex;
+    gap: 14px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.anschreiben-field {
+    display: grid;
+    gap: 6px;
+    flex: 1 1 320px;
+}
+
+.anschreiben-field span {
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.anschreiben-source-help {
+    display: block;
+    margin-top: 10px;
+}
+
+.anschreiben-upload-area {
+    border: 2px dashed var(--border);
+    border-radius: 16px;
+    padding: 2.4rem 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+    background: #f8fafc;
+}
+
+.anschreiben-upload-area:hover,
+.anschreiben-upload-area.is-dragover {
+    transform: translateY(-1px);
+    border-color: var(--primary);
+    background: #eff6ff;
+}
+
+.anschreiben-upload-area p {
+    margin: 0 0 8px;
+    font-size: 1.05rem;
+    color: var(--text);
+    font-weight: 700;
+}
+
+.anschreiben-upload-area small {
+    color: var(--muted);
+}
+
+.anschreiben-upload-area-compact {
+    padding: 1.5rem;
+}
+
+.anschreiben-file-info {
+    margin-top: 12px;
+    padding: 14px 16px;
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+}
+
+.anschreiben-file-info p {
+    margin: 0;
+    color: var(--muted);
+}
+
+.anschreiben-file-info p + p {
+    margin-top: 6px;
+}
+
+.anschreiben-summary-grid {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.anschreiben-summary-item {
+    padding: 14px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--panel-soft);
+}
+
+.anschreiben-summary-item span {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.anschreiben-summary-item strong {
+    display: block;
+    color: var(--text);
+    font-size: 14px;
+    word-break: break-word;
+}
+
+.anschreiben-column-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    min-height: 24px;
+}
+
+.anschreiben-column-tag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, var(--primary), #6a7fe9);
+    color: #ffffff;
+    font-size: 0.92rem;
+    font-weight: 700;
+}
+
+.anschreiben-data-preview {
+    margin-top: 18px;
+}
+
+.anschreiben-data-preview h4 {
+    margin-bottom: 10px;
+}
+
+.anschreiben-preview-table {
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: #ffffff;
+}
+
+.anschreiben-preview-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.94rem;
+}
+
+.anschreiben-preview-table th {
+    background: #f8fafc;
+    padding: 12px;
+    text-align: left;
+    font-weight: 700;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+}
+
+.anschreiben-preview-table td {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+}
+
+.anschreiben-design-upload {
+    margin-bottom: 18px;
+}
+
+.anschreiben-design-upload h4 {
+    margin-bottom: 10px;
+    color: var(--text);
+}
+
+.anschreiben-template-editor {
+    display: grid;
+    gap: 16px;
+}
+
+.anschreiben-placeholder-help,
+.anschreiben-template-variants,
+.anschreiben-layout-controls {
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: #f8fafc;
+}
+
+.anschreiben-placeholder-help p {
+    margin: 0 0 8px;
+}
+
+.anschreiben-placeholder-help span {
+    color: var(--primary);
+    font-family: Consolas, Monaco, monospace;
+    font-weight: 700;
+}
+
+.anschreiben-template-variant-header h4 {
+    margin-bottom: 4px;
+}
+
+.anschreiben-template-variant-header small {
+    color: var(--muted);
+}
+
+.anschreiben-template-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.anschreiben-template-chip,
+.anschreiben-format-btn,
+.anschreiben-btn-primary,
+.anschreiben-btn-secondary,
+.anschreiben-close-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.anschreiben-template-chip,
+.anschreiben-format-btn,
+.anschreiben-btn-secondary,
+.anschreiben-close-btn {
+    background: linear-gradient(180deg, #ffffff, #eef2f7);
+    border-color: #d6deea;
+    color: var(--text);
+    box-shadow: 0 10px 24px -20px rgba(31, 42, 68, 0.45);
+}
+
+.anschreiben-template-chip {
+    padding: 0 14px;
+}
+
+.anschreiben-template-chip.is-active,
+.anschreiben-btn-primary {
+    background: linear-gradient(135deg, var(--primary), #6a7fe9);
+    border-color: transparent;
+    color: #ffffff;
+    box-shadow: 0 16px 30px -22px rgba(79, 99, 207, 0.9);
+}
+
+.anschreiben-template-chip.is-empty {
+    border-style: dashed;
+    color: var(--muted);
+    background: #ffffff;
+}
+
+.anschreiben-template-chip:hover,
+.anschreiben-format-btn:hover,
+.anschreiben-btn-primary:hover,
+.anschreiben-btn-secondary:hover,
+.anschreiben-close-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 26px -20px rgba(31, 42, 68, 0.55);
+}
+
+.anschreiben-format-toolbar,
+.anschreiben-template-actions,
+.anschreiben-action-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.anschreiben-format-btn,
+.anschreiben-btn-secondary,
+.anschreiben-btn-primary {
+    padding: 0.85rem 1.15rem;
+}
+
+.anschreiben-format-btn:hover,
+.anschreiben-btn-secondary:hover {
+    border-color: #94a3b8;
+    background: #ffffff;
+}
+
+.anschreiben-format-toolbar {
+    margin-top: -2px;
+}
+
+.anschreiben-textarea {
+    width: 100%;
+    min-height: 240px;
+    padding: 14px 16px;
+    border: 1px solid #cfd7e7;
+    border-radius: 16px;
+    font-size: 1rem;
+    line-height: 1.65;
+    resize: vertical;
+    font-family: Consolas, Monaco, monospace;
+    background: #ffffff;
+    color: var(--text);
+}
+
+.anschreiben-textarea:focus,
+.anschreiben-layout-grid input:focus,
+.anschreiben-filename-format input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(79, 99, 207, 0.12);
+}
+
+.anschreiben-validation-result {
+    margin-top: 16px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 1px solid transparent;
+}
+
+.anschreiben-validation-result.is-ok {
+    color: #065f46;
+    background: #ecfdf5;
+    border-color: #34d399;
+}
+
+.anschreiben-validation-result.is-warn {
+    color: #92400e;
+    background: #fffbeb;
+    border-color: #f59e0b;
+}
+
+.anschreiben-filename-format {
+    margin-bottom: 18px;
+}
+
+.anschreiben-filename-format label {
+    display: block;
+    margin-bottom: 8px;
+}
+
+.anschreiben-filename-format input {
+    width: 100%;
+    padding: 11px 12px;
+    border: 1px solid #cfd7e7;
+    border-radius: 12px;
+    background: #ffffff;
+    color: var(--text);
+}
+
+.anschreiben-filename-format small,
+.anschreiben-layout-controls small {
+    display: block;
+    margin-top: 8px;
+    color: var(--muted);
+}
+
+.anschreiben-layout-controls {
+    margin-bottom: 18px;
+}
+
+.anschreiben-layout-controls h4 {
+    margin-bottom: 12px;
+}
+
+.anschreiben-layout-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.anschreiben-layout-grid label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.92rem;
+    color: var(--muted);
+}
+
+.anschreiben-layout-grid input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #cfd7e7;
+    border-radius: 12px;
+    background: #ffffff;
+    color: var(--text);
+}
+
+.anschreiben-action-buttons .anschreiben-btn-primary,
+.anschreiben-action-buttons .anschreiben-btn-secondary {
+    flex: 1 1 220px;
+}
+
+.anschreiben-progress-area {
+    margin-top: 18px;
+}
+
+.anschreiben-progress-bar {
+    width: 100%;
+    height: 12px;
+    background: #e5e7eb;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.anschreiben-progress-fill {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, #10b981, #059669);
+    transition: width 0.3s ease;
+}
+
+.anschreiben-progress-area p {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: 0.95rem;
+}
+
+.anschreiben-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 60;
+}
+
+.anschreiben-modal-content {
+    width: min(960px, 96vw);
+    background: #ffffff;
+    border-radius: 20px;
+    box-shadow: 0 24px 56px rgba(15, 23, 42, 0.22);
+    overflow: hidden;
+}
+
+.anschreiben-modal-header,
+.anschreiben-modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--border);
+}
+
+.anschreiben-modal-footer {
+    border-bottom: 0;
+    border-top: 1px solid var(--border);
+    justify-content: flex-end;
+}
+
+.anschreiben-modal-body {
+    padding: 18px;
+}
+
+.anschreiben-modal-body iframe {
+    width: 100%;
+    height: 520px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: #ffffff;
+}
+
+.anschreiben-close-btn {
+    width: 44px;
+    min-width: 44px;
+    padding: 0;
+    font-size: 1.5rem;
+    line-height: 1;
+}
+
+.anschreiben-toast {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    max-width: min(420px, calc(100vw - 32px));
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: #334155;
+    color: #ffffff;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.22);
+    z-index: 70;
+}
+
+@media (max-width: 900px) {
+    .anschreiben-inline-form {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .anschreiben-action-buttons,
+    .anschreiben-template-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .anschreiben-action-buttons .anschreiben-btn-primary,
+    .anschreiben-action-buttons .anschreiben-btn-secondary,
+    .anschreiben-template-actions .anschreiben-btn-primary,
+    .anschreiben-template-actions .anschreiben-btn-secondary {
+        width: 100%;
+    }
+
+    .anschreiben-format-toolbar {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .anschreiben-format-btn {
+        width: 100%;
+    }
+
+    .anschreiben-modal-body iframe {
+        height: 420px;
+    }
+}
+
+@media (max-width: 640px) {
+    .anschreiben-card {
+        padding: 18px;
+    }
+
+    .anschreiben-upload-area {
+        padding: 1.8rem 1rem;
+    }
+
+    .anschreiben-format-toolbar {
+        grid-template-columns: 1fr;
+    }
+
+    .anschreiben-modal-header,
+    .anschreiben-modal-footer,
+    .anschreiben-modal-body {
+        padding: 14px;
+    }
+
+    .anschreiben-modal-body iframe {
+        height: 320px;
+    }
+}
+
+/* Add section */
+.add-form-card {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 24px;
+    box-shadow: var(--shadow);
+}
+
+.add-candidate-form {
+    display: grid;
+    gap: 16px;
+}
+
+.add-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.add-field {
+    display: block;
+}
+
+.add-field > span,
+.add-fieldset legend {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--muted);
+    font-weight: 700;
+}
+
+.add-field small {
+    display: block;
+    margin-top: 8px;
+    color: var(--muted);
+    line-height: 1.5;
+}
+
+.add-fieldset {
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+    margin: 0;
+    background: #f8fafc;
+}
+
+.add-choice-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.add-choice-card {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 52px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 12px 14px;
+    background: #ffffff;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.add-choice-card:hover {
+    transform: translateY(-1px);
+    border-color: rgba(79, 99, 207, 0.3);
+    box-shadow: 0 10px 22px rgba(31, 42, 68, 0.08);
+}
+
+.add-choice-card input[type="radio"] {
+    width: auto;
+    margin: 0;
+}
+
+.add-choice-card span {
+    color: var(--text);
+    font-weight: 700;
+}
+
+.add-candidate-form input[type="text"],
+.add-candidate-form input[type="email"],
+.add-candidate-form input[type="tel"],
+.add-candidate-form select {
+    width: 100%;
+}
+
+.add-file-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #cfd7e7;
+    border-radius: 12px;
+    background: #ffffff;
+}
+
+.add-file-meta {
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 14px;
+}
+
+.add-status-message {
+    min-height: 22px;
+    margin: 0;
+    font-weight: 700;
+    color: var(--muted);
+}
+
+.add-status-message.success {
+    color: #15803d;
+}
+
+.add-status-message.error {
+    color: #b91c1c;
+}
+
+.add-status-message.loading {
+    color: #1d4ed8;
+}
+
+.add-submit-button {
+    width: 100%;
+    min-height: 48px;
+    border: 0;
+    border-radius: 12px;
+    padding: 0 16px;
+    color: #ffffff;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--primary), #6a7fe9);
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.add-submit-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 24px rgba(31, 42, 68, 0.14);
+}
+
+.add-submit-button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+@media (max-width: 900px) {
+    .add-form-grid,
+    .add-choice-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 640px) {
+    .add-form-card {
+        padding: 18px;
+    }
+}
+
+/* Send-emails section */
+.send-emails-card {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 22px;
+    box-shadow: var(--shadow);
+}
+
+.tips {
+    margin-bottom: 12px;
+    color: #666;
+}
+
+.tip {
+    margin-bottom: 6px;
+    font-size: 14px;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.group {
+    margin-bottom: 12px;
+}
+
+textarea {
+    width: 100%;
+    padding: 11px 12px;
+    border: 1px solid #cfd7e7;
+    border-radius: 12px;
+    font-size: 16px;
+    background: #ffffff;
+    color: var(--text);
+    font-family: inherit;
+    resize: vertical;
+    min-height: 120px;
+}
+
+.file-input {
+    position: absolute;
+    width: 0;
+    height: 0;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.file-upload {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid #d6d6d6;
+    border-radius: 8px;
+    background: #fff;
+    padding: 8px;
+    min-height: 46px;
+}
+
+.file-btn {
+    display: inline-block;
+    background: var(--primary);
+    color: #fff;
+    font-weight: 700;
+    padding: 9px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+}
+
+.file-btn:hover {
+    background: var(--primary-dark);
+}
+
+.file-name {
+    color: #666;
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+}
+
+.checkbox-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.checkbox-row input {
+    width: 16px;
+    height: 16px;
+}
+
+.one-document-fields {
+    margin-top: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    background: #f8fafc;
+}
+
+.btn {
+    margin-top: 8px;
+    width: 100%;
+    border: 0;
+    border-radius: 5px;
+    padding: 12px;
+    color: #fff;
+    font-weight: 700;
+    background: var(--primary);
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.btn:hover {
+    background: var(--primary-dark);
+}
+
+.btn:disabled {
+    opacity: .7;
+    cursor: not-allowed;
+}
+
+.btn-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.btn-row .btn {
+    margin-top: 0;
+}
+
+.btn-secondary {
+    background: #2f3a56;
+}
+
+.btn-secondary:hover {
+    background: #1f2a44;
+}
+
+.btn-danger {
+    background: #d94b4b;
+}
+
+.btn-danger:hover {
+    background: #b43838;
+}
+
+.btn-inline {
+    width: auto;
+    margin-top: 0;
+}
+
+.result {
+    display: none;
+    margin-top: 14px;
+    border-radius: 5px;
+    padding: 12px;
+    white-space: pre-wrap;
+    font-size: 14px;
+}
+
+.result.success {
+    display: block;
+    background: #dcfce7;
+    color: #166534;
+    border: 1px solid #86efac;
+}
+
+.result.error {
+    display: block;
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fca5a5;
+}
+
+.muted-note {
+    font-size: 13px;
+    color: #666;
+    margin-top: 6px;
+}
+
+.campaign-box {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    color: #1d4ed8;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 14px;
+}
+
+.campaign-box-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.campaign-list {
+    margin: 8px 0 0;
+    padding-left: 18px;
+}
+
+.transfer-box {
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    color: #3730a3;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 14px;
+}
+
+.transfer-list {
+    margin: 8px 0 0;
+    padding-left: 18px;
+}
+
+#send-emails-error {
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    color: #b91c1c;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 14px;
+    font-size: 14px;
+}
+
+.send-progress-dock {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #ffffff;
+    border-top: 1px solid #d6d6d6;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.08);
+    padding: 10px 16px;
+    display: none;
+    z-index: 1000;
+}
+
+.send-progress-dock.visible {
+    display: block;
+}
+
+.send-progress-text {
+    font-size: 14px;
+    color: #333;
+    margin-bottom: 6px;
+}
+
+.send-progress-track {
+    width: 100%;
+    height: 12px;
+    background: #ececec;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.send-progress-fill {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary) 0%, #6a7fe9 100%);
+    transition: width 0.25s ease;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+@media (max-width: 1180px) {
+    .shell-main {
+        grid-template-columns: 1fr;
+    }
+
+    .shell-sidebar {
+        position: static;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 900px) {
+    .shell-topbar,
+    .section-hero {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .search-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .progress-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .hero-actions,
+    .file-actions,
+    .campaign-actions {
+        justify-content: stretch;
+    }
+
+    .grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 760px) {
+    .shell-topbar,
+    .shell-main {
+        padding: 16px;
+    }
+
+    .shell-sidebar {
+        grid-template-columns: 1fr;
+    }
+
+    .cards-grid,
+    .files-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .campaign-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* Document Viewer Styles */
+.anschreiben-document-list {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-right: 16px;
+}
+
+.anschreiben-document-pill {
+    padding: 6px 12px;
+    border-radius: 20px;
+    background: #eef2f8;
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid #d9e2f0;
+    transition: all 0.2s ease;
+}
+
+.anschreiben-document-pill:hover {
+    background: #e2e8f0;
+    color: var(--text);
+}
+
+.anschreiben-document-pill.is-active {
+    background: var(--primary);
+    color: #ffffff;
+    border-color: var(--primary-dark);
+    box-shadow: 0 2px 4px rgba(79, 99, 207, 0.2);
+}
+
+.anschreiben-document-viewer-head {
+    padding: 10px 16px;
+    background: var(--panel-soft);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.anschreiben-document-viewer {
+    height: 600px;
+    width: 100%;
+    background: #f0f0f0;
+}
+
+.anschreiben-document-viewer iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+}

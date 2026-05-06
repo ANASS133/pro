@@ -1,0 +1,153 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Generator für Bewerbungen</title>
+    <link rel="stylesheet" href="/pdf/styles.css">
+    <link rel="stylesheet" href="/static/shared_nav.css">
+    <script src="/static/shared_nav.js" defer></script>
+</head>
+<body>
+    <nav class="top-nav">
+        <a href="/">E-Mails finden</a>
+        <a class="active" href="/create-anschreibens">Anschreiben erstellen</a>
+        <a href="/send-emails">E-Mails senden</a>
+        <a href="/dashboard">Dashboard</a>
+        <a href="/add">Add</a>
+    </nav>
+    <div class="container">
+        <header>
+            <h1>PDF Generator für Bewerbungen</h1>
+            <p>Erstellen Sie professionelle Bewerbungs-PDFs aus Excel- oder CSV-Daten</p>
+        </header>
+
+        <div class="main-content">
+            <section class="card" id="step1">
+                <h2>1. Daten-Datei hochladen</h2>
+                <div class="upload-area" id="dropZone">
+                    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
+                    <p>Datei hier ablegen oder klicken zum Auswählen</p>
+                    <small>Unterstützt: .xlsx, .xls, .csv (max. 50MB)</small>
+                </div>
+                <div id="fileInfo" class="file-info hidden">
+                    <p>Datei: <span id="fileName"></span></p>
+                    <p>Zeilen: <span id="rowCount"></span></p>
+                </div>
+            </section>
+
+            <section class="card" id="step2">
+                <h2>2. Spalten aus Datei</h2>
+                <div id="columnList" class="column-list"></div>
+                <div id="dataPreview" class="data-preview hidden">
+                    <h3>Datenvorschau:</h3>
+                    <div id="previewTable" class="preview-table"></div>
+                </div>
+            </section>
+
+            <section class="card" id="step3">
+                <h2>3. Textvorlage bearbeiten</h2>
+                <div class="design-upload">
+                    <h3>Optional: Design-PDF als Hintergrund</h3>
+                    <div class="upload-area compact" id="designDropZone">
+                        <input type="file" id="designFileInput" accept=".pdf" hidden>
+                        <p>Design-PDF hier ablegen oder klicken</p>
+                        <small>Der Text wird auf Seite 1 des PDFs platziert</small>
+                    </div>
+                    <div id="designFileInfo" class="file-info hidden">
+                        <p>Design-Datei: <span id="designFileName"></span></p>
+                    </div>
+                </div>
+                <div class="template-editor">
+                    <div class="placeholder-help">
+                        <p>Verfügbare Platzhalter: <span id="placeholderTags"></span></p>
+                        <small>Platzhalter im Format: {{Spaltenname}}. Formatierung unterstützt z. B. <b>&lt;b&gt;fett&lt;/b&gt;</b>, <i>&lt;i&gt;kursiv&lt;/i&gt;</i> und <u>&lt;u&gt;unterstrichen&lt;/u&gt;</u>.</small>
+                    </div>
+                    <div class="template-variants">
+                        <div class="template-variant-header">
+                            <h3>Anschreiben-Varianten</h3>
+                            <small>Beim Generieren wird pro PDF zufällig eine gespeicherte Variante gewählt.</small>
+                        </div>
+                        <div id="templateList" class="template-list"></div>
+                        <div class="template-actions">
+                            <button id="addTemplateBtn" class="btn-secondary" type="button">Neue Variante</button>
+                            <button id="deleteTemplateBtn" class="btn-secondary" type="button">Aktive löschen</button>
+                        </div>
+                    </div>
+                    <div class="format-toolbar" id="formatToolbar">
+                        <button type="button" class="format-btn" data-prefix="<b>" data-suffix="</b>"><strong>Fett</strong></button>
+                        <button type="button" class="format-btn" data-prefix="<i>" data-suffix="</i>"><em>Kursiv</em></button>
+                        <button type="button" class="format-btn" data-prefix="<u>" data-suffix="</u>"><u>Unterstrichen</u></button>
+                        <button type="button" class="format-btn" data-prefix="<br><br>" data-suffix="">Absatz</button>
+                    </div>
+                    <textarea id="templateEditor" rows="15" placeholder="Geben Sie hier Ihre Vorlage ein..."></textarea>
+                    <div class="template-actions">
+                        <button id="saveTemplateBtn" class="btn-primary">Vorlage speichern</button>
+                        <button id="resetTemplateBtn" class="btn-secondary">Aktive leeren</button>
+                    </div>
+                </div>
+                <div id="validationResult" class="validation-result hidden"></div>
+            </section>
+
+            <section class="card" id="step4">
+                <h2>4. PDFs generieren</h2>
+                <div class="filename-format">
+                    <label for="filenameFormat">Dateiname:</label>
+                    <input type="text" id="filenameFormat" value="Automatisch aus Firma" readonly>
+                    <small>Jede PDF wird automatisch nach Firma/Unternehmen benannt.</small>
+                </div>
+
+                <div class="layout-controls">
+                    <h3>PDF Layout Steuerung</h3>
+                    <div class="layout-grid">
+                        <label>Schriftgröße (pt)<input type="number" id="fontSizeInput" min="6" max="48" step="1" value="11"></label>
+                        <label>Zeilenhöhe (mm)<input type="number" id="lineHeightInput" min="2" max="30" step="0.5" value="5"></label>
+                        <label>Margin oben (mm)<input type="number" id="marginTopInput" min="0" max="250" step="1" value="20"></label>
+                        <label>Margin links (mm)<input type="number" id="marginLeftInput" min="0" max="200" step="1" value="20"></label>
+                        <label>Margin rechts (mm)<input type="number" id="marginRightInput" min="0" max="200" step="1" value="20"></label>
+                        <label>Margin unten (mm)<input type="number" id="marginBottomInput" min="0" max="250" step="1" value="20"></label>
+                        <label>Textbreite (mm)<input type="number" id="textWidthInput" min="20" max="210" step="1" value="170"></label>
+                        <label>Texthöhe (mm)<input type="number" id="textHeightInput" min="20" max="297" step="1" value="257"></label>
+                    </div>
+                    <div class="template-actions">
+                        <button id="resetLayoutBtn" class="btn-secondary">Layout zurücksetzen</button>
+                    </div>
+                    <small>Bei Design-PDF steuern diese Werte die Textposition auf Seite 1.</small>
+                </div>
+
+                <div class="action-buttons">
+                    <button id="previewBtn" class="btn-secondary">Vorschau (erste PDF)</button>
+                    <button id="generateBtn" class="btn-primary">Alle PDFs im Projektordner erstellen</button>
+                    <button id="toEmailBtn" class="btn-secondary hidden">To Email Sender</button>
+                </div>
+
+                <div id="progressArea" class="progress-area hidden">
+                    <div class="progress-bar">
+                        <div id="progressFill" class="progress-fill"></div>
+                    </div>
+                    <p id="progressText">Generiere PDFs...</p>
+                </div>
+            </section>
+        </div>
+
+        <div id="previewModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>PDF Vorschau</h2>
+                    <button class="close-btn" id="closeModalBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <iframe id="pdfPreview"></iframe>
+                </div>
+                <div class="modal-footer">
+                    <button id="closeFooterBtn" class="btn-secondary">Schließen</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="toast" class="toast hidden"></div>
+    </div>
+
+    <script src="/pdf/script.js"></script>
+</body>
+</html>

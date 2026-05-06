@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Solve CAPTCHA</title>
+    <style>
+        body {
+            font-family: Arial;
+            padding: 100px 20px 20px;
+            background: #f5f5f5;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .navbar {
+            max-width: 900px;
+            margin: 0 auto 20px;
+            background: #fff;
+            border-radius: 10px;
+            display: flex;
+            gap: 10px;
+            padding: 10px 14px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: fixed;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+        }
+        .nav-link {
+            color: #2f3a56;
+            text-decoration: none;
+            font-weight: 700;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+        .nav-link.active {
+            background: #667eea;
+            color: #fff;
+        }
+        .captcha-container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 700px;
+            text-align: center;
+            margin: 0 auto;
+        }
+        .captcha-image {
+            max-width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .button {
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .button:hover { background: #45a049; }
+        .instructions {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            text-align: left;
+        }
+    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='shared_nav.css') }}">
+    <script src="{{ url_for('static', filename='shared_nav.js') }}" defer></script>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="{{ url_for('index') }}" class="nav-link active">Get Emails</a>
+        <a href="{{ url_for('firebase_page') }}" class="nav-link">Firebase</a>
+        <a href="{{ url_for('create_anschreibens') }}" class="nav-link">Create Anschreibens</a>
+        <a href="{{ url_for('send_emails') }}" class="nav-link">Send Emails</a>
+        <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+        <a href="{{ url_for('add') }}" class="nav-link">Add</a>
+        <a href="{{ url_for('ausbildungen') }}" class="nav-link">Ausbildungen</a>
+    </nav>
+    <div class="captcha-container">
+        <h2>Manual CAPTCHA Solving</h2>
+
+        <div class="instructions">
+            <h3>Instructions:</h3>
+            <ol>
+                <li>Use the opened Selenium browser window.</li>
+                <li>Solve the CAPTCHA directly on that page.</li>
+                <li>After solving it, click "I solved CAPTCHA" below.</li>
+                <li>The extraction process will resume automatically.</li>
+            </ol>
+        </div>
+
+        <img src="/static/captcha_latest.png" alt="CAPTCHA snapshot" class="captcha-image" id="captchaImage">
+
+        <button onclick="submitSolved()" class="button">I solved CAPTCHA</button>
+
+        <p style="margin-top: 20px; color: #666;">
+            <small>After confirming, you can close this window.</small>
+        </p>
+    </div>
+
+    <script>
+        function submitSolved() {
+            fetch('/api/captcha_solved', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ solved: true })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('CAPTCHA marked as solved.');
+                    window.close();
+                }
+            });
+        }
+
+        setInterval(() => {
+            document.getElementById('captchaImage').src = '/static/captcha_latest.png?t=' + Date.now();
+        }, 5000);
+    </script>
+</body>
+</html>

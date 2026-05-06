@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Firebase Applications Dashboard</title>
+  <style>
+    :root {
+      --bg: #f4efe7;
+      --bg-accent: #efe3cf;
+      --surface: rgba(255, 255, 255, 0.78);
+      --surface-strong: rgba(255, 255, 255, 0.92);
+      --ink: #1d1b18;
+      --muted: #6d675e;
+      --line: rgba(29, 27, 24, 0.12);
+      --line-strong: rgba(29, 27, 24, 0.22);
+      --brand: #0b6e4f;
+      --brand-soft: rgba(11, 110, 79, 0.12);
+      --warn: #b85c38;
+      --warn-soft: rgba(184, 92, 56, 0.12);
+      --shadow: 0 24px 70px rgba(30, 25, 17, 0.14);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --radius-md: 14px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      color-scheme: light;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(11, 110, 79, 0.18), transparent 24%),
+        radial-gradient(circle at top right, rgba(184, 92, 56, 0.16), transparent 22%),
+        linear-gradient(180deg, var(--bg-accent), var(--bg));
+    }
+
+    a {
+      color: inherit;
+    }
+
+    .shell {
+      width: min(1240px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 48px;
+    }
+
+    .hero {
+      padding: 32px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.64));
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: var(--brand-soft);
+      color: var(--brand);
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: currentColor;
+      box-shadow: 0 0 0 6px rgba(11, 110, 79, 0.12);
+    }
+
+    .hero h1 {
+      margin: 18px 0 12px;
+      font-size: clamp(2rem, 5vw, 4.4rem);
+      line-height: 0.94;
+      max-width: 10ch;
+    }
+
+    .hero p {
+      max-width: 60ch;
+      margin: 0;
+      color: var(--muted);
+      font-size: 1.02rem;
+      line-height: 1.7;
+    }
+
+    .toolbar {
+      margin-top: 22px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .stat-card {
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--surface-strong);
+    }
+
+    .stat-label {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 0.84rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .stat-value {
+      font-size: clamp(1.6rem, 3vw, 2.4rem);
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .status-banner {
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--surface-strong);
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .status-banner.is-loading {
+      border-color: rgba(11, 110, 79, 0.18);
+      background: rgba(11, 110, 79, 0.08);
+      color: var(--brand);
+    }
+
+    .status-banner.is-error {
+      border-color: rgba(184, 92, 56, 0.22);
+      background: var(--warn-soft);
+      color: var(--warn);
+    }
+
+    .status-banner.is-success {
+      border-color: rgba(11, 110, 79, 0.18);
+      background: rgba(11, 110, 79, 0.08);
+      color: var(--brand);
+    }
+
+    .cards {
+      margin-top: 22px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 18px;
+    }
+
+    .empty-state {
+      padding: 34px;
+      border: 1px dashed var(--line-strong);
+      border-radius: var(--radius-xl);
+      background: rgba(255, 255, 255, 0.5);
+      text-align: center;
+      color: var(--muted);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    }
+
+    .app-card {
+      position: relative;
+      overflow: hidden;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      background: var(--surface);
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+    }
+
+    .app-card::after {
+      content: "";
+      position: absolute;
+      inset: auto -10% -26% 35%;
+      height: 140px;
+      background: radial-gradient(circle, rgba(11, 110, 79, 0.14), transparent 65%);
+      pointer-events: none;
+    }
+
+    .card-head {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .card-kicker {
+      display: inline-flex;
+      width: fit-content;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: rgba(29, 27, 24, 0.06);
+      color: var(--muted);
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .card-title {
+      margin: 0;
+      font-size: 1.55rem;
+      line-height: 1.05;
+      word-break: break-word;
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tag {
+      padding: 8px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.72);
+      color: var(--ink);
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .meta-grid {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .meta-item {
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    .meta-label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .meta-value {
+      font-weight: 700;
+      line-height: 1.45;
+      word-break: break-word;
+    }
+
+    .documents {
+      position: relative;
+      z-index: 1;
+      margin-top: 4px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+    }
+
+    .documents h3 {
+      margin: 0 0 14px;
+      font-size: 0.95rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    .document-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .document-link {
+      display: grid;
+      gap: 5px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      background: rgba(255, 255, 255, 0.72);
+      text-decoration: none;
+      transition: transform 0.18s ease, border-color 0.18s ease;
+    }
+
+    .document-link:hover {
+      transform: translateY(-2px);
+      border-color: rgba(11, 110, 79, 0.28);
+    }
+
+    .document-link strong {
+      font-size: 0.96rem;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+
+    .document-link span {
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .document-empty {
+      color: var(--muted);
+      margin: 0;
+      line-height: 1.6;
+    }
+
+    .card-footer {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.86rem;
+      font-weight: 600;
+    }
+
+    .footer-meta {
+      display: flex;
+      flex: 1;
+      flex-wrap: wrap;
+      gap: 12px;
+      min-width: 220px;
+    }
+
+    .delete-card-button {
+      appearance: none;
+      border: 1px solid rgba(184, 92, 56, 0.26);
+      border-radius: 999px;
+      background: var(--warn-soft);
+      color: var(--warn);
+      cursor: pointer;
+      font: inherit;
+      font-weight: 800;
+      padding: 10px 14px;
+      transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+    }
+
+    .delete-card-button:hover:not(:disabled) {
+      border-color: rgba(184, 92, 56, 0.42);
+      background: rgba(184, 92, 56, 0.18);
+      transform: translateY(-1px);
+    }
+
+    .delete-card-button:disabled {
+      cursor: not-allowed;
+      opacity: 0.62;
+    }
+
+    @media (max-width: 800px) {
+      .shell {
+        width: min(100% - 20px, 1240px);
+        padding-top: 20px;
+      }
+
+      .hero,
+      .app-card {
+        padding: 20px;
+      }
+
+      .stats,
+      .meta-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero h1 {
+        max-width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <span class="eyebrow">Live Firestore Feed</span>
+      <h1>Applications Dashboard</h1>
+      <p>
+        This page reads every document from the Firebase <code>applications</code> collection and
+        shows each submission as a card with applicant details, package choice, uploaded files,
+        and submission metadata.
+      </p>
+
+      <div class="toolbar">
+        <div class="stats">
+          <article class="stat-card">
+            <span class="stat-label">Total Applications</span>
+            <strong class="stat-value" id="total-applications">0</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Uploaded Files</span>
+            <strong class="stat-value" id="total-documents">0</strong>
+          </article>
+          <article class="stat-card">
+            <span class="stat-label">Latest Submission</span>
+            <strong class="stat-value" id="latest-submission">--</strong>
+          </article>
+        </div>
+
+        <div class="status-banner is-loading" id="status-banner">
+          Connecting to Firebase and loading application cards...
+        </div>
+      </div>
+    </section>
+
+    <section class="cards" id="cards-root" aria-live="polite"></section>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+    import {
+      collection,
+      deleteDoc,
+      doc,
+      getFirestore,
+      onSnapshot,
+      query,
+    } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyD3xQalpdCJZK2GNCYRP8noiY5ei6oOtFw",
+      authDomain: "clients-9d7fe.firebaseapp.com",
+      projectId: "clients-9d7fe",
+      storageBucket: "clients-9d7fe.firebasestorage.app",
+      messagingSenderId: "489647859812",
+      appId: "1:489647859812:web:6f0f06a20beef2ea6a9771",
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const pendingDeletes = new Set();
+
+    const elements = {
+      cardsRoot: document.getElementById("cards-root"),
+      latestSubmission: document.getElementById("latest-submission"),
+      statusBanner: document.getElementById("status-banner"),
+      totalApplications: document.getElementById("total-applications"),
+      totalDocuments: document.getElementById("total-documents"),
+    };
+
+    function setStatus(message, state) {
+      elements.statusBanner.textContent = message;
+      elements.statusBanner.className = `status-banner ${state}`;
+    }
+
+    function formatDate(value) {
+      if (!value) {
+        return "No timestamp";
+      }
+
+      const date =
+        typeof value.toDate === "function"
+          ? value.toDate()
+          : value instanceof Date
+            ? value
+            : new Date(value);
+
+      if (Number.isNaN(date.getTime())) {
+        return "No timestamp";
+      }
+
+      return new Intl.DateTimeFormat("en-GB", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(date);
+    }
+
+    function getTimeValue(value) {
+      if (!value) {
+        return 0;
+      }
+
+      const date =
+        typeof value.toDate === "function"
+          ? value.toDate()
+          : value instanceof Date
+            ? value
+            : new Date(value);
+
+      const time = date.getTime();
+      return Number.isNaN(time) ? 0 : time;
+    }
+
+    function formatFileSize(size) {
+      if (typeof size !== "number" || Number.isNaN(size) || size < 0) {
+        return "Unknown size";
+      }
+
+      if (size < 1024) {
+        return `${size} B`;
+      }
+
+      if (size < 1024 * 1024) {
+        return `${(size / 1024).toFixed(1)} KB`;
+      }
+
+      return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+    }
+
+    function sanitizeText(value, fallback = "Not provided") {
+      if (value === null || value === undefined) {
+        return fallback;
+      }
+
+      const normalized = String(value).trim();
+      return normalized || fallback;
+    }
+
+    function createMetaItem(label, value) {
+      const wrapper = document.createElement("div");
+      const metaLabel = document.createElement("span");
+      const metaValue = document.createElement("div");
+
+      wrapper.className = "meta-item";
+      metaLabel.className = "meta-label";
+      metaValue.className = "meta-value";
+
+      metaLabel.textContent = label;
+      metaValue.textContent = sanitizeText(value);
+
+      wrapper.append(metaLabel, metaValue);
+      return wrapper;
+    }
+
+    function createDocumentLink(documentEntry) {
+      const link = document.createElement("a");
+      const fileName = document.createElement("strong");
+      const meta = document.createElement("span");
+
+      link.className = "document-link";
+      link.href = documentEntry.downloadURL || "#";
+      link.target = "_blank";
+      link.rel = "noreferrer noopener";
+
+      if (!documentEntry.downloadURL) {
+        link.removeAttribute("target");
+        link.removeAttribute("rel");
+      }
+
+      fileName.textContent = sanitizeText(documentEntry.name, "Unnamed file");
+      meta.textContent = [
+        sanitizeText(documentEntry.contentType, "Unknown type"),
+        formatFileSize(documentEntry.size),
+      ].join(" | ");
+
+      link.append(fileName, meta);
+      return link;
+    }
+
+    function createCard(application) {
+      const article = document.createElement("article");
+      const header = document.createElement("header");
+      const kicker = document.createElement("span");
+      const title = document.createElement("h2");
+      const tagRow = document.createElement("div");
+      const metaGrid = document.createElement("div");
+      const documentsSection = document.createElement("section");
+      const documentsTitle = document.createElement("h3");
+      const documentsList = document.createElement("div");
+      const footer = document.createElement("footer");
+      const footerMeta = document.createElement("div");
+      const deleteButton = document.createElement("button");
+      const documents = Array.isArray(application.documents) ? application.documents : [];
+
+      article.className = "app-card";
+      header.className = "card-head";
+      kicker.className = "card-kicker";
+      title.className = "card-title";
+      tagRow.className = "tag-row";
+      metaGrid.className = "meta-grid";
+      documentsSection.className = "documents";
+      documentsList.className = "document-list";
+      footer.className = "card-footer";
+      footerMeta.className = "footer-meta";
+      deleteButton.className = "delete-card-button";
+      deleteButton.type = "button";
+
+      kicker.textContent = "Application";
+      title.textContent = sanitizeText(application.fullName, "Unnamed applicant");
+
+      [
+        sanitizeText(application.languageLevel, "Language level unknown"),
+        sanitizeText(application.bewerbungen, "Package unknown"),
+        sanitizeText(application.bank, "Bank unknown"),
+      ].forEach((tagText) => {
+        const tag = document.createElement("span");
+        tag.className = "tag";
+        tag.textContent = tagText;
+        tagRow.appendChild(tag);
+      });
+
+      [
+        ["Email", application.email],
+        ["WhatsApp", application.whatsapp],
+        ["Field", application.bereich],
+        ["Submission ID", application.submissionId],
+        ["Firestore ID", application.id],
+        ["Submitted At", formatDate(application.createdAt)],
+      ].forEach(([label, value]) => {
+        metaGrid.appendChild(createMetaItem(label, value));
+      });
+
+      documentsTitle.textContent = `Documents (${documents.length})`;
+
+      if (documents.length) {
+        documents.forEach((documentEntry) => {
+          documentsList.appendChild(createDocumentLink(documentEntry));
+        });
+      } else {
+        const emptyDocuments = document.createElement("p");
+        emptyDocuments.className = "document-empty";
+        emptyDocuments.textContent = "No uploaded documents found for this application.";
+        documentsList.appendChild(emptyDocuments);
+      }
+
+      const footerRecord = document.createElement("span");
+      const footerTimestamp = document.createElement("span");
+
+      footerRecord.textContent = `Record: ${sanitizeText(application.id, "--")}`;
+      footerTimestamp.textContent = `Updated from Firestore: ${formatDate(application.createdAt)}`;
+      deleteButton.textContent = pendingDeletes.has(application.id) ? "Deleting..." : "Delete";
+      deleteButton.disabled = pendingDeletes.has(application.id);
+      deleteButton.addEventListener("click", () => {
+        handleDeleteApplication(application, deleteButton);
+      });
+
+      footerMeta.append(footerRecord, footerTimestamp);
+      footer.append(footerMeta, deleteButton);
+      documentsSection.append(documentsTitle, documentsList);
+      header.append(kicker, title, tagRow);
+      article.append(header, metaGrid, documentsSection, footer);
+      return article;
+    }
+
+    async function handleDeleteApplication(application, button) {
+      const applicationId = application.id;
+
+      if (!applicationId || pendingDeletes.has(applicationId)) {
+        return;
+      }
+
+      const applicantName = sanitizeText(application.fullName, "this application");
+      const confirmed = window.confirm(`Delete the application for ${applicantName}?`);
+
+      if (!confirmed) {
+        return;
+      }
+
+      pendingDeletes.add(applicationId);
+      button.disabled = true;
+      button.textContent = "Deleting...";
+      setStatus(`Deleting application for ${applicantName}...`, "is-loading");
+
+      try {
+        await deleteDoc(doc(db, "applications", applicationId));
+        setStatus(`Deleted application for ${applicantName}.`, "is-success");
+      } catch (error) {
+        console.error("Firebase delete failed", error);
+        pendingDeletes.delete(applicationId);
+        button.disabled = false;
+        button.textContent = "Delete";
+        setStatus(`Firebase delete failed: ${error.message}`, "is-error");
+      }
+    }
+
+    function renderEmptyState(message) {
+      elements.cardsRoot.innerHTML = "";
+      const empty = document.createElement("div");
+      empty.className = "empty-state";
+      empty.textContent = message;
+      elements.cardsRoot.appendChild(empty);
+    }
+
+    function renderStats(applications) {
+      const totalDocuments = applications.reduce((count, application) => {
+        return count + (Array.isArray(application.documents) ? application.documents.length : 0);
+      }, 0);
+
+      elements.totalApplications.textContent = String(applications.length);
+      elements.totalDocuments.textContent = String(totalDocuments);
+      elements.latestSubmission.textContent = applications.length
+        ? formatDate(applications[0].createdAt)
+        : "--";
+    }
+
+    function renderApplications(applications) {
+      renderStats(applications);
+
+      if (!applications.length) {
+        renderEmptyState("No application documents were found in Firebase.");
+        return;
+      }
+
+      elements.cardsRoot.innerHTML = "";
+      const fragment = document.createDocumentFragment();
+
+      applications.forEach((application) => {
+        fragment.appendChild(createCard(application));
+      });
+
+      elements.cardsRoot.appendChild(fragment);
+    }
+
+    const applicationsQuery = query(collection(db, "applications"));
+
+    onSnapshot(
+      applicationsQuery,
+      (snapshot) => {
+        const applications = snapshot.docs
+          .map((docSnapshot) => ({
+            id: docSnapshot.id,
+            ...docSnapshot.data(),
+          }))
+          .sort((left, right) => getTimeValue(right.createdAt) - getTimeValue(left.createdAt));
+
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === "removed") {
+            pendingDeletes.delete(change.doc.id);
+          }
+        });
+
+        renderApplications(applications);
+        setStatus(`Loaded ${applications.length} application card(s) from Firebase.`, "is-success");
+      },
+      (error) => {
+        console.error(error);
+        renderStats([]);
+        renderEmptyState("Unable to read Firebase data. Check Firestore rules and collection access.");
+        setStatus(`Firebase read failed: ${error.message}`, "is-error");
+      },
+    );
+  </script>
+</body>
+</html>

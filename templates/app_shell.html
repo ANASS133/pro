@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arbeitsagentur Scraper</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='spa/app.css') }}?v=2.0">
+</head>
+<body>
+    <div class="spa-shell" data-initial-section="{{ initial_section }}">
+        <header class="shell-topbar">
+            <div class="shell-brand">
+                <span class="brand-kicker">Arbeitsagentur Scraper</span>
+                <h1>Single Page Workbench</h1>
+                <p>Suche, Anschreiben, Add, Versand und Operations laufen jetzt in einer gemeinsamen Shell.</p>
+            </div>
+            <nav class="shell-nav" aria-label="Hauptnavigation">
+                <a href="{{ url_for('index') }}" data-section-link="search">E-Mails finden</a>
+                <a href="{{ url_for('firebase_page') }}" data-section-link="firebase">Firebase</a>
+                <a href="{{ url_for('create_anschreibens') }}" data-section-link="create-anschreibens">Anschreiben</a>
+                <a href="{{ url_for('send_emails') }}" data-section-link="send-emails">E-Mails senden</a>
+                <a href="{{ url_for('dashboard') }}" data-section-link="dashboard">Dashboard</a>
+                <a href="{{ url_for('add') }}" data-section-link="add">Add</a>
+                <a href="{{ url_for('ausbildungen') }}" data-section-link="ausbildungen">Ausbildungen</a>
+            </nav>
+        </header>
+
+        <main class="shell-main">
+            <div class="shell-content">
+                <section
+                    id="search-section"
+                    class="app-section"
+                    data-section="search"
+                    {% if initial_section != "search" %}hidden{% endif %}
+                >
+                    <div class="section-hero">
+                        <div>
+                            <span class="section-kicker">Suche</span>
+                            <h2>Jobsuche und Auto-Extraktion</h2>
+                            <p>Suche parallel nach Stellen und starte die automatische E-Mail-Extraktion direkt aus derselben Ansicht.</p>
+                        </div>
+                        <div class="hero-actions">
+                            <a href="{{ url_for('create_anschreibens') }}" data-section-link="create-anschreibens">Zum Anschreiben-Tool</a>
+                            <a href="{{ url_for('send_emails') }}" data-section-link="send-emails">Zum Email-Sender</a>
+                        </div>
+                    </div>
+
+                    <div class="search-grid">
+                        <div class="search-card">
+                            <form id="search_form_1" action="{{ url_for('search') }}" method="POST">
+                                <div class="form-group">
+                                    <label for="keyword">Stellentitel / Stichwort</label>
+                                    <input
+                                        type="text"
+                                        id="keyword"
+                                        name="keyword"
+                                        placeholder="z. B. Softwareentwickler, Krankenschwester"
+                                        required
+                                    >
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="location">Ort (optional)</label>
+                                    <input
+                                        type="text"
+                                        id="location"
+                                        name="location"
+                                        placeholder="z. B. Berlin, Muenchen"
+                                    >
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="published_since">Veroeffentlicht seit</label>
+                                    <select id="published_since" name="published_since">
+                                        <option value="all" selected>Alle anzeigen</option>
+                                        <option value="today">Heute</option>
+                                        <option value="yesterday">Gestern</option>
+                                        <option value="1week">1 Woche</option>
+                                        <option value="2weeks">2 Wochen</option>
+                                        <option value="4weeks">4 Wochen</option>
+                                    </select>
+                                </div>
+
+                                <button id="search_btn_1" type="submit">Suchen</button>
+                            </form>
+
+                            <div class="loading" id="loading_1">
+                                <div class="spinner"></div>
+                                <p>Stellen werden geladen, bitte warten.</p>
+                            </div>
+
+                            <div class="info">
+                                <strong>Hinweis:</strong> Bitte verantwortungsvoll und gemaess Website-Bedingungen nutzen.
+                            </div>
+                            <div id="results_1" class="results-box">
+                                <div id="results_meta_1" class="results-meta"></div>
+                                <div id="results_list_1" class="results-list"></div>
+                                <div class="results-actions">
+                                    <button id="auto_btn_1" type="button" class="auto-btn" style="display:none;">Automatisch extrahieren</button>
+                                </div>
+                                <section id="progress_panel_1" class="progress-panel">
+                                    <h4 class="progress-title">Fortschritt Auto-Extraktion</h4>
+                                    <div class="progress-stats">
+                                        <div class="progress-stat"><span id="processed_1" class="value">0</span><span class="label">Verarbeitet</span></div>
+                                        <div class="progress-stat"><span id="emails_1" class="value">0</span><span class="label">E-Mails</span></div>
+                                        <div class="progress-stat"><span id="captcha_1" class="value">0</span><span class="label">CAPTCHAs</span></div>
+                                        <div class="progress-stat"><span id="failed_1" class="value">0</span><span class="label">Fehler</span></div>
+                                    </div>
+                                    <div class="progress-track"><div id="progress_fill_1" class="progress-fill">0%</div></div>
+                                    <div id="progress_status_1" class="progress-status">Leerlauf</div>
+                                    <div id="progress_error_1" class="progress-error"></div>
+                                    <div class="progress-actions">
+                                        <button id="stop_btn_1" type="button" class="progress-btn stop">Stoppen + Ergebnis herunterladen</button>
+                                        <button id="continue_btn_1" type="button" class="progress-btn continue">Fortsetzen</button>
+                                        <button id="download_btn_1" type="button" class="progress-btn download">Ergebnis herunterladen</button>
+                                        <button id="anschreiben_btn_1" type="button" class="progress-btn primary-action" style="display:none;">Zu Anschreiben</button>
+                                    </div>
+                                </section>
+                                <div id="results_error_1" class="results-error" style="display:none;"></div>
+                            </div>
+                        </div>
+
+                        <div class="search-card">
+                            <form id="search_form_2" action="{{ url_for('search') }}" method="POST">
+                                <div class="form-group">
+                                    <label for="keyword_2">Stellentitel / Stichwort</label>
+                                    <input
+                                        type="text"
+                                        id="keyword_2"
+                                        name="keyword"
+                                        placeholder="z. B. Softwareentwickler, Krankenschwester"
+                                        required
+                                    >
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="location_2">Ort (optional)</label>
+                                    <input
+                                        type="text"
+                                        id="location_2"
+                                        name="location"
+                                        placeholder="z. B. Berlin, Muenchen"
+                                    >
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="published_since_2">Veroeffentlicht seit</label>
+                                    <select id="published_since_2" name="published_since">
+                                        <option value="all" selected>Alle anzeigen</option>
+                                        <option value="today">Heute</option>
+                                        <option value="yesterday">Gestern</option>
+                                        <option value="1week">1 Woche</option>
+                                        <option value="2weeks">2 Wochen</option>
+                                        <option value="4weeks">4 Wochen</option>
+                                    </select>
+                                </div>
+
+                                <button id="search_btn_2" type="submit">Suchen</button>
+                            </form>
+
+                            <div class="loading" id="loading_2">
+                                <div class="spinner"></div>
+                                <p>Stellen werden geladen, bitte warten.</p>
+                            </div>
+
+                            <div class="info">
+                                <strong>Hinweis:</strong> Bitte verantwortungsvoll und gemaess Website-Bedingungen nutzen.
+                            </div>
+                            <div id="results_2" class="results-box">
+                                <div id="results_meta_2" class="results-meta"></div>
+                                <div id="results_list_2" class="results-list"></div>
+                                <div class="results-actions">
+                                    <button id="auto_btn_2" type="button" class="auto-btn" style="display:none;">Automatisch extrahieren</button>
+                                </div>
+                                <section id="progress_panel_2" class="progress-panel">
+                                    <h4 class="progress-title">Fortschritt Auto-Extraktion</h4>
+                                    <div class="progress-stats">
+                                        <div class="progress-stat"><span id="processed_2" class="value">0</span><span class="label">Verarbeitet</span></div>
+                                        <div class="progress-stat"><span id="emails_2" class="value">0</span><span class="label">E-Mails</span></div>
+                                        <div class="progress-stat"><span id="captcha_2" class="value">0</span><span class="label">CAPTCHAs</span></div>
+                                        <div class="progress-stat"><span id="failed_2" class="value">0</span><span class="label">Fehler</span></div>
+                                    </div>
+                                    <div class="progress-track"><div id="progress_fill_2" class="progress-fill">0%</div></div>
+                                    <div id="progress_status_2" class="progress-status">Leerlauf</div>
+                                    <div id="progress_error_2" class="progress-error"></div>
+                                    <div class="progress-actions">
+                                        <button id="stop_btn_2" type="button" class="progress-btn stop">Stoppen + Ergebnis herunterladen</button>
+                                        <button id="continue_btn_2" type="button" class="progress-btn continue">Fortsetzen</button>
+                                        <button id="download_btn_2" type="button" class="progress-btn download">Ergebnis herunterladen</button>
+                                        <button id="anschreiben_btn_2" type="button" class="progress-btn primary-action" style="display:none;">Zu Anschreiben</button>
+                                    </div>
+                                </section>
+                                <div id="results_error_2" class="results-error" style="display:none;"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section
+                    id="dashboard-section"
+                    class="app-section"
+                    data-section="dashboard"
+                    {% if initial_section != "dashboard" %}hidden{% endif %}
+                >
+                    <div class="section-hero">
+                        <div>
+                            <span class="section-kicker">Dashboard</span>
+                            <h2>Gespeicherte Kampagnen</h2>
+                            <p>Versandfortschritt, Pause/Continue und Anschreiben-Editor bleiben in einer laufenden Uebersicht.</p>
+                        </div>
+                        <div class="hero-actions">
+                            <a href="{{ url_for('send_emails') }}" data-section-link="send-emails">Neue Kampagne</a>
+                        </div>
+                    </div>
+
+                    <div id="dashboard-status" class="section-status" hidden></div>
+                    <div id="dashboard-empty" class="empty-state" hidden>Noch keine gespeicherten Vorlagen vorhanden.</div>
+                    <div id="dashboard-cards" class="cards-grid"></div>
+                </section>
+
+                <section
+                    id="firebase-section"
+                    class="app-section"
+                    data-section="firebase"
+                    {% if initial_section != "firebase" %}hidden{% endif %}
+                >
+                    <div class="section-hero firebase-hero">
+                        <div>
+                            <span class="section-kicker">Firebase</span>
+                            <h2>Online-Bewerbungen</h2>
+                            <p>Firebase-Eintraege werden jetzt ueber denselben Shell-Flow geladen und geloescht.</p>
+                        </div>
+                    </div>
+
+                    <div id="firebase-status" class="section-status" hidden></div>
+                    <div id="firebase-empty" class="empty-state" hidden>Noch keine Online-Bewerbungen vorhanden.</div>
+                    <div id="firebase-cards" class="cards-grid"></div>
+                </section>
+
+
+                <section
+                    id="ausbildungen-section"
+                    class="app-section"
+                    data-section="ausbildungen"
+                    {% if initial_section != "ausbildungen" %}hidden{% endif %}
+                >
+                    <div class="section-hero">
+                        <div>
+                            <span class="section-kicker">Ausbildungen</span>
+                            <h2>Exportdateien und Updates</h2>
+                            <p>Update-Jobs laufen weiter ueber dieselben APIs, jetzt ohne Seitenwechsel.</p>
+                        </div>
+                    </div>
+
+                    <div id="ausbildungen-status" class="section-status" hidden></div>
+                    <div id="ausbildungen-empty" class="empty-state" hidden>Keine exportierten Ausbildungsdateien gefunden.</div>
+                    <div id="ausbildungen-files" class="files-grid"></div>
+                </section>
+
+                <section
+                    id="create-anschreibens-section"
+                    class="app-section"
+                    data-section="create-anschreibens"
+                    {% if initial_section != "create-anschreibens" %}hidden{% endif %}
+                >
+                    <div class="section-hero">
+                        <div>
+                            <span class="section-kicker">Anschreiben</span>
+                            <h2>PDF Generator</h2>
+                            <p>Export-Domain waehlen, Varianten verwalten und PDFs direkt aus den gespeicherten Auto-Exporten erzeugen.</p>
+                        </div>
+                        <div class="hero-actions">
+                            <a href="{{ url_for('send_emails') }}" data-section-link="send-emails">Weiter zu E-Mails</a>
+                            <a href="{{ url_for('dashboard') }}" data-section-link="dashboard">Zum Dashboard</a>
+                        </div>
+                    </div>
+
+                    <div id="create-anschreibens-error" class="section-status is-error" hidden></div>
+
+                    <div class="anschreiben-workspace">
+                        <article class="anschreiben-card">
+                            <div class="anschreiben-card-head">
+                                <div>
+                                    <h3>1. Export-Domain auswaehlen</h3>
+                                    <p>Verfuegbare Datendateien aus <code>data/auto_extraction_exports</code> direkt als PDF-Quelle laden.</p>
+                                </div>
+                            </div>
+                            <div class="anschreiben-inline-form">
+                                <label class="anschreiben-field" for="create-anschreibens-exportSelect">
+                                    <span>Verfuegbare Domains</span>
+                                    <select id="create-anschreibens-exportSelect">
+                                        <option value="">Bitte Domain waehlen</option>
+                                    </select>
+                                </label>
+                                <button id="create-anschreibens-loadExportBtn" class="anschreiben-btn-primary" type="button">Daten laden</button>
+                            </div>
+                            <small class="anschreiben-source-help">Quelle: zuletzt exportierte Dateien aus dem Auto-Extraction-Ordner.</small>
+                            <div id="create-anschreibens-fileInfo" class="anschreiben-file-info" hidden>
+                                <p>Quelle: <span id="create-anschreibens-fileName"></span></p>
+                                <p>Zeilen: <span id="create-anschreibens-rowCount"></span></p>
+                            </div>
+                        </article>
+
+                        <article class="anschreiben-card">
+                            <div class="anschreiben-card-head">
+                                <div>
+                                    <h3>2. Spalten aus Datei</h3>
+                                    <p>Verfuegbare Felder werden direkt fuer Platzhalter und Vorschau vorbereitet.</p>
+                                </div>
+                            </div>
+                            <div id="create-anschreibens-columnList" class="anschreiben-column-list"></div>
+                            <div id="create-anschreibens-dataPreview" class="anschreiben-data-preview" hidden>
+                                <h4>Datenvorschau</h4>
+                                <div id="create-anschreibens-previewTable" class="anschreiben-preview-table"></div>
+                            </div>
+                        </article>
+
+                        <article class="anschreiben-card">
+                            <div class="anschreiben-card-head">
+                                <div>
+                                    <h3>3. Dokumentenansicht</h3>
+                                    <p>Das hochgeladene PDF-Dokument des Kunden wird hier angezeigt.</p>
+                                </div>
+                            </div>
+                            <div id="create-anschreibens-sourcePrompt" class="empty-state">
+                                Noch kein Quelldokument ausgewaehlt.
+                            </div>
+                            <div id="create-anschreibens-pdfContainer" style="width: 100%; border: 1px solid #ddd; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column;" hidden>
+                                <div class="anschreiben-document-viewer-head" style="padding: 10px; background: #f8faff; border-bottom: 1px solid #ddd; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                                    <div id="create-anschreibens-documentList" class="anschreiben-document-list" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <span id="create-anschreibens-documentViewerTitle" style="font-weight: bold; font-size: 14px;"></span>
+                                        <a id="create-anschreibens-documentOpenLink" href="#" target="_blank" class="anschreiben-btn-secondary" style="padding: 4px 8px; font-size: 12px; text-decoration: none;">In neuem Tab öffnen</a>
+                                    </div>
+                                </div>
+                                <div class="anschreiben-document-viewer" style="height: 600px; width: 100%;">
+                                    <iframe id="create-anschreibens-pdfIframe" style="width: 100%; height: 100%; border: none;"></iframe>
+                                </div>
+                            </div>
+                        </article>
+
+                        <article class="anschreiben-card">
+                            <div class="anschreiben-card-head">
+                                <div>
+                                    <h3>4. Textvorlage bearbeiten</h3>
+                                    <p>Mehrere Varianten speichern, Text aus dem PDF extrahieren und optional ein Design-PDF als Hintergrund hinterlegen.</p>
+                                </div>
+                            </div>
+
+                            <div class="anschreiben-design-upload">
+                                <h4>Optional: Design-PDF als Hintergrund</h4>
+                                <div class="anschreiben-upload-area anschreiben-upload-area-compact" id="create-anschreibens-designDropZone">
+                                    <input type="file" id="create-anschreibens-designFileInput" accept=".pdf" hidden>
+                                    <p>Design-PDF hier ablegen oder klicken</p>
+                                    <small>Der Text wird auf Seite 1 des PDFs platziert.</small>
+                                </div>
+                                <div id="create-anschreibens-designFileInfo" class="anschreiben-file-info" hidden>
+                                    <p>Design-Datei: <span id="create-anschreibens-designFileName"></span></p>
+                                </div>
+                            </div>
+
+                            <div class="anschreiben-template-editor">
+                                <div class="anschreiben-placeholder-help">
+                                    <p>Verfuegbare Platzhalter: <span id="create-anschreibens-placeholderTags"></span></p>
+                                    <small>Formatierung unterstuetzt z. B. <b>&lt;b&gt;fett&lt;/b&gt;</b>, <i>&lt;i&gt;kursiv&lt;/i&gt;</i> und <u>&lt;u&gt;unterstrichen&lt;/u&gt;</u>.</small>
+                                </div>
+
+                                <div class="anschreiben-extract-area" style="background: var(--surface); padding: 16px; border-radius: 6px; border: 1px solid var(--border); margin-bottom: 20px;">
+                                    <h4 style="margin-top: 0; margin-bottom: 12px; font-size: 0.95rem; color: var(--text-primary);">Text aus PDF extrahieren</h4>
+                                    <div style="display: flex; gap: 10px; align-items: center;">
+                                        <label for="create-anschreibens-extractPageInput" style="font-size: 0.9rem;">Seitenzahl (Anschreiben):</label>
+                                        <input type="number" id="create-anschreibens-extractPageInput" min="1" value="1" style="width: 80px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px;">
+                                        <button id="create-anschreibens-extractBtn" type="button" class="anschreiben-btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">Text extrahieren & einfuegen</button>
+                                        <span id="create-anschreibens-extractStatus" style="font-size: 0.85rem; color: var(--text-secondary);" hidden>Extrahiere...</span>
+                                    </div>
+                                    <small style="display: block; margin-top: 8px; color: var(--text-secondary);">Achtung: Ueberschreibt den aktuellen Text im Editor.</small>
+                                </div>
+
+                                <div class="anschreiben-extract-area" style="background: var(--surface); padding: 16px; border-radius: 6px; border: 1px solid var(--border); margin-bottom: 20px;">
+                                    <h4 style="margin-top: 0; margin-bottom: 12px; font-size: 0.95rem; color: var(--text-primary);">KI-Vorlage erstellen</h4>
+                                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                                        <button id="create-anschreibens-aiTemplatizeBtn" type="button" class="anschreiben-btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">Platzhalter per KI einfuegen</button>
+                                        <span id="create-anschreibens-aiTemplatizeStatus" style="font-size: 0.85rem; color: var(--text-secondary);" hidden>KI verarbeitet den Text...</span>
+                                    </div>
+                                    <small style="display: block; margin-top: 8px; color: var(--text-secondary);">Nach der Textextraktion analysiert die KI den Text und fuegt automatisch die verfuegbaren Platzhalter ein. Der Vorgang wird nach der Extraktion automatisch gestartet oder kann manuell ausgeloest werden.</small>
+                                </div>
+
+                                <div class="anschreiben-template-variants">
+                                    <div class="anschreiben-template-variant-header">
+                                        <h4>Anschreiben-Varianten</h4>
+                                        <small>Beim Generieren wird pro PDF zufaellig eine gespeicherte Variante verwendet.</small>
+                                    </div>
+                                    <div id="create-anschreibens-templateList" class="anschreiben-template-list"></div>
+                                    <div class="anschreiben-template-actions">
+                                        <button id="create-anschreibens-addTemplateBtn" class="anschreiben-btn-secondary" type="button">Neue Variante</button>
+                                        <button id="create-anschreibens-deleteTemplateBtn" class="anschreiben-btn-secondary" type="button">Aktive loeschen</button>
+                                    </div>
+                                </div>
+
+                                <div class="anschreiben-format-toolbar" id="create-anschreibens-formatToolbar">
+                                    <button type="button" class="anschreiben-format-btn" data-prefix="<b>" data-suffix="</b>"><strong>Fett</strong></button>
+                                    <button type="button" class="anschreiben-format-btn" data-prefix="<i>" data-suffix="</i>"><em>Kursiv</em></button>
+                                    <button type="button" class="anschreiben-format-btn" data-prefix="<u>" data-suffix="</u>"><u>Unterstrichen</u></button>
+                                    <button type="button" class="anschreiben-format-btn" data-prefix="<br><br>" data-suffix="">Absatz</button>
+                                </div>
+
+                                <textarea
+                                    id="create-anschreibens-templateEditor"
+                                    class="anschreiben-textarea"
+                                    rows="15"
+                                    placeholder="Geben Sie hier Ihre Vorlage ein..."
+                                ></textarea>
+
+                                <div class="anschreiben-template-actions">
+                                    <button id="create-anschreibens-saveTemplateBtn" class="anschreiben-btn-primary" type="button">Vorlage speichern</button>
+                                    <button id="create-anschreibens-resetTemplateBtn" class="anschreiben-btn-secondary" type="button">Aktive leeren</button>
+                                </div>
+                            </div>
+
+                            <div id="create-anschreibens-validationResult" class="anschreiben-validation-result" hidden></div>
+                        </article>
+
+                        <article class="anschreiben-card">
+                            <div class="anschreiben-card-head">
+                                <div>
+                                    <h3>5. PDFs generieren</h3>
+                                    <p>Layout feinjustieren, Vorschau pruefen und die fertigen PDFs direkt in den Versand uebergeben.</p>
+                                </div>
+                            </div>
+
+                            <div class="anschreiben-filename-format">
+                                <label for="create-anschreibens-filenameFormat">Dateiname</label>
+                                <input type="text" id="create-anschreibens-filenameFormat" value="Automatisch aus Firma" readonly>
+                                <small>Jede PDF wird automatisch nach Firma oder Unternehmen benannt.</small>
+                            </div>
+
+                            <div class="anschreiben-layout-controls">
+                                <h4>PDF Layout Steuerung</h4>
+                                <div class="anschreiben-layout-grid">
+                                    <label>Schriftgroesse (pt)<input type="number" id="create-anschreibens-fontSizeInput" min="6" max="48" step="1" value="11"></label>
+                                    <label>Zeilenhoehe (mm)<input type="number" id="create-anschreibens-lineHeightInput" min="2" max="30" step="0.5" value="5"></label>
+                                    <label>Margin oben (mm)<input type="number" id="create-anschreibens-marginTopInput" min="0" max="250" step="1" value="20"></label>
+                                    <label>Margin links (mm)<input type="number" id="create-anschreibens-marginLeftInput" min="0" max="200" step="1" value="20"></label>
+                                    <label>Margin rechts (mm)<input type="number" id="create-anschreibens-marginRightInput" min="0" max="200" step="1" value="20"></label>
+                                    <label>Margin unten (mm)<input type="number" id="create-anschreibens-marginBottomInput" min="0" max="250" step="1" value="20"></label>
+                                    <label>Textbreite (mm)<input type="number" id="create-anschreibens-textWidthInput" min="20" max="210" step="1" value="170"></label>
+                                    <label>Texthoehe (mm)<input type="number" id="create-anschreibens-textHeightInput" min="20" max="297" step="1" value="257"></label>
+                                </div>
+                                <div class="anschreiben-template-actions">
+                                    <button id="create-anschreibens-resetLayoutBtn" class="anschreiben-btn-secondary" type="button">Layout zuruecksetzen</button>
+                                </div>
+                                <small>Bei Design-PDF steuern diese Werte die Textposition auf Seite 1.</small>
+                            </div>
+
+                            <div class="anschreiben-action-buttons">
+                                <button id="create-anschreibens-previewBtn" class="anschreiben-btn-secondary" type="button">Vorschau (erste PDF)</button>
+                                <button id="create-anschreibens-generateBtn" class="anschreiben-btn-primary" type="button">Alle PDFs im Projektordner erstellen</button>
+                                <button id="create-anschreibens-toEmailBtn" class="anschreiben-btn-secondary" type="button" hidden>To Email Sender</button>
+                            </div>
+
+                            <div id="create-anschreibens-progressArea" class="anschreiben-progress-area" hidden>
+                                <div class="anschreiben-progress-bar">
+                                    <div id="create-anschreibens-progressFill" class="anschreiben-progress-fill"></div>
+                                </div>
+                                <p id="create-anschreibens-progressText">Generiere PDFs...</p>
+                            </div>
+                        </article>
+
+                        <div id="create-anschreibens-previewModal" class="anschreiben-modal" hidden>
+                            <div class="anschreiben-modal-content">
+                                <div class="anschreiben-modal-header">
+                                    <h3>PDF Vorschau</h3>
+                                    <button class="anschreiben-close-btn" id="create-anschreibens-closeModalBtn" type="button">&times;</button>
+                                </div>
+                                <div class="anschreiben-modal-body">
+                                    <iframe id="create-anschreibens-pdfPreview" title="PDF Vorschau"></iframe>
+                                </div>
+                                <div class="anschreiben-modal-footer">
+                                    <button id="create-anschreibens-closeFooterBtn" class="anschreiben-btn-secondary" type="button">Schliessen</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="create-anschreibens-toast" class="anschreiben-toast" hidden></div>
+                    </div>
+                </section>
+
+                <section
+                    id="send-emails-section"
+                    class="app-section"
+                    data-section="send-emails"
+                    {% if initial_section != "send-emails" %}hidden{% endif %}
+                >
+                    <div class="section-hero">
+                        <div>
+                            <span class="section-kicker">E-Mails</span>
+                            <h2>Massenversand</h2>
+                            <p>Personalisierter Massenversand mit CSV/XLSX-Daten.</p>
+                        </div>
+                    </div>
+
+                    <div class="send-emails-card">
+                        <div class="tips">
+                            <div class="tip">Standard-Empf&#228;ngerspalte ist <b>email</b>.</div>
+                            <div class="tip">Unterst&#252;tzte Datendateien: <b>.csv</b>, <b>.xlsx</b>.</div>
+                            <div class="tip">Platzhalter wie <code>&#123;&#123;company&#125;&#125;</code> und <code>&#123;&#123;person&#125;&#125;</code> verwenden.</div>
+                        </div>
+                        <div id="send-emails-error" hidden></div>
+                        <div id="send-emails-transfer-box" hidden></div>
+                        <div id="send-emails-campaign-box" hidden></div>
+
+                        <form id="send-emails-bulkForm" enctype="multipart/form-data">
+                            <input type="hidden" name="transfer_session_id" value="">
+                            <input type="hidden" name="campaign_id" value="">
+                            <div class="grid">
+                                <div class="group">
+                                    <label for="send-emails-full_name">Vollst&#228;ndiger Name</label>
+                                    <input
+                                        type="text"
+                                        id="send-emails-full_name"
+                                        name="full_name"
+                                        placeholder="z. B. Max Mustermann"
+                                    >
+                                </div>
+                                <div class="group">
+                                    <label for="send-emails-sender_email">Absender (Gmail)</label>
+                                    <input
+                                        type="email"
+                                        id="send-emails-sender_email"
+                                        name="sender_email"
+                                        placeholder="you@gmail.com"
+                                    >
+                                </div>
+                                <div class="group">
+                                    <label for="send-emails-app_password">App-Passwort</label>
+                                    <input
+                                        type="password"
+                                        id="send-emails-app_password"
+                                        name="app_password"
+                                        placeholder="xxxx xxxx xxxx xxxx"
+                                    >
+                                </div>
+                            </div>
+
+                            <div class="grid">
+                                <div class="group">
+                                    <label for="send-emails-data_file">Empf&#228;nger-Datendatei (.csv/.xlsx)</label>
+                                    <div class="file-upload">
+                                        <input class="file-input" type="file" id="send-emails-data_file" name="data_file" accept=".csv,.xlsx,.xls">
+                                        <label for="send-emails-data_file" class="file-btn">Datei w&#228;hlen</label>
+                                        <span id="send-emails-data_file_name" class="file-name">Keine Datei ausgew&#228;hlt</span>
+                                    </div>
+                                </div>
+                                <div class="group">
+                                    <label for="send-emails-attachments">Anh&#228;nge (optional, mehrfach)</label>
+                                    <div class="file-upload">
+                                        <input class="file-input" type="file" id="send-emails-attachments" name="attachments" multiple>
+                                        <label for="send-emails-attachments" class="file-btn">Dateien w&#228;hlen</label>
+                                        <span id="send-emails-attachments_name" class="file-name">Keine Datei ausgew&#228;hlt</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="group">
+                                <label class="checkbox-row" for="send-emails-one_document_enabled">
+                                    <input type="checkbox" id="send-emails-one_document_enabled" name="one_document_enabled" value="1">
+                                    One Document Mode
+                                </label>
+                                <div id="send-emails-oneDocumentFields" class="one-document-fields" hidden>
+                                    <div class="grid">
+                                        <div class="group">
+                                            <label for="send-emails-one_document_base_file">Basis-Dokument (.pdf)</label>
+                                            <div class="file-upload">
+                                                <input class="file-input" type="file" id="send-emails-one_document_base_file" name="one_document_base_file" accept=".pdf">
+                                                <label for="send-emails-one_document_base_file" class="file-btn">PDF w&#228;hlen</label>
+                                                <span id="send-emails-one_document_base_file_name" class="file-name">Keine Datei ausgew&#228;hlt</span>
+                                            </div>
+                                        </div>
+                                        <div class="group">
+                                            <label for="send-emails-one_document_page">Seite des Anschreibens</label>
+                                            <input type="number" id="send-emails-one_document_page" name="one_document_page" min="1" step="1" value="1">
+                                        </div>
+                                    </div>
+                                    <div class="group">
+                                        <label for="send-emails-one_document_action">Aktion</label>
+                                        <select id="send-emails-one_document_action" name="one_document_action">
+                                            <option value="replace">Replace - Seite ersetzen</option>
+                                            <option value="add">Add - vor dieser Seite einfuegen</option>
+                                        </select>
+                                    </div>
+                                    <div class="muted-note">Pro Empf&#228;nger wird eine frische Kopie des Basis-PDFs erstellt und mit dem personalisierten Anschreiben kombiniert.</div>
+                                </div>
+                            </div>
+
+                            <div class="grid">
+                                <div class="group">
+                                    <label for="send-emails-recipient_column">Name der Empf&#228;ngerspalte</label>
+                                    <input type="text" id="send-emails-recipient_column" name="recipient_column" value="email">
+                                </div>
+                                <div class="group">
+                                    <label for="send-emails-limit">Zeilenlimit (optional)</label>
+                                    <input
+                                        type="number"
+                                        id="send-emails-limit"
+                                        name="limit"
+                                        min="1"
+                                        placeholder="Beispiel: 100"
+                                    >
+                                </div>
+                            </div>
+
+                            <div class="group">
+                                <label for="send-emails-day_preset">Versand-Tag</label>
+                                <select id="send-emails-day_preset" name="day_preset">
+                                    <option value="">Tag ausw&#228;hlen</option>
+                                    <option value="day1">Tag 1 - 100 E-Mails</option>
+                                    <option value="day2">Tag 2 - 200 E-Mails</option>
+                                    <option value="day3">Tag 3 - 300 E-Mails</option>
+                                    <option value="day4">Tag 4 - 500 E-Mails</option>
+                                </select>
+                                <div class="muted-note">Die Werte f&#252;r Zeilenlimit, Jitter und Batch werden automatisch gesetzt.</div>
+                            </div>
+
+                            <div class="grid">
+                                <div class="group">
+                                    <label for="send-emails-jitter_min_seconds">Jitter Minimum (Sekunden)</label>
+                                    <input
+                                        type="number"
+                                        id="send-emails-jitter_min_seconds"
+                                        name="jitter_min_seconds"
+                                        min="0"
+                                        step="0.1"
+                                        placeholder="z. B. 80"
+                                    >
+                                </div>
+                                <div class="group">
+                                    <label for="send-emails-jitter_max_seconds">Jitter Maximum (Sekunden)</label>
+                                    <input
+                                        type="number"
+                                        id="send-emails-jitter_max_seconds"
+                                        name="jitter_max_seconds"
+                                        min="0"
+                                        step="0.1"
+                                        placeholder="z. B. 110"
+                                    >
+                                </div>
+                            </div>
+
+                            <div class="grid">
+                                <div class="group">
+                                    <label for="send-emails-batch_size">Batch-Gr&#246;&#223;e (E-Mails)</label>
+                                    <input
+                                        type="number"
+                                        id="send-emails-batch_size"
+                                        name="batch_size"
+                                        min="1"
+                                        step="1"
+                                        placeholder="z. B. 20"
+                                    >
+                                </div>
+                                <div class="group">
+                                    <label for="send-emails-batch_pause_minutes">Batch-Pause (Minuten)</label>
+                                    <input
+                                        type="number"
+                                        id="send-emails-batch_pause_minutes"
+                                        name="batch_pause_minutes"
+                                        min="0"
+                                        step="0.1"
+                                        placeholder="z. B. 30"
+                                    >
+                                </div>
+                            </div>
+
+                            <div class="group">
+                                <label for="send-emails-subject_template">Betreff-Vorlage</label>
+                                <input
+                                    type="text"
+                                    id="send-emails-subject_template"
+                                    name="subject_template"
+                                    placeholder="Hi &#123;&#123;person&#125;&#125; from &#123;&#123;company&#125;&#125;"
+                                >
+                            </div>
+
+                            <div class="group">
+                                <label for="send-emails-body_template">Nachrichtenvorlage</label>
+                                <textarea id="send-emails-body_template" name="body_template" placeholder="Hallo &#123;&#123;person&#125;&#125;,&#10;&#10;wir haben ein Angebot f&#252;r &#123;&#123;company&#125;&#125;."></textarea>
+                            </div>
+
+                            <div class="btn-row">
+                                <button class="btn btn-secondary" type="button" id="send-emails-saveTemplateBtn">Vorlage im Dashboard speichern</button>
+                                <button class="btn" type="submit" id="send-emails-sendBtn">Massenversand starten</button>
+                            </div>
+                            <button class="btn" type="button" id="send-emails-stopSendBtn" style="display:none; background:#d94b4b;">Speichern und stoppen</button>
+                        </form>
+
+                        <div id="send-emails-result" class="result"></div>
+                    </div>
+                    <div id="send-emails-sendProgressDock" class="send-progress-dock">
+                        <div id="send-emails-sendProgressText" class="send-progress-text">Versand wird vorbereitet...</div>
+                        <div class="send-progress-track">
+                            <div id="send-emails-sendProgressFill" class="send-progress-fill"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <section
+                    id="add-section"
+                    class="app-section"
+                    data-section="add"
+                    {% if initial_section != "add" %}hidden{% endif %}
+                >
+                    <div class="section-hero">
+                        <div>
+                            <span class="section-kicker">Add</span>
+                            <h2>Kandidatenformular</h2>
+                            <p>Erfasst Bewerberdaten, Dokumente und speichert die Eintraege direkt in Firebase.</p>
+                        </div>
+                        <div class="hero-actions">
+                            <a href="{{ url_for('firebase_page') }}" data-section-link="firebase">Zu Firebase</a>
+                            <a href="{{ url_for('dashboard') }}" data-section-link="dashboard">Zum Dashboard</a>
+                        </div>
+                    </div>
+
+                    <div class="add-form-card">
+                        <form id="add-candidate-form" class="add-candidate-form" novalidate>
+                            <div class="add-form-grid">
+                                <label class="add-field">
+                                    <span>Full Name</span>
+                                    <input
+                                        type="text"
+                                        id="add-fullName"
+                                        name="fullName"
+                                        placeholder="Enter the full name"
+                                        autocomplete="name"
+                                        required
+                                    >
+                                </label>
+
+                                <label class="add-field">
+                                    <span>Email</span>
+                                    <input
+                                        type="email"
+                                        id="add-email"
+                                        name="email"
+                                        placeholder="name@example.com"
+                                        autocomplete="email"
+                                        required
+                                    >
+                                </label>
+                            </div>
+
+                            <div class="add-form-grid">
+                                <label class="add-field">
+                                    <span>WhatsApp</span>
+                                    <input
+                                        type="tel"
+                                        id="add-whatsapp"
+                                        name="whatsapp"
+                                        placeholder="+212 600000000"
+                                        autocomplete="tel"
+                                        required
+                                    >
+                                </label>
+
+                                <label class="add-field">
+                                    <span>Bank</span>
+                                    <select id="add-bank" name="bank" required>
+                                        <option value="">Choose bank</option>
+                                        <option value="Banque Populaire">Banque Populaire</option>
+                                        <option value="CIH">CIH</option>
+                                        <option value="Cash Plus">Cash Plus</option>
+                                    </select>
+                                </label>
+                            </div>
+
+                            <fieldset class="add-fieldset">
+                                <legend>Language level</legend>
+                                <div class="add-choice-grid">
+                                    <label class="add-choice-card">
+                                        <input type="radio" name="languageLevel" value="B1" required>
+                                        <span>B1</span>
+                                    </label>
+                                    <label class="add-choice-card">
+                                        <input type="radio" name="languageLevel" value="B2" required>
+                                        <span>B2</span>
+                                    </label>
+                                </div>
+                            </fieldset>
+
+                            <div class="add-form-grid">
+                                <label class="add-field">
+                                    <span>Bereich</span>
+                                    <select id="add-bereich" name="bereich" required>
+                                        <option value="">Choose domain</option>
+                                    </select>
+                                    <small>These options are loaded from the Ausbildungen page.</small>
+                                </label>
+
+                                <label class="add-field">
+                                    <span>Applications</span>
+                                    <select id="add-bewerbungen" name="bewerbungen" required>
+                                        <option value="">Choose amount</option>
+                                        <option value="500 Bewerbung">500 Bewerbung</option>
+                                        <option value="1000 Bewerbung">1000 Bewerbung</option>
+                                    </select>
+                                </label>
+                            </div>
+
+                            <label class="add-field">
+                                <span>Documents</span>
+                                <input
+                                    class="add-file-input"
+                                    type="file"
+                                    id="add-documents"
+                                    name="documents"
+                                    multiple
+                                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                                >
+                                <div class="add-file-meta" id="add-file-meta">Keine Datei ausgewaehlt</div>
+                                <small>PDF, DOC, DOCX, JPG, PNG. Max 10 MB per file and 25 MB total.</small>
+                            </label>
+
+                            <p class="add-status-message" id="add-status-message" aria-live="polite"></p>
+                            <button type="submit" class="add-submit-button" id="add-submit-button">Save to Firebase</button>
+                        </form>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        window.APP_INITIAL_SECTION = {{ initial_section|tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='spa/utils.js') }}?v=2.0"></script>
+    <script src="{{ url_for('static', filename='spa/sections/search.js') }}?v=2.0"></script>
+    <script src="{{ url_for('static', filename='spa/sections/dashboard.js') }}?v=2.0"></script>
+    <script src="{{ url_for('static', filename='spa/sections/firebase.js') }}?v=2.0"></script>
+    <script src="{{ url_for('static', filename='spa/sections/ausbildungen.js') }}?v=2.0"></script>
+    <script src="{{ url_for('static', filename='spa/sections/create-anschreibens.js') }}?v=2.0"></script>
+    <script src="{{ url_for('static', filename='spa/sections/send-emails.js') }}?v=2.0"></script>
+    <script src="{{ url_for('static', filename='spa/sections/add.js') }}?v=2.0"></script>
+    <script src="{{ url_for('static', filename='spa/app.js') }}?v=2.0"></script>
+</body>
+</html>

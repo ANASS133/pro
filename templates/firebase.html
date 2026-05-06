@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase - Online-Bewerbungen</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 100px 20px 20px;
+        }
+        .navbar {
+            max-width: 1100px;
+            margin: 0 auto 20px;
+            background: #fff;
+            border-radius: 10px;
+            display: flex;
+            gap: 10px;
+            padding: 10px 14px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            position: fixed;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            flex-wrap: wrap;
+        }
+        .nav-link {
+            color: #2f3a56;
+            text-decoration: none;
+            font-weight: 700;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+        .nav-link.active {
+            background: #667eea;
+            color: #fff;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        .header {
+            background: linear-gradient(135deg, #0b6e4f 0%, #1a936f 100%);
+            color: #fff;
+            padding: 28px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .header h1 {
+            margin: 0;
+        }
+        .header p {
+            margin: 8px 0 0;
+        }
+        .empty {
+            background: #fff;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            color: #555;
+        }
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+            gap: 14px;
+        }
+        .card {
+            background: #fff;
+            border-radius: 10px;
+            padding: 18px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .card h3 {
+            margin: 0;
+            font-size: 1.1rem;
+            color: #1f2a44;
+        }
+        .meta {
+            color: #606b85;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        .actions {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+        }
+        .firebase-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            background: rgba(11, 110, 79, 0.12);
+            color: #0b6e4f;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .firebase-badge::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: #0b6e4f;
+        }
+        .card.firebase-card {
+            border-left: 4px solid #0b6e4f;
+        }
+        .card.firebase-card h3 {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .firebase-delete-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            min-height: 46px;
+            box-sizing: border-box;
+            border-radius: 10px;
+            padding: 11px 14px;
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 1.2;
+            text-align: center;
+            text-decoration: none;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+            white-space: nowrap;
+            cursor: pointer;
+            border: 1px solid #b85c38;
+            background: linear-gradient(135deg, #ef5350 0%, #b85c38 100%);
+            color: #fff;
+        }
+        .firebase-delete-btn:hover {
+            background: linear-gradient(135deg, #e24a47 0%, #a04d2d 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 18px rgba(47, 58, 86, 0.14);
+        }
+        .firebase-delete-btn:disabled {
+            border-color: #d6dae3;
+            background: #e5e7eb;
+            color: #7a8397;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='shared_nav.css') }}">
+    <script src="{{ url_for('static', filename='shared_nav.js') }}" defer></script>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="{{ url_for('index') }}" class="nav-link">E-Mails finden</a>
+        <a href="{{ url_for('firebase_page') }}" class="nav-link active">Firebase</a>
+        <a href="{{ url_for('create_anschreibens') }}" class="nav-link">Anschreiben erstellen</a>
+        <a href="{{ url_for('send_emails') }}" class="nav-link">E-Mails senden</a>
+        <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+        <a href="{{ url_for('add') }}" class="nav-link">Add</a>
+        <a href="{{ url_for('ausbildungen') }}" class="nav-link">Ausbildungen</a>
+    </nav>
+
+    <div class="container">
+        <div class="header">
+            <h1>Firebase</h1>
+            <p>Online-Bewerbungen</p>
+        </div>
+
+        <section id="firebase-section" class="firebase-section" {% if not firebase_applications %}hidden{% endif %}>
+            <div class="cards" id="firebase-cards" data-initial-count="{{ firebase_applications|length }}">
+                {% for app in firebase_applications %}
+                <div class="card firebase-card" data-firebase-id="{{ app.id }}" data-source="firebase">
+                    <h3>
+                        {{ app.fullName or 'Unnamed applicant' }}
+                        <span class="firebase-badge">{{ app.source_label or 'Firebase' }}</span>
+                    </h3>
+                    <div class="meta">
+                        Quelle: <strong>{{ app.source_label or 'Firebase' }}</strong><br>
+                        E-Mail: <strong>{{ app.email or 'k. A.' }}</strong><br>
+                        WhatsApp: <span>{{ app.whatsapp or 'k. A.' }}</span><br>
+                        Paket: <span>{{ app.bewerbungen or 'k. A.' }}</span><br>
+                        Bereich: <span>{{ app.bereich or 'k. A.' }}</span><br>
+                        Dokumente: <span>{{ app.document_count or 0 }}</span><br>
+                        Eingereicht: <span>{{ app.created_at_display or 'k. A.' }}</span>
+                    </div>
+                    <div class="actions">
+                        <button type="button" class="firebase-delete-btn" data-firebase-delete="{{ app.id }}">Loeschen</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+        
+        {% if not firebase_applications %}
+        <div class="empty">Noch keine Online-Bewerbungen vorhanden.</div>
+        {% endif %}
+    </div>
+
+    <script type="module" src="{{ url_for('static', filename='dashboard_firebase.js') }}"></script>
+</body>
+</html>

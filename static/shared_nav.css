@@ -1,0 +1,63 @@
+.shared-navbar,
+nav.navbar.shared-navbar,
+nav.top-nav.shared-navbar {
+    position: fixed !important;
+    top: 16px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    z-index: 1000 !important;
+    width: min(1100px, calc(100% - 40px)) !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    background: #fff !important;
+    border-radius: 10px !important;
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+    padding: 10px 14px !important;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1) !important;
+}
+
+body.has-shared-navbar {
+    padding-top: 100px !important;
+}
+
+.shared-navbar .shared-nav-link {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    color: #2f3a56 !important;
+    text-decoration: none !important;
+    font-weight: 700 !important;
+    padding: 8px 12px !important;
+    border-radius: 6px !important;
+    line-height: 1.2 !important;
+    transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.shared-navbar .shared-nav-link:hover {
+    background: #eef2ff !important;
+    color: #2f3a56 !important;
+    transform: translateY(-1px) !important;
+}
+
+.shared-navbar .shared-nav-link.active,
+.shared-navbar .shared-nav-link[aria-current="page"] {
+    background: #667eea !important;
+    color: #fff !important;
+}
+
+@media (max-width: 640px) {
+    .shared-navbar,
+    nav.navbar.shared-navbar,
+    nav.top-nav.shared-navbar {
+        width: calc(100% - 24px) !important;
+        top: 12px !important;
+        gap: 8px !important;
+        padding: 10px !important;
+    }
+
+    body.has-shared-navbar {
+        padding-top: 116px !important;
+    }
+}

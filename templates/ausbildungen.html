@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ausbildungen</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 100px 20px 20px;
+        }
+        .navbar {
+            max-width: 1100px;
+            margin: 0 auto 20px;
+            background: #fff;
+            border-radius: 10px;
+            display: flex;
+            gap: 10px;
+            padding: 10px 14px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            position: fixed;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            flex-wrap: wrap;
+        }
+        .nav-link {
+            color: #2f3a56;
+            text-decoration: none;
+            font-weight: 700;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+        .nav-link.active {
+            background: #667eea;
+            color: #fff;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            padding: 28px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .header p {
+            margin: 8px 0 0;
+        }
+        .empty {
+            background: #fff;
+            border-radius: 10px;
+            padding: 22px;
+            color: #555;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .files-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+        }
+        .file-card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 18px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e1e6f0;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .file-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .file-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 54px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            background: #eef2ff;
+            color: #3f51b5;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+        }
+        .line-count {
+            font-size: 14px;
+            font-weight: 700;
+            color: #2f3a56;
+        }
+        .domain-name {
+            margin: 0;
+            color: #1f2a44;
+            font-size: 1.1rem;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+        .file-meta {
+            color: #69728a;
+            font-size: 13px;
+            line-height: 1.5;
+            word-break: break-word;
+        }
+        .file-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 4px;
+        }
+        .update-btn {
+            border: none;
+            border-radius: 8px;
+            background: #667eea;
+            color: #fff;
+            padding: 10px 14px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.15s ease, transform 0.15s ease;
+        }
+        .update-btn:hover {
+            background: #556cd6;
+            transform: translateY(-1px);
+        }
+        .update-btn:disabled {
+            background: #c7d0ea;
+            cursor: wait;
+            transform: none;
+        }
+        .stop-btn {
+            border: none;
+            border-radius: 8px;
+            background: #dc2626;
+            color: #fff;
+            padding: 10px 14px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.15s ease, transform 0.15s ease;
+        }
+        .stop-btn:hover {
+            background: #b91c1c;
+            transform: translateY(-1px);
+        }
+        .stop-btn:disabled {
+            background: #f0a7a7;
+            cursor: wait;
+            transform: none;
+        }
+        .solver-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            border-radius: 8px;
+            background: #f59e0b;
+            color: #fff;
+            padding: 10px 14px;
+            font-size: 14px;
+            font-weight: 700;
+        }
+        .solver-link:hover {
+            background: #d97706;
+        }
+        [hidden] {
+            display: none !important;
+        }
+        .update-status {
+            min-height: 18px;
+            color: #4d5a79;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .update-status.error {
+            color: #b42318;
+        }
+        .update-status.success {
+            color: #0b6e4f;
+        }
+    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='shared_nav.css') }}">
+    <script src="{{ url_for('static', filename='shared_nav.js') }}" defer></script>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="{{ url_for('index') }}" class="nav-link">E-Mails finden</a>
+        <a href="{{ url_for('firebase_page') }}" class="nav-link">Firebase</a>
+        <a href="{{ url_for('create_anschreibens') }}" class="nav-link">Anschreiben erstellen</a>
+        <a href="{{ url_for('send_emails') }}" class="nav-link">E-Mails senden</a>
+        <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+        <a href="{{ url_for('add') }}" class="nav-link">Add</a>
+        <a href="{{ url_for('ausbildungen') }}" class="nav-link active">Ausbildungen</a>
+    </nav>
+
+    <div class="container">
+        <div class="header">
+            <h1>Ausbildungen</h1>
+            <p>Exportierte Dateien aus <code>data/auto_extraction_exports</code> mit Ausbildungsname und Zeilenanzahl.</p>
+        </div>
+
+        {% if not export_files %}
+        <div class="empty">
+            Keine exportierten Ausbildungsdateien gefunden.
+        </div>
+        {% else %}
+        <div class="files-grid">
+            {% for item in export_files %}
+            <div class="file-card" data-export-card data-filename="{{ item.filename }}">
+                <div class="file-top">
+                    <span class="file-pill">FILE</span>
+                    <span class="line-count" data-line-count>{{ item.row_count_display }} Zeilen</span>
+                </div>
+                <h2 class="domain-name">{{ item.domain_name }}</h2>
+                <div class="file-meta" data-file-meta>
+                    Geaendert: {{ item.modified_at }}<br>
+                </div>
+                <div class="file-actions">
+                    <button type="button" class="update-btn" data-update-button>
+                        Update
+                    </button>
+                    <button type="button" class="stop-btn" data-stop-button hidden>
+                        Stop updating
+                    </button>
+                    <a href="/captcha_solve" target="_blank" class="solver-link" data-solver-link hidden>
+                        Open CAPTCHA
+                    </a>
+                </div>
+                <div class="update-status" data-update-status></div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    <script>
+        (() => {
+            const activePolls = new Map();
+
+            function setIdleState(button, stopButton, solverLink) {
+                button.hidden = false;
+                button.disabled = false;
+                button.textContent = 'Update';
+                stopButton.hidden = true;
+                stopButton.disabled = false;
+                stopButton.textContent = 'Stop updating';
+                solverLink.hidden = true;
+            }
+
+            function setRunningState(button, stopButton) {
+                button.hidden = true;
+                button.disabled = true;
+                stopButton.hidden = false;
+                stopButton.disabled = false;
+                stopButton.textContent = 'Stop updating';
+            }
+
+            function buildStatusText(job) {
+                const phase = String(job.phase || '');
+                if (phase === 'searching') {
+                    return 'Suche nach neuen Stellen...';
+                }
+                if (phase === 'extracting') {
+                    const current = Number(job.current_index || 0);
+                    const total = Number(job.total_jobs || 0);
+                    const found = Number(job.emails_found || 0);
+                    const duplicates = Number(job.duplicate_emails || 0);
+                    return `Suche ${current}/${total} | neue E-Mails: ${found} | Duplikate: ${duplicates}`;
+                }
+                if (phase === 'saving') {
+                    return 'Datei wird aktualisiert...';
+                }
+                if (phase === 'captcha') {
+                    return 'CAPTCHA gefunden. Bitte im Selenium-Fenster loesen und dann bestaetigen.';
+                }
+                if (phase === 'stopping') {
+                    return 'Update wird gestoppt...';
+                }
+                if (phase === 'stopped') {
+                    return 'Update gestoppt.';
+                }
+                return 'Update laeuft...';
+            }
+
+            async function pollJob(jobId, card, button, statusNode) {
+                if (activePolls.has(jobId)) {
+                    window.clearInterval(activePolls.get(jobId));
+                }
+
+                const poll = async () => {
+                    try {
+                        const response = await fetch(`/api/ausbildungen/update/${encodeURIComponent(jobId)}`);
+                        const payload = await response.json();
+                        if (!response.ok || !payload.success || !payload.job) {
+                            throw new Error(payload.message || 'Status konnte nicht geladen werden');
+                        }
+
+                        const job = payload.job;
+                        const lineCount = card.querySelector('[data-line-count]');
+                        const stopButton = card.querySelector('[data-stop-button]');
+                        const solverLink = card.querySelector('[data-solver-link]');
+
+                        if (job.phase === 'completed' && !job.is_running) {
+                            const newRows = Number(job.new_rows_added || 0);
+                            const totalRows = Number(job.result_rows || 0);
+                            if (lineCount) {
+                                lineCount.textContent = `${totalRows} Zeilen`;
+                            }
+                            statusNode.className = 'update-status success';
+                            statusNode.textContent = `Fertig. ${newRows} neue E-Mails hinzugefuegt. Seite wird neu geladen...`;
+                            setIdleState(button, stopButton, solverLink);
+                            window.clearInterval(activePolls.get(jobId));
+                            activePolls.delete(jobId);
+                            window.setTimeout(() => window.location.reload(), 1200);
+                            return;
+                        }
+
+                        if (job.phase === 'stopped' && !job.is_running) {
+                            const newRows = Number(job.new_rows_added || 0);
+                            const totalRows = Number(job.result_rows || 0);
+                            if (lineCount && totalRows) {
+                                lineCount.textContent = `${totalRows} Zeilen`;
+                            }
+                            statusNode.className = 'update-status';
+                            statusNode.textContent = newRows > 0
+                                ? `Gestoppt. ${newRows} neue E-Mails wurden bereits gespeichert.`
+                                : 'Update gestoppt.';
+                            setIdleState(button, stopButton, solverLink);
+                            window.clearInterval(activePolls.get(jobId));
+                            activePolls.delete(jobId);
+                            if (newRows > 0) {
+                                window.setTimeout(() => window.location.reload(), 1200);
+                            }
+                            return;
+                        }
+
+                        if (job.phase === 'failed' && !job.is_running) {
+                            statusNode.className = 'update-status error';
+                            statusNode.textContent = job.last_error || 'Update fehlgeschlagen.';
+                            setIdleState(button, stopButton, solverLink);
+                            window.clearInterval(activePolls.get(jobId));
+                            activePolls.delete(jobId);
+                            return;
+                        }
+
+                        setRunningState(button, stopButton);
+                        if (job.phase === 'stopping') {
+                            stopButton.disabled = true;
+                            stopButton.textContent = 'Stopping...';
+                        }
+                        solverLink.hidden = job.phase !== 'captcha';
+                        statusNode.className = 'update-status';
+                        statusNode.textContent = buildStatusText(job);
+                    } catch (error) {
+                        const stopButton = card.querySelector('[data-stop-button]');
+                        const solverLink = card.querySelector('[data-solver-link]');
+                        statusNode.className = 'update-status error';
+                        statusNode.textContent = error.message || 'Update-Status konnte nicht geladen werden.';
+                        setIdleState(button, stopButton, solverLink);
+                        window.clearInterval(activePolls.get(jobId));
+                        activePolls.delete(jobId);
+                    }
+                };
+
+                await poll();
+                activePolls.set(jobId, window.setInterval(poll, 2500));
+            }
+
+            document.querySelectorAll('[data-export-card]').forEach((card) => {
+                const button = card.querySelector('[data-update-button]');
+                const stopButton = card.querySelector('[data-stop-button]');
+                const solverLink = card.querySelector('[data-solver-link]');
+                const statusNode = card.querySelector('[data-update-status]');
+                const filename = String(card.dataset.filename || '').trim();
+                if (!button || !stopButton || !solverLink || !statusNode || !filename) {
+                    return;
+                }
+
+                button.addEventListener('click', async () => {
+                    setRunningState(button, stopButton);
+                    statusNode.className = 'update-status';
+                    statusNode.textContent = 'Update wird gestartet...';
+
+                    try {
+                        const response = await fetch('/api/ausbildungen/update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ filename }),
+                        });
+                        const payload = await response.json();
+                        if (!response.ok || !payload.success || !payload.job_id) {
+                            throw new Error(payload.message || 'Update konnte nicht gestartet werden');
+                        }
+
+                        card.dataset.jobId = String(payload.job_id);
+                        await pollJob(String(payload.job_id), card, button, statusNode);
+                    } catch (error) {
+                        setIdleState(button, stopButton, solverLink);
+                        statusNode.className = 'update-status error';
+                        statusNode.textContent = error.message || 'Update konnte nicht gestartet werden.';
+                    }
+                });
+
+                stopButton.addEventListener('click', async () => {
+                    const jobId = String(card.dataset.jobId || '').trim();
+                    if (!jobId) {
+                        return;
+                    }
+
+                    stopButton.disabled = true;
+                    stopButton.textContent = 'Stopping...';
+
+                    try {
+                        const response = await fetch(`/api/ausbildungen/update/${encodeURIComponent(jobId)}/stop`, {
+                            method: 'POST',
+                        });
+                        const payload = await response.json();
+                        if (!response.ok || !payload.success) {
+                            throw new Error(payload.message || 'Stop konnte nicht angefordert werden');
+                        }
+                        statusNode.className = 'update-status';
+                        statusNode.textContent = 'Stop wird angefordert...';
+                    } catch (error) {
+                        stopButton.disabled = false;
+                        stopButton.textContent = 'Stop updating';
+                        statusNode.className = 'update-status error';
+                        statusNode.textContent = error.message || 'Stop konnte nicht angefordert werden.';
+                    }
+                });
+            });
+        })();
+    </script>
+</body>
+</html>

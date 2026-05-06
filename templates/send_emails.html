@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-Mails senden</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 100px 20px 20px;
+        }
+        .navbar {
+            max-width: 1000px;
+            margin: 0 auto 20px;
+            background: #fff;
+            border-radius: 10px;
+            display: flex;
+            gap: 10px;
+            padding: 10px 14px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            position: fixed;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+        }
+        .nav-link {
+            color: #2f3a56;
+            text-decoration: none;
+            font-weight: 700;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+        .nav-link.active {
+            background: #667eea;
+            color: #fff;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .card {
+            background: #fff;
+            border-radius: 10px;
+            padding: 24px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+        .group {
+            margin-bottom: 12px;
+        }
+        label {
+            display: block;
+            margin-bottom: 6px;
+            color: #555;
+            font-weight: 700;
+        }
+        input, textarea, select {
+            width: 100%;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            background: #fff;
+            padding: 11px 12px;
+            font: inherit;
+            box-sizing: border-box;
+        }
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+        .file-input {
+            position: absolute;
+            width: 0;
+            height: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .file-upload {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border: 1px solid #d6d6d6;
+            border-radius: 8px;
+            background: #fff;
+            padding: 8px;
+            min-height: 46px;
+        }
+        .file-btn {
+            display: inline-block;
+            background: #667eea;
+            color: #fff;
+            font-weight: 700;
+            padding: 9px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            white-space: nowrap;
+            user-select: none;
+        }
+        .file-btn:hover {
+            background: #764ba2;
+        }
+        .file-name {
+            color: #666;
+            font-size: 14px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .btn {
+            margin-top: 8px;
+            width: 100%;
+            border: 0;
+            border-radius: 5px;
+            padding: 12px;
+            color: #fff;
+            font-weight: 700;
+            background: #667eea;
+            cursor: pointer;
+        }
+        .btn:hover {
+            background: #764ba2;
+        }
+        .btn:disabled {
+            opacity: .7;
+            cursor: not-allowed;
+        }
+        .btn-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .btn-row .btn {
+            margin-top: 0;
+        }
+        .btn-secondary {
+            background: #2f3a56;
+        }
+        .btn-secondary:hover {
+            background: #1f2a44;
+        }
+        .btn-danger {
+            background: #d94b4b;
+        }
+        .btn-danger:hover {
+            background: #b43838;
+        }
+        .btn-inline {
+            width: auto;
+            margin-top: 0;
+        }
+        .result {
+            display: none;
+            margin-top: 14px;
+            border-radius: 5px;
+            padding: 12px;
+            white-space: pre-wrap;
+        }
+        .result.success {
+            display: block;
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #86efac;
+        }
+        .result.error {
+            display: block;
+            background: #fee2e2;
+            color: #b91c1c;
+            border: 1px solid #fca5a5;
+        }
+        .tips {
+            margin-bottom: 12px;
+            color: #666;
+        }
+        .tip {
+            margin-bottom: 6px;
+        }
+        .transfer-box {
+            background: #eef2ff;
+            border: 1px solid #c7d2fe;
+            color: #3730a3;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 14px;
+        }
+        .transfer-error {
+            background: #fee2e2;
+            border: 1px solid #fca5a5;
+            color: #b91c1c;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 14px;
+        }
+        .transfer-list {
+            margin: 8px 0 0;
+            padding-left: 18px;
+        }
+        .campaign-box {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            color: #1d4ed8;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 14px;
+        }
+        .campaign-box-head {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .campaign-list {
+            margin: 8px 0 0;
+            padding-left: 18px;
+        }
+        .muted-note {
+            font-size: 13px;
+            color: #666;
+            margin-top: 6px;
+        }
+        .send-progress-dock {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #ffffff;
+            border-top: 1px solid #d6d6d6;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.08);
+            padding: 10px 16px;
+            display: none;
+            z-index: 1000;
+        }
+        .send-progress-dock.visible {
+            display: block;
+        }
+        .send-progress-text {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 6px;
+        }
+        .send-progress-track {
+            width: 100%;
+            height: 12px;
+            background: #ececec;
+            border-radius: 999px;
+            overflow: hidden;
+        }
+        .send-progress-fill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.25s ease;
+        }
+        @media (max-width: 900px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='shared_nav.css') }}">
+    <script src="{{ url_for('static', filename='shared_nav.js') }}" defer></script>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="{{ url_for('index') }}" class="nav-link">E-Mails finden</a>
+        <a href="{{ url_for('firebase_page') }}" class="nav-link">Firebase</a>
+        <a href="{{ url_for('create_anschreibens') }}" class="nav-link">Anschreiben erstellen</a>
+        <a href="{{ url_for('send_emails') }}" class="nav-link active">E-Mails senden</a>
+        <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+        <a href="{{ url_for('add') }}" class="nav-link">Add</a>
+        <a href="{{ url_for('ausbildungen') }}" class="nav-link">Ausbildungen</a>
+    </nav>
+
+    <div class="container">
+        <div class="header">
+            <h1>E-Mails senden</h1>
+            <p>Personalisierter Massenversand mit CSV/XLSX-Daten.</p>
+        </div>
+
+        <div class="card">
+            <div class="tips">
+                <div class="tip">Standard-Empf&#228;ngerspalte ist <b>email</b>.</div>
+                <div class="tip">Unterst&#252;tzte Datendateien: <b>.csv</b>, <b>.xlsx</b>.</div>
+                <div class="tip">Platzhalter wie <code>&#123;&#123;company&#125;&#125;</code> und <code>&#123;&#123;person&#125;&#125;</code> verwenden.</div>
+            </div>
+            {% if transfer_error %}
+            <div class="transfer-error">{{ transfer_error }}</div>
+            {% endif %}
+            {% if campaign_error %}
+            <div class="transfer-error">{{ campaign_error }}</div>
+            {% endif %}
+            {% if campaign_info %}
+            <div class="campaign-box">
+                <div class="campaign-box-head">
+                    <div>
+                        <strong>Gespeicherte Vorlage geladen:</strong> {{ campaign_info.name }}<br>
+                        Fortschritt: {{ campaign_info.sent_rows }}/{{ campaign_info.total_rows }} gesendet, {{ campaign_info.remaining_rows }} offen.
+                    </div>
+                    <button
+                        class="btn btn-danger btn-inline"
+                        type="button"
+                        id="deleteCampaignBtn"
+                        {% if active_send_job %}disabled title="Laufenden Versand zuerst stoppen oder abschliessen"{% endif %}
+                    >
+                        {% if active_send_job %}Versand aktiv{% else %}Vorlage loeschen{% endif %}
+                    </button>
+                </div>
+                <div class="muted-note" id="deleteCampaignNote" {% if not active_send_job %}hidden{% endif %}>
+                    Loeschen ist waehrend eines laufenden Versands gesperrt.
+                </div>
+                {% if campaign_info.preview %}
+                <ul class="campaign-list">
+                    {% for row in campaign_info.preview %}
+                    <li>Zeile {{ row.row_index }} | {{ row.recipient }} | {{ row.company }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </div>
+            {% endif %}
+            {% if transfer_info %}
+            <div class="transfer-box">
+                <strong>Transfer aus Anschreiben geladen:</strong> {{ transfer_info.total_rows }} Empf&#228;nger mit zugeordneten PDF-Dateien.
+                {% if transfer_info.preview %}
+                <ul class="transfer-list">
+                    {% for row in transfer_info.preview %}
+                    <li>{{ row.recipient }} | {{ row.company or 'k. A.' }} | {{ row.filename }}</li>
+                    {% endfor %}
+                </ul>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <form id="bulkForm" enctype="multipart/form-data">
+                <input type="hidden" name="transfer_session_id" value="{{ transfer_info.id if transfer_info else '' }}">
+                <input type="hidden" name="campaign_id" value="{{ campaign_info.id if campaign_info else '' }}">
+                <div class="grid">
+                    <div class="group">
+                        <label for="full_name">Vollst&#228;ndiger Name</label>
+                        <input
+                            type="text"
+                            id="full_name"
+                            name="full_name"
+                            placeholder="z. B. Max Mustermann"
+                            value="{{ campaign_info.full_name if campaign_info else '' }}"
+                        >
+                    </div>
+                    <div class="group">
+                        <label for="sender_email">Absender (Gmail)</label>
+                        <input
+                            type="email"
+                            id="sender_email"
+                            name="sender_email"
+                            placeholder="you@gmail.com"
+                            value="{{ campaign_info.sender_email if campaign_info else '' }}"
+                        >
+                    </div>
+                    <div class="group">
+                        <label for="app_password">App-Passwort</label>
+                        <input
+                            type="password"
+                            id="app_password"
+                            name="app_password"
+                            placeholder="xxxx xxxx xxxx xxxx"
+                            value="{{ campaign_info.app_password if campaign_info else '' }}"
+                        >
+                    </div>
+                </div>
+
+                <div class="grid">
+                    <div class="group">
+                        <label for="data_file">
+                            {% if campaign_info %}
+                            Empf&#228;nger aus gespeicherter Vorlage
+                            {% elif transfer_info %}
+                            Empf&#228;nger aus Anschreiben-Transfer
+                            {% else %}
+                            Empf&#228;nger-Datendatei (.csv/.xlsx)
+                            {% endif %}
+                        </label>
+                        <div class="file-upload">
+                            <input class="file-input" type="file" id="data_file" name="data_file" accept=".csv,.xlsx,.xls" {% if transfer_info or campaign_info %}disabled{% else %}required{% endif %}>
+                            <label for="data_file" class="file-btn">{% if transfer_info or campaign_info %}Gesperrt{% else %}Datei w&#228;hlen{% endif %}</label>
+                            <span id="data_file_name" class="file-name">{% if campaign_info %}{{ campaign_info.total_rows }} Empf&#228;nger geladen{% elif transfer_info %}{{ transfer_info.total_rows }} Empf&#228;nger geladen{% else %}Keine Datei ausgew&#228;hlt{% endif %}</span>
+                        </div>
+                        {% if transfer_info %}
+                        <div class="muted-note">Im Transfer-Modus ist kein Datei-Upload erforderlich.</div>
+                        {% elif campaign_info %}
+                        <div class="muted-note">Empf&#228;ngerzeilen stammen aus der gespeicherten Vorlage und werden ab der n&#228;chsten ungesendeten Zeile fortgesetzt.</div>
+                        {% endif %}
+                    </div>
+                    <div class="group">
+                        <label for="attachments">Anh&#228;nge (optional, mehrfach)</label>
+                        <div class="file-upload">
+                            <input class="file-input" type="file" id="attachments" name="attachments" multiple>
+                            <label for="attachments" class="file-btn">Dateien w&#228;hlen</label>
+                            <span id="attachments_name" class="file-name">{% if campaign_info and campaign_info.attachments %}{{ campaign_info.attachments|length }} Anhang/Anh&#228;nge gespeichert{% else %}Keine Datei ausgew&#228;hlt{% endif %}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid">
+                    {% if not transfer_info and not campaign_info %}
+                    <div class="group">
+                        <label for="recipient_column">Name der Empf&#228;ngerspalte</label>
+                        <input type="text" id="recipient_column" name="recipient_column" value="email" required>
+                    </div>
+                    {% elif campaign_info and campaign_info.mode != 'transfer' %}
+                    <div class="group">
+                        <label for="recipient_column">Name der Empf&#228;ngerspalte</label>
+                        <input type="text" id="recipient_column" name="recipient_column" value="{{ campaign_info.recipient_column }}" required>
+                    </div>
+                    {% endif %}
+                    <div class="group">
+                        <label for="limit">Zeilenlimit (optional)</label>
+                        <input
+                            type="number"
+                            id="limit"
+                            name="limit"
+                            min="1"
+                            placeholder="Beispiel: 100"
+                            value="{{ campaign_info.last_limit if campaign_info and campaign_info.last_limit else '' }}"
+                        >
+                    </div>
+                </div>
+
+                <div class="group">
+                    <label for="day_preset">Versand-Tag</label>
+                    <select id="day_preset" name="day_preset">
+                        <option value="">Tag ausw&#228;hlen</option>
+                        <option value="day1">Tag 1 - 100 E-Mails</option>
+                        <option value="day2">Tag 2 - 200 E-Mails</option>
+                        <option value="day3">Tag 3 - 300 E-Mails</option>
+                        <option value="day4">Tag 4 - 500 E-Mails</option>
+                    </select>
+                    <div class="muted-note">Die Werte f&#252;r Zeilenlimit, Jitter und Batch werden automatisch gesetzt.</div>
+                </div>
+
+                <div class="grid">
+                    <div class="group">
+                        <label for="jitter_min_seconds">Jitter Minimum (Sekunden)</label>
+                        <input
+                            type="number"
+                            id="jitter_min_seconds"
+                            name="jitter_min_seconds"
+                            min="0"
+                            step="0.1"
+                            placeholder="z. B. 80"
+                            value="{{ campaign_info.jitter_min_seconds if campaign_info else '' }}"
+                        >
+                    </div>
+                    <div class="group">
+                        <label for="jitter_max_seconds">Jitter Maximum (Sekunden)</label>
+                        <input
+                            type="number"
+                            id="jitter_max_seconds"
+                            name="jitter_max_seconds"
+                            min="0"
+                            step="0.1"
+                            placeholder="z. B. 110"
+                            value="{{ campaign_info.jitter_max_seconds if campaign_info else '' }}"
+                        >
+                    </div>
+                </div>
+
+                <div class="grid">
+                    <div class="group">
+                        <label for="batch_size">Batch-Gr&#246;&#223;e (E-Mails)</label>
+                        <input
+                            type="number"
+                            id="batch_size"
+                            name="batch_size"
+                            min="1"
+                            step="1"
+                            placeholder="z. B. 20"
+                            value="{{ campaign_info.batch_size if campaign_info and campaign_info.batch_size else '' }}"
+                        >
+                    </div>
+                    <div class="group">
+                        <label for="batch_pause_minutes">Batch-Pause (Minuten)</label>
+                        <input
+                            type="number"
+                            id="batch_pause_minutes"
+                            name="batch_pause_minutes"
+                            min="0"
+                            step="0.1"
+                            placeholder="z. B. 30"
+                            value="{{ ((campaign_info.batch_pause_seconds or 0) / 60) if campaign_info and campaign_info.batch_pause_seconds else '' }}"
+                        >
+                    </div>
+                </div>
+
+                <div class="group">
+                    <label for="subject_template">Betreff-Vorlage</label>
+                    <input
+                        type="text"
+                        id="subject_template"
+                        name="subject_template"
+                        placeholder="Hi &#123;&#123;person&#125;&#125; from &#123;&#123;company&#125;&#125;"
+                        value="{{ campaign_info.subject_template if campaign_info else '' }}"
+                        required
+                    >
+                </div>
+
+                <div class="group">
+                    <label for="body_template">Nachrichtenvorlage</label>
+                    <textarea id="body_template" name="body_template" placeholder="Hallo &#123;&#123;person&#125;&#125;,&#10;&#10;wir haben ein Angebot f&#252;r &#123;&#123;company&#125;&#125;." required>{{ campaign_info.body_template if campaign_info else '' }}</textarea>
+                </div>
+
+                <div class="btn-row">
+                    <button class="btn btn-secondary" type="button" id="saveTemplateBtn">Vorlage im Dashboard speichern</button>
+                    <button class="btn" type="submit" id="sendBtn">Massenversand starten</button>
+                </div>
+                <button class="btn" type="button" id="stopSendBtn" style="display:none; margin-top:8px; background:#d94b4b;">Speichern und stoppen</button>
+            </form>
+
+            <div id="result" class="result"></div>
+        </div>
+    </div>
+    <div id="sendProgressDock" class="send-progress-dock">
+        <div id="sendProgressText" class="send-progress-text">Versand wird vorbereitet...</div>
+        <div class="send-progress-track">
+            <div id="sendProgressFill" class="send-progress-fill"></div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('bulkForm');
+        const resultDiv = document.getElementById('result');
+        const sendBtn = document.getElementById('sendBtn');
+        const saveTemplateBtn = document.getElementById('saveTemplateBtn');
+        const stopSendBtn = document.getElementById('stopSendBtn');
+        const campaignIdInput = form.querySelector('input[name="campaign_id"]');
+        const deleteCampaignBtn = document.getElementById('deleteCampaignBtn');
+        const deleteCampaignNote = document.getElementById('deleteCampaignNote');
+        const dataFileInput = document.getElementById('data_file');
+        const dataFileName = document.getElementById('data_file_name');
+        const attachmentsInput = document.getElementById('attachments');
+        const attachmentsName = document.getElementById('attachments_name');
+        const sendProgressDock = document.getElementById('sendProgressDock');
+        const sendProgressText = document.getElementById('sendProgressText');
+        const sendProgressFill = document.getElementById('sendProgressFill');
+        const dayPresetSelect = document.getElementById('day_preset');
+        let sendJobPoll = null;
+        let activeSendJobId = '';
+        const initialActiveSendJob = {{ active_send_job|tojson }};
+        const SEND_FORM_STATE_KEY = 'aa_send_form_state_v1';
+        const SEND_RESULT_FLASH_KEY = 'aa_send_result_flash_v1';
+        const DAY_PRESETS = {
+            day1: {
+                limit: '100',
+                jitter_min_seconds: '90',
+                jitter_max_seconds: '140',
+                batch_size: '10',
+                batch_pause_minutes: '35'
+            },
+            day2: {
+                limit: '200',
+                jitter_min_seconds: '85',
+                jitter_max_seconds: '130',
+                batch_size: '15',
+                batch_pause_minutes: '30'
+            },
+            day3: {
+                limit: '300',
+                jitter_min_seconds: '80',
+                jitter_max_seconds: '120',
+                batch_size: '20',
+                batch_pause_minutes: '25'
+            },
+            day4: {
+                limit: '500',
+                jitter_min_seconds: '75',
+                jitter_max_seconds: '110',
+                batch_size: '20',
+                batch_pause_minutes: '20'
+            }
+        };
+
+        function updateFileLabel(inputEl, outputEl, isMultiple = false) {
+            const files = Array.from(inputEl.files || []);
+            if (!files.length) {
+                outputEl.textContent = 'Keine Datei ausgew\u00E4hlt';
+                outputEl.title = '';
+                return;
+            }
+
+            if (!isMultiple) {
+                outputEl.textContent = files[0].name;
+                outputEl.title = files[0].name;
+                return;
+            }
+
+            const names = files.map((file) => file.name);
+            const shortText = names.length <= 2
+                ? names.join(', ')
+                : `${names.slice(0, 2).join(', ')} +${names.length - 2} weitere`;
+            outputEl.textContent = shortText;
+            outputEl.title = names.join(', ');
+        }
+
+        dataFileInput.addEventListener('change', () => updateFileLabel(dataFileInput, dataFileName));
+        attachmentsInput.addEventListener('change', () => updateFileLabel(attachmentsInput, attachmentsName, true));
+
+        function setLoadedCampaignDeleteState(isSending) {
+            if (!deleteCampaignBtn) {
+                return;
+            }
+
+            const hasCampaignId = Boolean(String(campaignIdInput?.value || '').trim());
+            deleteCampaignBtn.disabled = !hasCampaignId || isSending;
+            deleteCampaignBtn.textContent = isSending ? 'Versand aktiv' : 'Vorlage loeschen';
+            deleteCampaignBtn.title = isSending
+                ? 'Laufenden Versand zuerst stoppen oder abschliessen'
+                : '';
+
+            if (deleteCampaignNote) {
+                deleteCampaignNote.hidden = !isSending;
+            }
+        }
+
+        function consumeTransientResult() {
+            const raw = sessionStorage.getItem(SEND_RESULT_FLASH_KEY);
+            if (!raw) {
+                return;
+            }
+
+            sessionStorage.removeItem(SEND_RESULT_FLASH_KEY);
+            try {
+                const payload = JSON.parse(raw);
+                if (!payload || !payload.message) {
+                    return;
+                }
+                resultDiv.className = `result ${payload.level === 'error' ? 'error' : 'success'}`;
+                resultDiv.textContent = payload.message;
+                resultDiv.style.display = 'block';
+            } catch (_error) {
+                // ignore invalid transient payload
+            }
+        }
+
+        function saveSendFormState() {
+            const state = {
+                full_name: document.getElementById('full_name')?.value || '',
+                sender_email: document.getElementById('sender_email')?.value || '',
+                recipient_column: document.getElementById('recipient_column')?.value || '',
+                limit: document.getElementById('limit')?.value || '',
+                day_preset: dayPresetSelect?.value || '',
+                jitter_min_seconds: document.getElementById('jitter_min_seconds')?.value || '',
+                jitter_max_seconds: document.getElementById('jitter_max_seconds')?.value || '',
+                batch_size: document.getElementById('batch_size')?.value || '',
+                batch_pause_minutes: document.getElementById('batch_pause_minutes')?.value || '',
+                subject_template: document.getElementById('subject_template')?.value || '',
+                body_template: document.getElementById('body_template')?.value || ''
+            };
+            localStorage.setItem(SEND_FORM_STATE_KEY, JSON.stringify(state));
+        }
+
+        function applyDayPreset(presetKey) {
+            const preset = DAY_PRESETS[presetKey];
+            if (!preset) {
+                return;
+            }
+
+            Object.entries(preset).forEach(([id, value]) => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.value = value;
+                }
+            });
+        }
+
+        function detectDayPresetFromInputs() {
+            const currentValues = {
+                limit: document.getElementById('limit')?.value || '',
+                jitter_min_seconds: document.getElementById('jitter_min_seconds')?.value || '',
+                jitter_max_seconds: document.getElementById('jitter_max_seconds')?.value || '',
+                batch_size: document.getElementById('batch_size')?.value || '',
+                batch_pause_minutes: document.getElementById('batch_pause_minutes')?.value || ''
+            };
+
+            const matchingPreset = Object.entries(DAY_PRESETS).find(([, preset]) =>
+                Object.entries(preset).every(([key, value]) => currentValues[key] === value)
+            );
+
+            return matchingPreset ? matchingPreset[0] : '';
+        }
+
+        function restoreSendFormState() {
+            const raw = localStorage.getItem(SEND_FORM_STATE_KEY);
+            if (!raw) {
+                if (dayPresetSelect) {
+                    dayPresetSelect.value = detectDayPresetFromInputs();
+                }
+                return;
+            }
+            try {
+                const state = JSON.parse(raw);
+                Object.entries(state).forEach(([id, value]) => {
+                    const el = document.getElementById(id);
+                    if (!el || el.value) {
+                        return;
+                    }
+                    el.value = typeof value === 'string' ? value : '';
+                });
+                if (dayPresetSelect && !dayPresetSelect.value) {
+                    dayPresetSelect.value = detectDayPresetFromInputs();
+                }
+            } catch (_error) {
+                // ignore bad local state
+            }
+        }
+
+        function bindSendFormState() {
+            ['full_name', 'sender_email', 'recipient_column', 'limit', 'day_preset', 'jitter_min_seconds', 'jitter_max_seconds', 'batch_size', 'batch_pause_minutes', 'subject_template', 'body_template'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (!el) {
+                    return;
+                }
+                el.addEventListener('input', saveSendFormState);
+                el.addEventListener('change', saveSendFormState);
+            });
+        }
+
+        if (dayPresetSelect) {
+            dayPresetSelect.addEventListener('change', () => {
+                applyDayPreset(dayPresetSelect.value);
+                saveSendFormState();
+            });
+        }
+
+        function setSendingUiActive() {
+            sendBtn.disabled = true;
+            saveTemplateBtn.disabled = true;
+            sendBtn.textContent = 'Wird gesendet...';
+            stopSendBtn.style.display = 'block';
+            stopSendBtn.disabled = false;
+            stopSendBtn.textContent = 'Speichern und stoppen';
+            sendProgressDock.classList.add('visible');
+            setLoadedCampaignDeleteState(true);
+        }
+
+        function resetSendingUi() {
+            sendBtn.disabled = false;
+            saveTemplateBtn.disabled = false;
+            sendBtn.textContent = 'Massenversand starten';
+            stopSendBtn.style.display = 'none';
+            stopSendBtn.disabled = false;
+            stopSendBtn.textContent = 'Speichern und stoppen';
+            setLoadedCampaignDeleteState(false);
+        }
+
+        async function saveTemplateToDashboard() {
+            resultDiv.style.display = 'none';
+            saveTemplateBtn.disabled = true;
+            const previousLabel = saveTemplateBtn.textContent;
+            saveTemplateBtn.textContent = 'Speichert...';
+
+            try {
+                const formData = new FormData(form);
+                const response = await fetch('/api/campaign/save', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Vorlage konnte nicht gespeichert werden');
+                }
+
+                if (data.campaign_id && campaignIdInput) {
+                    campaignIdInput.value = data.campaign_id;
+                    const currentUrl = new URL(window.location.href);
+                    currentUrl.searchParams.set('campaign', data.campaign_id);
+                    currentUrl.searchParams.delete('transfer');
+                    window.history.replaceState({}, '', currentUrl.toString());
+                }
+
+                saveSendFormState();
+                resultDiv.className = 'result success';
+                resultDiv.textContent = data.message || 'Vorlage gespeichert.';
+                resultDiv.style.display = 'block';
+            } catch (saveError) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = saveError.message || 'Vorlage konnte nicht gespeichert werden.';
+                resultDiv.style.display = 'block';
+            } finally {
+                saveTemplateBtn.disabled = false;
+                saveTemplateBtn.textContent = previousLabel;
+            }
+        }
+
+        function attachToSendJob(jobId) {
+            activeSendJobId = String(jobId || '').trim();
+            if (!activeSendJobId) {
+                return;
+            }
+            setSendingUiActive();
+            if (sendJobPoll) {
+                clearInterval(sendJobPoll);
+            }
+            sendJobPoll = setInterval(async () => {
+                try {
+                    await pollSendJobStatus();
+                } catch (pollError) {
+                    if (sendJobPoll) {
+                        clearInterval(sendJobPoll);
+                        sendJobPoll = null;
+                    }
+                    resetSendingUi();
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = pollError.message || 'Versandfortschritt konnte nicht geladen werden.';
+                    resultDiv.style.display = 'block';
+                }
+            }, 1500);
+        }
+
+        function updateSendProgress(job) {
+            const total = Number(job.total || 0);
+            const processed = Number(job.processed || 0);
+            const sentSuccess = Number(job.sent_success || 0);
+            const percent = Math.max(0, Math.min(100, Number(job.percent || 0)));
+            const stageMessage = (job.message || '').trim();
+            const remainingSeconds = Number(job.estimated_remaining_seconds);
+
+            function formatEta(seconds) {
+                if (!Number.isFinite(seconds) || seconds < 0) {
+                    return '';
+                }
+                if (seconds < 60) {
+                    return `${Math.round(seconds)}s`;
+                }
+                const hours = Math.floor(seconds / 3600);
+                const minutes = Math.floor((seconds % 3600) / 60);
+                const secs = Math.round(seconds % 60);
+                if (hours > 0) {
+                    return `${hours}h ${minutes}m`;
+                }
+                if (minutes > 0) {
+                    return `${minutes}m ${secs}s`;
+                }
+                return `${secs}s`;
+            }
+
+            sendProgressDock.classList.add('visible');
+            sendProgressFill.style.width = `${percent}%`;
+            const etaText = total > processed && Number.isFinite(remainingSeconds)
+                ? ` | ETA ${formatEta(remainingSeconds)}`
+                : '';
+            const base = `Gesendet ${sentSuccess}/${total} | Verarbeitet ${processed}/${total} | ${percent.toFixed(1)}%${etaText}`;
+            sendProgressText.textContent = stageMessage ? `${base} | ${stageMessage}` : base;
+        }
+
+        async function pollSendJobStatus() {
+            if (!activeSendJobId) {
+                return;
+            }
+            const response = await fetch(`/api/send-bulk/status/${activeSendJobId}`);
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || 'Versandfortschritt konnte nicht geladen werden');
+            }
+
+            const job = data.job || {};
+            updateSendProgress(job);
+
+            if (job.campaign_id && campaignIdInput) {
+                campaignIdInput.value = job.campaign_id;
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('campaign', job.campaign_id);
+                currentUrl.searchParams.delete('transfer');
+                window.history.replaceState({}, '', currentUrl.toString());
+            }
+
+            if (job.status === 'completed' || job.status === 'failed') {
+                if (sendJobPoll) {
+                    clearInterval(sendJobPoll);
+                    sendJobPoll = null;
+                }
+                activeSendJobId = '';
+                resetSendingUi();
+                resultDiv.className = `result ${job.success ? 'success' : 'error'}`;
+                resultDiv.textContent = job.message || 'Versandauftrag abgeschlossen.';
+                resultDiv.style.display = 'block';
+            }
+        }
+
+        async function restoreActiveSendJobForCampaign() {
+            const preloadedJob = initialActiveSendJob && typeof initialActiveSendJob === 'object'
+                ? initialActiveSendJob
+                : null;
+            if (preloadedJob && preloadedJob.job_id) {
+                attachToSendJob(preloadedJob.job_id);
+                await pollSendJobStatus();
+                return;
+            }
+
+            const campaignId = String(campaignIdInput?.value || '').trim();
+            if (!campaignId) {
+                return;
+            }
+
+            const response = await fetch(`/api/send-bulk/active?campaign_id=${encodeURIComponent(campaignId)}`);
+            const data = await response.json();
+            if (!response.ok || !data.success || !data.job || !data.job.job_id) {
+                return;
+            }
+
+            attachToSendJob(data.job.job_id);
+            await pollSendJobStatus();
+        }
+
+        async function deleteLoadedCampaign() {
+            const campaignId = String(campaignIdInput?.value || '').trim();
+            if (!campaignId) {
+                return;
+            }
+            if (!window.confirm('Diese gespeicherte Vorlage loeschen? Das kann nicht rueckgaengig gemacht werden.')) {
+                return;
+            }
+
+            resultDiv.style.display = 'none';
+            const previousLabel = deleteCampaignBtn.textContent;
+            deleteCampaignBtn.disabled = true;
+            deleteCampaignBtn.textContent = 'Loescht...';
+
+            try {
+                const response = await fetch(`/api/campaign/delete/${encodeURIComponent(campaignId)}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Vorlage konnte nicht geloescht werden');
+                }
+
+                sessionStorage.setItem(SEND_RESULT_FLASH_KEY, JSON.stringify({
+                    level: 'success',
+                    message: data.message || 'Vorlage wurde geloescht.'
+                }));
+
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.delete('campaign');
+                window.location.href = currentUrl.toString();
+            } catch (deleteError) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = deleteError.message || 'Vorlage konnte nicht geloescht werden.';
+                resultDiv.style.display = 'block';
+                deleteCampaignBtn.textContent = previousLabel;
+                setLoadedCampaignDeleteState(Boolean(activeSendJobId));
+            }
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            setSendingUiActive();
+            resultDiv.style.display = 'none';
+            sendProgressDock.classList.add('visible');
+            sendProgressText.textContent = 'Versandauftrag wird gestartet...';
+            sendProgressFill.style.width = '0%';
+
+            try {
+                const formData = new FormData(form);
+                const response = await fetch('/api/send-bulk/start', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                if (!response.ok || !data.success || !data.job_id) {
+                    throw new Error(data.message || 'Versandauftrag konnte nicht gestartet werden');
+                }
+
+                attachToSendJob(data.job_id);
+                saveSendFormState();
+                await pollSendJobStatus();
+            } catch (_error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = _error.message || 'Netzwerkfehler. Bitte erneut versuchen.';
+                resultDiv.style.display = 'block';
+                resetSendingUi();
+            }
+        });
+
+        stopSendBtn.addEventListener('click', async () => {
+            if (!activeSendJobId) {
+                return;
+            }
+            stopSendBtn.disabled = true;
+            stopSendBtn.textContent = 'Stoppe...';
+
+            try {
+                const response = await fetch(`/api/send-bulk/stop/${activeSendJobId}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'Stoppen konnte nicht angefordert werden');
+                }
+            } catch (stopError) {
+                stopSendBtn.disabled = false;
+                stopSendBtn.textContent = 'Speichern und stoppen';
+                resultDiv.className = 'result error';
+                resultDiv.textContent = stopError.message || 'Stoppen konnte nicht angefordert werden.';
+                resultDiv.style.display = 'block';
+            }
+        });
+
+        saveTemplateBtn.addEventListener('click', () => {
+            saveTemplateToDashboard().catch(() => {});
+        });
+        if (deleteCampaignBtn) {
+            deleteCampaignBtn.addEventListener('click', () => {
+                deleteLoadedCampaign().catch(() => {});
+            });
+        }
+
+        consumeTransientResult();
+        setLoadedCampaignDeleteState(Boolean(initialActiveSendJob && initialActiveSendJob.job_id));
+        restoreSendFormState();
+        bindSendFormState();
+        restoreActiveSendJobForCampaign().catch(() => {});
+    </script>
+</body>
+</html>

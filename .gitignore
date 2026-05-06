@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Environment / secrets
+.env
+.env.*
+
+# Test / coverage caches
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Runtime outputs and debug artifacts
+*.log
+debug_*.png
+debug_*.html
+captcha_attempt_*.png
+static/captcha_latest.png
+data/
+search_cache.json
+email_campaigns.json
+extraction_progress.json
+auto_extraction_progress.json
+auto_extraction_progress.csv
+auto_extraction_results.csv
+auto_extraction_results.xlsx
+extraction_results.csv
+extraction_results.xlsx
+
+# Keep dependency and source files tracked
+!requirements.txt
+!requirements-dev.txt
+!templates/
+!static/
+!scraper/
+!email_sender/
+!pdf_generator/

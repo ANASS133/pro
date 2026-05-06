@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <title>Fortschritt E-Mail-Extraktion</title>
+    <style>
+        body { font-family: Arial; padding: 100px 20px 20px; background: #f5f5f5; }
+        .navbar {
+            max-width: 900px;
+            margin: 0 auto 20px;
+            background: #fff;
+            border-radius: 10px;
+            display: flex;
+            gap: 10px;
+            padding: 10px 14px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            position: fixed;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+        }
+        .nav-link {
+            color: #2f3a56;
+            text-decoration: none;
+            font-weight: 700;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+        .nav-link.active {
+            background: #667eea;
+            color: #fff;
+        }
+        .progress-container {
+            width: 100%;
+            background: #f0f0f0;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .progress-bar {
+            width: 0%;
+            height: 30px;
+            background: linear-gradient(90deg, #4CAF50, #45a049);
+            border-radius: 5px;
+            transition: width 0.3s;
+            text-align: center;
+            line-height: 30px;
+            color: white;
+        }
+        .status-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin: 20px 0;
+        }
+        .captcha-alert {
+            background: #fff3cd;
+            border: 1px solid #ffeeba;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .button {
+            padding: 10px 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .button:hover { background: #45a049; }
+    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='shared_nav.css') }}">
+    <script src="{{ url_for('static', filename='shared_nav.js') }}" defer></script>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="{{ url_for('index') }}" class="nav-link active">E-Mails finden</a>
+        <a href="{{ url_for('firebase_page') }}" class="nav-link">Firebase</a>
+        <a href="{{ url_for('create_anschreibens') }}" class="nav-link">Anschreiben erstellen</a>
+        <a href="{{ url_for('send_emails') }}" class="nav-link">E-Mails senden</a>
+        <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+        <a href="{{ url_for('add') }}" class="nav-link">Add</a>
+        <a href="{{ url_for('ausbildungen') }}" class="nav-link">Ausbildungen</a>
+    </nav>
+    <h1>Fortschritt E-Mail-Extraktion</h1>
+
+    <div class="status-card">
+        <h3>Status: <span id="status">Laeuft...</span></h3>
+        <p>Verarbeitet: <span id="current">0</span> / <span id="total">{{ status.total_jobs }}</span> Stellen</p>
+
+        <div class="progress-container">
+            <div class="progress-bar" id="progressBar" style="width: 0%">0%</div>
+        </div>
+        <p id="lastError" style="color:#b00;"></p>
+    </div>
+
+    <div id="captchaAlert" class="captcha-alert" style="display: none;">
+        <h3>CAPTCHA erkannt</h3>
+        <p>Die Extraktion ist pausiert. CAPTCHA im Selenium-Fenster loesen und dann fortsetzen.</p>
+        <a href="/captcha_solve" target="_blank" class="button">CAPTCHA-Hilfe oeffnen</a>
+    </div>
+
+    <div id="failurePauseAlert" class="captcha-alert" style="display: none; background:#fbeaea; border-color:#f5c2c7; color:#842029;">
+        <h3>Pausiert nach Fehler</h3>
+        <p id="failureText">Eine Stelle ist fehlgeschlagen. Auf Fortsetzen klicken.</p>
+        <button onclick="continueScraping()" class="button" style="background:#198754;">Fortsetzen</button>
+    </div>
+
+    <div style="margin-top: 20px;">
+        <a href="/" class="button">Zurueck zur Suche</a>
+        <button onclick="stopAndDownload()" class="button" style="background: #d9534f;">Stoppen + Ergebnis herunterladen</button>
+        <button onclick="downloadResults()" class="button" style="background: #2196F3;">Ergebnis herunterladen</button>
+        <button id="toAnschreibenBtn" onclick="goToAnschreiben()" class="button" style="background: #667eea; display: none;">Zu Anschreiben</button>
+    </div>
+
+    <script>
+        function updateProgress() {
+            fetch('/api/extraction_status')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('current').textContent = data.current_index;
+                    document.getElementById('total').textContent = data.total_jobs;
+                    const percentage = data.percentage || 0;
+                    document.getElementById('progressBar').style.width = percentage + '%';
+                    document.getElementById('progressBar').textContent = Math.round(percentage) + '%';
+
+                    if (data.last_error) {
+                        document.getElementById('lastError').textContent = data.last_error;
+                    }
+
+                    if (data.captcha_needed) {
+                        document.getElementById('captchaAlert').style.display = 'block';
+                        document.getElementById('failurePauseAlert').style.display = 'none';
+                        document.getElementById('status').textContent = 'Pausiert - CAPTCHA erforderlich';
+                    } else if (data.paused) {
+                        document.getElementById('captchaAlert').style.display = 'none';
+                        document.getElementById('failurePauseAlert').style.display = 'block';
+                        document.getElementById('failureText').textContent = data.last_error
+                            ? `Fehler: ${data.last_error}`
+                            : 'Eine Stelle ist fehlgeschlagen. Zum Fortsetzen klicken.';
+                        document.getElementById('status').textContent = 'Pausiert - Fehler';
+                    } else {
+                        document.getElementById('captchaAlert').style.display = 'none';
+                        document.getElementById('failurePauseAlert').style.display = 'none';
+                        if (data.stop_requested) {
+                            document.getElementById('status').textContent = 'Gestoppt';
+                        } else {
+                            document.getElementById('status').textContent = data.is_running ? 'Laeuft...' : 'Abgeschlossen';
+                        }
+                    }
+
+                    const canGoToAnschreiben = !data.is_running && !data.paused && !data.captcha_needed && (data.current_index > 0);
+                    document.getElementById('toAnschreibenBtn').style.display = canGoToAnschreiben ? 'inline-block' : 'none';
+                });
+        }
+
+        function continueScraping() {
+            fetch('/api/continue_extraction', { method: 'POST' });
+        }
+
+        function stopAndDownload() {
+            fetch('/api/stop_extraction', { method: 'POST' })
+                .then(() => setTimeout(() => {
+                    window.location.href = '/download_results';
+                }, 1200));
+        }
+
+        function downloadResults() {
+            window.location.href = '/download_results';
+        }
+
+        function goToAnschreiben() {
+            window.location.href = '/create-anschreibens?autoload=manual';
+        }
+
+        setInterval(updateProgress, 2000);
+        updateProgress();
+    </script>
+</body>
+</html>

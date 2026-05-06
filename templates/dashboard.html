@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 100px 20px 20px;
+        }
+        .navbar {
+            max-width: 1100px;
+            margin: 0 auto 20px;
+            background: #fff;
+            border-radius: 10px;
+            display: flex;
+            gap: 10px;
+            padding: 10px 14px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            position: fixed;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            flex-wrap: wrap;
+        }
+        .nav-link {
+            color: #2f3a56;
+            text-decoration: none;
+            font-weight: 700;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+        .nav-link.active {
+            background: #667eea;
+            color: #fff;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            padding: 28px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .header p {
+            margin: 8px 0 0;
+        }
+        .header-actions {
+            margin-top: 12px;
+        }
+        .new-template-link {
+            display: inline-block;
+            text-decoration: none;
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+            font-weight: 700;
+            padding: 8px 12px;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 8px;
+        }
+        .new-template-link:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        .flash-messages {
+            display: grid;
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+        .flash {
+            border-radius: 10px;
+            padding: 12px 14px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            font-weight: 700;
+        }
+        .flash.success {
+            background: #dcfce7;
+            border: 1px solid #86efac;
+            color: #166534;
+        }
+        .flash.error {
+            background: #fee2e2;
+            border: 1px solid #fca5a5;
+            color: #b91c1c;
+        }
+        .empty {
+            background: #fff;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            color: #555;
+        }
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+            gap: 14px;
+        }
+        .card {
+            background: #fff;
+            border-radius: 10px;
+            padding: 18px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .card h3 {
+            margin: 0;
+            font-size: 1.1rem;
+            color: #1f2a44;
+        }
+        .meta {
+            color: #606b85;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+        }
+        .stat {
+            background: #f8f9ff;
+            border: 1px solid #d8ddff;
+            border-radius: 8px;
+            padding: 8px;
+            text-align: center;
+        }
+        .stat strong {
+            display: block;
+            font-size: 1rem;
+            color: #2f3a56;
+        }
+        .stat span {
+            font-size: 12px;
+            color: #69728a;
+        }
+        .actions {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+        .actions > * {
+            min-width: 0;
+        }
+        .open-btn,
+        .edit-btn,
+        .pause-btn,
+        .delete-btn,
+        .firebase-delete-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            min-height: 46px;
+            box-sizing: border-box;
+            border-radius: 10px;
+            padding: 11px 14px;
+            font-size: 14px;
+            font-weight: 700;
+            line-height: 1.2;
+            text-align: center;
+            text-decoration: none;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+            white-space: nowrap;
+            cursor: pointer;
+        }
+        .open-btn:hover,
+        .edit-btn:hover,
+        .pause-btn:hover,
+        .delete-btn:hover,
+        .firebase-delete-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 18px rgba(47, 58, 86, 0.14);
+        }
+        .open-btn {
+            border: 1px solid #5b73e6;
+            background: linear-gradient(135deg, #667eea 0%, #5b73e6 100%);
+            color: #fff;
+        }
+        .open-btn:hover {
+            background: linear-gradient(135deg, #5b73e6 0%, #5069dd 100%);
+        }
+        .edit-btn {
+            border: 1px solid #cfd6e6;
+            background: #eef2ff;
+            color: #2f3a56;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+        }
+        .edit-btn:hover {
+            background: #e1e8ff;
+        }
+        .edit-btn.disabled {
+            background: #e5e7eb;
+            border-color: #d6dae3;
+            color: #7a8397;
+            pointer-events: none;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        .pause-btn {
+            border: 1px solid #d97706;
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            color: #fff;
+        }
+        .pause-btn:hover {
+            background: linear-gradient(135deg, #ea9206 0%, #b45309 100%);
+        }
+        .pause-btn.is-continue {
+            border-color: #15803d;
+            background: linear-gradient(135deg, #22c55e 0%, #15803d 100%);
+        }
+        .pause-btn.is-continue:hover {
+            background: linear-gradient(135deg, #1fad52 0%, #166534 100%);
+        }
+        .pause-btn:disabled {
+            border-color: #d6dae3;
+            background: #e5e7eb;
+            color: #7a8397;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        .delete-form {
+            margin: 0;
+            display: flex;
+        }
+        .pause-btn[hidden] + .delete-form {
+            grid-column: span 2;
+        }
+        .delete-btn {
+            border: 1px solid #d94b4b;
+            background: linear-gradient(135deg, #ef5350 0%, #d94b4b 100%);
+            color: #fff;
+            cursor: pointer;
+        }
+        .delete-btn:hover {
+            background: linear-gradient(135deg, #e24a47 0%, #b43838 100%);
+        }
+        .delete-btn:disabled {
+            border-color: #d6dae3;
+            background: #e5e7eb;
+            color: #7a8397;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        @media (max-width: 560px) {
+            .actions {
+                grid-template-columns: 1fr;
+            }
+            .pause-btn[hidden] + .delete-form {
+                grid-column: auto;
+            }
+        }
+        .delete-note {
+            font-size: 12px;
+            color: #8a4b00;
+        }
+        .campaign-progress {
+            margin-top: 2px;
+        }
+        .campaign-progress-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #5a6278;
+            margin-bottom: 6px;
+        }
+        .progress-status {
+            font-weight: 700;
+            color: #5a6278;
+        }
+        .progress-status.sending {
+            color: #1d4ed8;
+        }
+        .progress-status.paused {
+            color: #b45309;
+        }
+        .progress-status.done {
+            color: #15803d;
+        }
+        .progress-percent {
+            font-weight: 700;
+            color: #2f3a56;
+        }
+        .progress-track {
+            width: 100%;
+            height: 10px;
+            background: #e5e7eb;
+            border-radius: 999px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+        }
+        .progress-fill.sending {
+            animation: sendingPulse 1.6s ease-in-out infinite alternate;
+        }
+        .progress-subtext {
+            margin-top: 6px;
+            font-size: 12px;
+            color: #606b85;
+            min-height: 16px;
+        }
+        @keyframes sendingPulse {
+            from { filter: brightness(1); }
+            to { filter: brightness(1.15); }
+        }
+    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='shared_nav.css') }}">
+    <script src="{{ url_for('static', filename='shared_nav.js') }}" defer></script>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="{{ url_for('index') }}" class="nav-link">E-Mails finden</a>
+        <a href="{{ url_for('firebase_page') }}" class="nav-link">Firebase</a>
+        <a href="{{ url_for('create_anschreibens') }}" class="nav-link">Anschreiben erstellen</a>
+        <a href="{{ url_for('send_emails') }}" class="nav-link">E-Mails senden</a>
+        <a href="{{ url_for('dashboard') }}" class="nav-link active">Dashboard</a>
+        <a href="{{ url_for('add') }}" class="nav-link">Add</a>
+        <a href="{{ url_for('ausbildungen') }}" class="nav-link">Ausbildungen</a>
+    </nav>
+
+    <div class="container">
+        <div class="header">
+            <h1>Dashboard</h1>
+            <p>Gespeicherte Vorlagen mit dauerhaftem Versandfortschritt.</p>
+            <div class="header-actions">
+                <a class="new-template-link" href="{{ url_for('send_emails') }}">Neue Vorlage anlegen</a>
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        {% if not campaigns %}
+        <div class="empty">
+            Noch keine gespeicherten Vorlagen. Starte unter <a href="{{ url_for('send_emails') }}">E-Mails senden</a>, die Kampagne wird automatisch gespeichert.
+        </div>
+        {% else %}
+        <div class="cards">
+            {% for campaign in campaigns %}
+            <div class="card" data-campaign-id="{{ campaign.id }}">
+                <h3>{{ campaign.full_name or campaign.name }}</h3>
+                <div class="meta">
+                    Modus: <strong class="meta-mode">{{ campaign.mode }}</strong><br>
+                    Absender: <span class="meta-sender">{{ campaign.sender_email or 'k. A.' }}</span><br>
+                    Anh&#228;nge: <span class="meta-attachments">{{ campaign.attachment_count }}</span><br>
+                    Aktualisiert: <span class="meta-updated">{{ campaign.updated_at }}</span>
+                </div>
+                <div class="stats">
+                    <div class="stat">
+                        <strong class="stat-total">{{ campaign.total_rows }}</strong>
+                        <span>Gesamt</span>
+                    </div>
+                    <div class="stat">
+                        <strong class="stat-sent">{{ campaign.sent_rows }}</strong>
+                        <span>Gesendet</span>
+                    </div>
+                    <div class="stat">
+                        <strong class="stat-remaining">{{ campaign.remaining_rows }}</strong>
+                        <span>Offen</span>
+                    </div>
+                </div>
+                <div class="actions">
+                    <a class="open-btn" href="{{ url_for('send_emails', campaign=campaign.id) }}">Versand oeffnen</a>
+                    <a
+                        class="edit-btn{% if campaign.has_active_job or not campaign.has_anschreiben_data or campaign.mode != 'transfer' %} disabled{% endif %}"
+                        href="{% if campaign.has_anschreiben_data and campaign.mode == 'transfer' and not campaign.has_active_job %}{{ url_for('create_anschreibens') }}?edit_campaign={{ campaign.id }}{% else %}#{% endif %}"
+                        data-edit-href="{{ url_for('create_anschreibens') }}?edit_campaign={{ campaign.id }}"
+                        data-has-anschreiben="{{ 'true' if campaign.has_anschreiben_data else 'false' }}"
+                        {% if campaign.has_active_job %}
+                        title="Anschreiben kann erst bearbeitet werden, wenn der Versand gestoppt ist"
+                        {% elif not campaign.has_anschreiben_data or campaign.mode != 'transfer' %}
+                        title="Kein gespeichertes Anschreiben fuer diese Karte verfuegbar"
+                        {% endif %}
+                    >
+                        Edit Anschreiben
+                    </a>
+                    <button
+                        type="button"
+                        class="pause-btn{% if campaign.active_job and campaign.active_job.status == 'paused' %} is-continue{% endif %}"
+                        data-job-id="{{ campaign.active_job.job_id if campaign.active_job else '' }}"
+                        data-action="{% if campaign.active_job and campaign.active_job.status == 'paused' %}continue{% else %}pause{% endif %}"
+                        {% if not campaign.active_job %}hidden{% endif %}
+                    >
+                        {% if campaign.active_job and campaign.active_job.status == 'paused' %}Continue{% else %}Pause{% endif %}
+                    </button>
+                    <form
+                        class="delete-form"
+                        method="POST"
+                        action="{{ url_for('delete_dashboard_campaign', campaign_id=campaign.id) }}"
+                        onsubmit="return confirm('Diese gespeicherte Vorlage loeschen? Das kann nicht rueckgaengig gemacht werden.');"
+                    >
+                        <button
+                            type="submit"
+                            class="delete-btn"
+                            {% if campaign.has_active_job %}disabled title="Laufenden oder pausierten Versand zuerst abschliessen"{% endif %}
+                        >
+                            {% if campaign.has_active_job %}Versand aktiv{% else %}Loeschen{% endif %}
+                        </button>
+                    </form>
+                </div>
+                <div class="delete-note" {% if not campaign.has_active_job %}hidden{% endif %}>
+                    Loeschen ist waehrend eines laufenden oder pausierten Versands gesperrt.
+                </div>
+                <div class="campaign-progress">
+                    <div class="campaign-progress-head">
+                        <span class="progress-status{% if campaign.is_sending %} sending{% elif campaign.is_paused %} paused{% elif campaign.remaining_rows == 0 and campaign.total_rows > 0 %} done{% endif %}">
+                            {% if campaign.is_sending %}
+                            Versand laeuft
+                            {% elif campaign.is_paused %}
+                            Pausiert
+                            {% elif campaign.remaining_rows == 0 and campaign.total_rows > 0 %}
+                            Abgeschlossen
+                            {% else %}
+                            Bereit
+                            {% endif %}
+                        </span>
+                        <span class="progress-percent">{{ "%.1f"|format(campaign.progress_percent or 0) }}%</span>
+                    </div>
+                    <div class="progress-track">
+                        <div
+                            class="progress-fill{% if campaign.is_sending %} sending{% endif %}"
+                            style="width: {{ "%.2f"|format(campaign.progress_percent or 0) }}%;"
+                        ></div>
+                    </div>
+                    <div class="progress-subtext">
+                        {% if campaign.active_job %}
+                        {{ campaign.active_job.message or 'Massenversand aktiv...' }}
+                        {% else %}
+                        {{ campaign.sent_rows }}/{{ campaign.total_rows }} gesendet, {{ campaign.remaining_rows }} offen.
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
+    {% if campaigns %}
+    <script>
+        (() => {
+            const cards = new Map();
+            const pendingJobActions = new Map();
+            document.querySelectorAll('.card[data-campaign-id]').forEach((card) => {
+                cards.set(card.dataset.campaignId, card);
+            });
+
+            if (!cards.size) {
+                return;
+            }
+
+            let pollTimer = null;
+            let reloadedForStructureChange = false;
+
+            function clampPercent(value) {
+                const parsed = Number(value || 0);
+                if (!Number.isFinite(parsed)) {
+                    return 0;
+                }
+                return Math.max(0, Math.min(100, parsed));
+            }
+
+            function text(card, selector, value) {
+                const el = card.querySelector(selector);
+                if (el) {
+                    el.textContent = String(value ?? '');
+                }
+            }
+
+            function setPauseButtonState(card, activeJob, hasActiveJob) {
+                const pauseBtn = card.querySelector('.pause-btn');
+                if (!pauseBtn) {
+                    return;
+                }
+
+                const campaignId = String(card.dataset.campaignId || '');
+                const jobStatus = String(activeJob?.status || '');
+                const pendingAction = pendingJobActions.get(campaignId) || '';
+
+                if (
+                    (pendingAction === 'pause' && jobStatus === 'paused')
+                    || (pendingAction === 'continue' && jobStatus === 'running')
+                    || !hasActiveJob
+                ) {
+                    pendingJobActions.delete(campaignId);
+                }
+
+                const resolvedPendingAction = pendingJobActions.get(campaignId) || '';
+                const isPaused = jobStatus === 'paused';
+
+                if (!hasActiveJob) {
+                    pauseBtn.hidden = true;
+                    pauseBtn.disabled = false;
+                    pauseBtn.dataset.jobId = '';
+                    pauseBtn.dataset.action = 'pause';
+                    pauseBtn.textContent = 'Pause';
+                    pauseBtn.title = '';
+                    pauseBtn.classList.remove('is-continue');
+                    return;
+                }
+
+                pauseBtn.hidden = false;
+                pauseBtn.dataset.jobId = String(activeJob?.job_id || '');
+                pauseBtn.dataset.action = isPaused ? 'continue' : 'pause';
+                pauseBtn.disabled = Boolean(resolvedPendingAction) || !pauseBtn.dataset.jobId;
+                pauseBtn.textContent = resolvedPendingAction
+                    ? (resolvedPendingAction === 'pause' ? 'Pausing...' : 'Continuing...')
+                    : (isPaused ? 'Continue' : 'Pause');
+                pauseBtn.title = isPaused
+                    ? 'Pausierten Versand fuer diese Karte fortsetzen'
+                    : 'Laufenden Versand fuer diese Karte pausieren';
+                pauseBtn.classList.toggle('is-continue', isPaused || resolvedPendingAction === 'continue');
+            }
+
+            function updateCard(card, campaign) {
+                const total = Number(campaign.total_rows || 0);
+                const sent = Number(campaign.sent_rows || 0);
+                const remaining = Number(campaign.remaining_rows || 0);
+                const percent = clampPercent(
+                    campaign.progress_percent != null
+                        ? campaign.progress_percent
+                        : (total > 0 ? (sent / total) * 100 : 0)
+                );
+
+                text(card, '.meta-mode', campaign.mode || '');
+                text(card, '.meta-sender', campaign.sender_email || 'k. A.');
+                text(card, '.meta-attachments', campaign.attachment_count || 0);
+                text(card, '.meta-updated', campaign.updated_at || '');
+                text(card, '.stat-total', total);
+                text(card, '.stat-sent', sent);
+                text(card, '.stat-remaining', remaining);
+
+                const statusEl = card.querySelector('.progress-status');
+                const percentEl = card.querySelector('.progress-percent');
+                const fillEl = card.querySelector('.progress-fill');
+                const subtextEl = card.querySelector('.progress-subtext');
+                const deleteBtn = card.querySelector('.delete-btn');
+                const deleteNote = card.querySelector('.delete-note');
+                const editBtn = card.querySelector('.edit-btn');
+                const activeJob = campaign.active_job || null;
+                const hasActiveJob = Boolean(campaign.has_active_job && activeJob);
+                const jobStatus = String(activeJob?.status || '');
+                const isSending = hasActiveJob && jobStatus === 'running';
+                const isPaused = hasActiveJob && jobStatus === 'paused';
+
+                setPauseButtonState(card, activeJob, hasActiveJob);
+
+                if (statusEl) {
+                    statusEl.classList.remove('sending', 'paused', 'done');
+                    if (isSending) {
+                        statusEl.classList.add('sending');
+                        statusEl.textContent = 'Versand laeuft';
+                    } else if (isPaused) {
+                        statusEl.classList.add('paused');
+                        statusEl.textContent = 'Pausiert';
+                    } else if (total > 0 && remaining === 0) {
+                        statusEl.classList.add('done');
+                        statusEl.textContent = 'Abgeschlossen';
+                    } else {
+                        statusEl.textContent = 'Bereit';
+                    }
+                }
+
+                if (percentEl) {
+                    percentEl.textContent = `${percent.toFixed(1)}%`;
+                }
+                if (fillEl) {
+                    fillEl.style.width = `${percent.toFixed(2)}%`;
+                    fillEl.classList.toggle('sending', isSending);
+                }
+                if (deleteBtn) {
+                    deleteBtn.disabled = hasActiveJob;
+                    deleteBtn.textContent = hasActiveJob ? 'Versand aktiv' : 'Loeschen';
+                    deleteBtn.title = hasActiveJob
+                        ? 'Laufenden oder pausierten Versand zuerst abschliessen'
+                        : '';
+                }
+                if (deleteNote) {
+                    deleteNote.hidden = !hasActiveJob;
+                }
+                if (editBtn) {
+                    editBtn.dataset.hasAnschreiben = String(Boolean(campaign.has_anschreiben_data));
+                    const hasAnschreibenData = String(editBtn.dataset.hasAnschreiben || 'false') === 'true';
+                    const canEdit = !hasActiveJob && hasAnschreibenData && (campaign.mode || '') === 'transfer';
+                    editBtn.classList.toggle('disabled', !canEdit);
+                    editBtn.href = canEdit ? String(editBtn.dataset.editHref || '#') : '#';
+                    editBtn.title = canEdit
+                        ? ''
+                        : (hasActiveJob
+                            ? 'Anschreiben kann erst bearbeitet werden, wenn der Versand gestoppt ist'
+                            : 'Kein gespeichertes Anschreiben fuer diese Karte verfuegbar');
+                }
+
+                if (subtextEl) {
+                    if (hasActiveJob) {
+                        const runTotal = Number(activeJob.total || 0);
+                        const runProcessed = Number(activeJob.processed || 0);
+                        const runPercent = clampPercent(activeJob.percent || 0);
+                        const runInfo = runTotal > 0
+                            ? `Lauf ${runProcessed}/${runTotal} (${runPercent.toFixed(1)}%)`
+                            : '';
+                        const message = String(activeJob.message || '').trim();
+                        subtextEl.textContent = message
+                            ? (runInfo ? `${runInfo} | ${message}` : message)
+                            : (runInfo || `${sent}/${total} gesendet, ${remaining} offen.`);
+                    } else {
+                        subtextEl.textContent = `${sent}/${total} gesendet, ${remaining} offen.`;
+                    }
+                }
+            }
+
+            async function pollDashboard() {
+                const response = await fetch('/api/dashboard/campaigns');
+                const payload = await response.json();
+                if (!response.ok || !payload.success || !Array.isArray(payload.campaigns)) {
+                    throw new Error(payload.message || 'Dashboard-Daten konnten nicht geladen werden');
+                }
+
+                const campaigns = payload.campaigns;
+                const incomingIds = new Set(campaigns.map((item) => String(item.id || '')));
+                const hasShapeChange = incomingIds.size !== cards.size
+                    || Array.from(cards.keys()).some((id) => !incomingIds.has(id));
+                if (hasShapeChange) {
+                    if (!reloadedForStructureChange) {
+                        reloadedForStructureChange = true;
+                        window.location.reload();
+                    }
+                    return;
+                }
+
+                campaigns.forEach((campaign) => {
+                    const card = cards.get(String(campaign.id || ''));
+                    if (!card) {
+                        return;
+                    }
+                    updateCard(card, campaign);
+                });
+            }
+
+            async function toggleCampaignJob(card) {
+                const pauseBtn = card.querySelector('.pause-btn');
+                const jobId = String(pauseBtn?.dataset.jobId || '').trim();
+                const campaignId = String(card.dataset.campaignId || '').trim();
+                const action = String(pauseBtn?.dataset.action || 'pause').trim() === 'continue'
+                    ? 'continue'
+                    : 'pause';
+                if (!pauseBtn || !jobId || !campaignId) {
+                    return;
+                }
+
+                pendingJobActions.set(campaignId, action);
+                setPauseButtonState(
+                    card,
+                    { job_id: jobId, status: action === 'continue' ? 'paused' : 'running' },
+                    true
+                );
+
+                try {
+                    const response = await fetch(`/api/send-bulk/${action}/${encodeURIComponent(jobId)}`, {
+                        method: 'POST'
+                    });
+                    const payload = await response.json();
+                    if (!response.ok || !payload.success) {
+                        throw new Error(
+                            payload.message
+                            || (action === 'continue'
+                                ? 'Continue konnte nicht angefordert werden'
+                                : 'Pause konnte nicht angefordert werden')
+                        );
+                    }
+                    await pollDashboard();
+                } catch (error) {
+                    pendingJobActions.delete(campaignId);
+                    setPauseButtonState(
+                        card,
+                        { job_id: jobId, status: action === 'continue' ? 'paused' : 'running' },
+                        true
+                    );
+                    window.alert(
+                        error.message
+                        || (action === 'continue'
+                            ? 'Continue konnte nicht angefordert werden.'
+                            : 'Pause konnte nicht angefordert werden.')
+                    );
+                }
+            }
+
+            document.addEventListener('click', (event) => {
+                const pauseBtn = event.target.closest('.pause-btn');
+                if (!pauseBtn) {
+                    return;
+                }
+
+                const card = pauseBtn.closest('.card[data-campaign-id]');
+                if (!card) {
+                    return;
+                }
+
+                toggleCampaignJob(card).catch(() => {});
+            });
+
+            pollTimer = setInterval(() => {
+                pollDashboard().catch(() => {});
+            }, 1500);
+
+            pollDashboard().catch(() => {});
+
+            window.addEventListener('beforeunload', () => {
+                if (pollTimer) {
+                    clearInterval(pollTimer);
+                }
+            });
+        })();
+    </script>
+    {% endif %}
+</body>
+</html>

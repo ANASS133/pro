@@ -7,7 +7,8 @@
     const routeToSection = {
         "/": "search",
         "/dashboard": "dashboard",
-        "/firebase": "firebase",
+        "/firebase": "supabase",
+        "/supabase": "supabase",
         "/ausbildungen": "ausbildungen",
         "/create-anschreibens": "create-anschreibens",
         "/send-emails": "send-emails",
@@ -17,7 +18,7 @@
     const sectionToRoute = {
         search: "/",
         dashboard: "/dashboard",
-        firebase: "/firebase",
+        supabase: "/supabase",
         ausbildungen: "/ausbildungen",
         "create-anschreibens": "/create-anschreibens",
         "send-emails": "/send-emails",
@@ -27,7 +28,7 @@
     const titleBySection = {
         search: "Arbeitsagentur Scraper | Suche",
         dashboard: "Arbeitsagentur Scraper | Dashboard",
-        firebase: "Arbeitsagentur Scraper | Firebase",
+        supabase: "Arbeitsagentur Scraper | Supabase",
         ausbildungen: "Arbeitsagentur Scraper | Ausbildungen",
         "create-anschreibens": "Arbeitsagentur Scraper | Anschreiben",
         "send-emails": "Arbeitsagentur Scraper | E-Mails senden",
@@ -44,8 +45,8 @@
         dashboard: typeof factories.createDashboardSection === "function"
             ? factories.createDashboardSection()
             : { show() {}, hide() {} },
-        firebase: typeof factories.createFirebaseSection === "function"
-            ? factories.createFirebaseSection()
+        supabase: typeof factories.createSupabaseSection === "function"
+            ? factories.createSupabaseSection()
             : { show() {}, hide() {} },
         ausbildungen: typeof factories.createAusbildungenSection === "function"
             ? factories.createAusbildungenSection()

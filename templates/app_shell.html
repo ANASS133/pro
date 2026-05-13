@@ -16,7 +16,7 @@
             </div>
             <nav class="shell-nav" aria-label="Hauptnavigation">
                 <a href="{{ url_for('index') }}" data-section-link="search">E-Mails finden</a>
-                <a href="{{ url_for('firebase_page') }}" data-section-link="firebase">Firebase</a>
+                <a href="{{ url_for('supabase_page') }}" data-section-link="supabase">Supabase</a>
                 <a href="{{ url_for('create_anschreibens') }}" data-section-link="create-anschreibens">Anschreiben</a>
                 <a href="{{ url_for('send_emails') }}" data-section-link="send-emails">E-Mails senden</a>
                 <a href="{{ url_for('dashboard') }}" data-section-link="dashboard">Dashboard</a>
@@ -219,22 +219,43 @@
                 </section>
 
                 <section
-                    id="firebase-section"
+                    id="supabase-section"
                     class="app-section"
-                    data-section="firebase"
-                    {% if initial_section != "firebase" %}hidden{% endif %}
+                    data-section="supabase"
+                    {% if initial_section != "supabase" %}hidden{% endif %}
                 >
-                    <div class="section-hero firebase-hero">
+                    <div class="section-hero supabase-hero">
                         <div>
-                            <span class="section-kicker">Firebase</span>
+                            <span class="section-kicker supabase-kicker">Supabase</span>
                             <h2>Online-Bewerbungen</h2>
-                            <p>Firebase-Eintraege werden jetzt ueber denselben Shell-Flow geladen und geloescht.</p>
+                            <p>Bewerbungen werden direkt aus Supabase geladen, inklusive privater Dokumente mit signierten Links.</p>
+                        </div>
+                        <div class="hero-actions">
+                            <button type="button" id="supabase-refresh" class="supabase-refresh-btn">Refresh</button>
                         </div>
                     </div>
 
-                    <div id="firebase-status" class="section-status" hidden></div>
-                    <div id="firebase-empty" class="empty-state" hidden>Noch keine Online-Bewerbungen vorhanden.</div>
-                    <div id="firebase-cards" class="cards-grid"></div>
+                    <div class="supabase-toolbar">
+                        <input
+                            type="text"
+                            id="supabase-search"
+                            class="supabase-search-input"
+                            placeholder="Suche nach Name, E-Mail oder WhatsApp..."
+                            autocomplete="off"
+                        >
+                        <select id="supabase-filter-pack" class="supabase-filter-select">
+                            <option value="">Alle Pakete</option>
+                        </select>
+                        <select id="supabase-filter-language" class="supabase-filter-select">
+                            <option value="">Alle Sprachniveaus</option>
+                            <option value="B1">B1</option>
+                            <option value="B2">B2</option>
+                        </select>
+                    </div>
+
+                    <div id="supabase-status" class="section-status" hidden></div>
+                    <div id="supabase-empty" class="empty-state" hidden>Noch keine Online-Bewerbungen vorhanden.</div>
+                    <div id="supabase-cards" class="cards-grid"></div>
                 </section>
 
 
@@ -713,10 +734,10 @@
                         <div>
                             <span class="section-kicker">Add</span>
                             <h2>Kandidatenformular</h2>
-                            <p>Erfasst Bewerberdaten, Dokumente und speichert die Eintraege direkt in Firebase.</p>
+                            <p>Erfasst Bewerberdaten, Dokumente und speichert die Eintraege direkt in Supabase.</p>
                         </div>
                         <div class="hero-actions">
-                            <a href="{{ url_for('firebase_page') }}" data-section-link="firebase">Zu Firebase</a>
+                            <a href="{{ url_for('supabase_page') }}" data-section-link="supabase">Zu Supabase</a>
                             <a href="{{ url_for('dashboard') }}" data-section-link="dashboard">Zum Dashboard</a>
                         </div>
                     </div>
@@ -821,7 +842,7 @@
                             </label>
 
                             <p class="add-status-message" id="add-status-message" aria-live="polite"></p>
-                            <button type="submit" class="add-submit-button" id="add-submit-button">Save to Firebase</button>
+                            <button type="submit" class="add-submit-button" id="add-submit-button">Save to Supabase</button>
                         </form>
                     </div>
                 </section>
@@ -831,11 +852,18 @@
 
     <script>
         window.APP_INITIAL_SECTION = {{ initial_section|tojson }};
+        window.SUPABASE_CONFIG = {
+            url: {{ supabase_url|tojson }},
+            anonKey: {{ supabase_anon_key|tojson }}
+        };
+        window.SUPABASE_URL = window.SUPABASE_CONFIG.url;
+        window.SUPABASE_ANON_KEY = window.SUPABASE_CONFIG.anonKey;
     </script>
     <script src="{{ url_for('static', filename='spa/utils.js') }}?v=2.0"></script>
+    <script src="{{ url_for('static', filename='spa/supabase-client.js') }}?v=2.0"></script>
     <script src="{{ url_for('static', filename='spa/sections/search.js') }}?v=2.0"></script>
     <script src="{{ url_for('static', filename='spa/sections/dashboard.js') }}?v=2.0"></script>
-    <script src="{{ url_for('static', filename='spa/sections/firebase.js') }}?v=2.0"></script>
+    <script src="{{ url_for('static', filename='spa/sections/supabase.js') }}?v=2.0"></script>
     <script src="{{ url_for('static', filename='spa/sections/ausbildungen.js') }}?v=2.0"></script>
     <script src="{{ url_for('static', filename='spa/sections/create-anschreibens.js') }}?v=2.0"></script>
     <script src="{{ url_for('static', filename='spa/sections/send-emails.js') }}?v=2.0"></script>

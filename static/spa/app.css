@@ -275,6 +275,7 @@ textarea {
 .search-card,
 .campaign-card,
 .firebase-card,
+.supabase-card,
 .file-card {
     background: #ffffff;
     border: 1px solid var(--border);
@@ -584,6 +585,7 @@ a:focus-visible {
 
 .campaign-card h3,
 .firebase-card h3,
+.supabase-card h3,
 .file-card h3,
 .file-card h2 {
     margin: 0;
@@ -593,6 +595,7 @@ a:focus-visible {
 
 .campaign-meta,
 .firebase-meta,
+.supabase-meta,
 .file-meta {
     margin-top: 10px;
     color: var(--muted);
@@ -1894,4 +1897,303 @@ textarea {
     height: 100%;
     border: none;
     display: block;
+}
+
+/* Supabase Dashboard */
+
+.supabase-hero {
+    background: linear-gradient(135deg, #f0fdf6 0%, #ffffff 100%);
+}
+
+.supabase-kicker {
+    background: rgba(62, 207, 142, 0.12);
+    color: #1b8a5a;
+}
+
+.supabase-toolbar {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.supabase-search-input {
+    flex: 1 1 260px;
+    min-width: 0;
+    padding: 12px 16px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: #ffffff;
+    font-size: 14px;
+    color: var(--text);
+    box-shadow: var(--shadow);
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.supabase-search-input:focus {
+    border-color: #3ecf8e;
+    box-shadow: 0 0 0 3px rgba(62, 207, 142, 0.12);
+}
+
+.supabase-filter-select {
+    padding: 12px 36px 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: #ffffff;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    box-shadow: var(--shadow);
+    outline: none;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235b6478' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'%3E%3C/path%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    min-width: 140px;
+}
+
+.supabase-refresh-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 18px;
+    border-radius: 12px;
+    border: 1px solid rgba(62, 207, 142, 0.25);
+    background: linear-gradient(135deg, rgba(62, 207, 142, 0.1), rgba(62, 207, 142, 0.04));
+    color: #1b8a5a;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.supabase-refresh-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(62, 207, 142, 0.15);
+    background: linear-gradient(135deg, rgba(62, 207, 142, 0.16), rgba(62, 207, 142, 0.08));
+}
+
+.supabase-refresh-btn:disabled {
+    opacity: 0.65;
+    cursor: wait;
+    transform: none;
+    box-shadow: none;
+}
+
+.supabase-card {
+    border-left: 4px solid #3ecf8e;
+}
+
+.supabase-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.supabase-card h3 {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.supabase-card--deleting {
+    opacity: 0.55;
+    pointer-events: none;
+}
+
+.supabase-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(62, 207, 142, 0.12);
+    color: #1b8a5a;
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.supabase-meta {
+    display: grid;
+    gap: 8px;
+}
+
+.supabase-meta div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #edf1f7;
+}
+
+.supabase-meta div:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
+}
+
+.supabase-meta span {
+    color: var(--muted);
+    font-weight: 700;
+}
+
+.supabase-meta strong {
+    color: var(--text);
+    font-weight: 700;
+    text-align: right;
+    overflow-wrap: anywhere;
+}
+
+.supabase-documents {
+    margin-top: 6px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+}
+
+.supabase-documents h4 {
+    margin: 0 0 6px;
+    font-size: 0.85rem;
+    color: var(--muted);
+    font-weight: 700;
+}
+
+.supabase-document-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.supabase-doc-item {
+    font-size: 13px;
+}
+
+.supabase-doc-link {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 8px;
+    background: #eef2f8;
+    color: var(--primary);
+    font-weight: 600;
+    text-decoration: none;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.supabase-doc-link:hover {
+    background: #dce3f0;
+    color: var(--primary-dark);
+}
+
+.supabase-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px;
+    margin-top: 14px;
+}
+
+.supabase-doc-error {
+    color: var(--muted);
+    font-style: italic;
+}
+
+.supabase-doc-empty {
+    color: var(--muted);
+    font-style: italic;
+}
+
+.supabase-next-step-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 44px;
+    box-sizing: border-box;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: center;
+    cursor: pointer;
+    border: 1px solid #2ea870;
+    background: linear-gradient(135deg, #3ecf8e 0%, #2ea870 100%);
+    color: #fff;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.supabase-next-step-btn:hover {
+    background: linear-gradient(135deg, #35bf7e 0%, #269460 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgba(62, 207, 142, 0.25);
+}
+
+.supabase-next-step-btn:disabled {
+    border-color: #d6dae3;
+    background: #e5e7eb;
+    color: #7a8397;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.supabase-delete-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 44px;
+    box-sizing: border-box;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: center;
+    cursor: pointer;
+    border: 1px solid #b85c38;
+    background: linear-gradient(135deg, #ef5350 0%, #b85c38 100%);
+    color: #fff;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.supabase-delete-btn:hover {
+    background: linear-gradient(135deg, #e24a47 0%, #a04d2d 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 8px 18px rgba(239, 83, 80, 0.25);
+}
+
+.supabase-delete-btn:disabled {
+    border-color: #d6dae3;
+    background: #e5e7eb;
+    color: #7a8397;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.supabase-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 40px 20px;
+    color: var(--muted);
+    font-size: 14px;
+    grid-column: 1 / -1;
+}
+
+.supabase-spinner {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2.5px solid var(--border);
+    border-top-color: #3ecf8e;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
 }

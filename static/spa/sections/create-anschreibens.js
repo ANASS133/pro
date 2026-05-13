@@ -187,10 +187,12 @@
             };
         }
 
+        const applicationStoragePrefix = "create-anschreibens:application:";
+        const lastApplicationKey = "create-anschreibens:last-application";
         const firebaseApplicationStoragePrefix = "create-anschreibens:firebase-application:";
         const firebaseLastApplicationKey = "create-anschreibens:last-firebase-application";
         const noDataMessage = dataSourceMode === "firebase-application"
-            ? "Bitte zuerst eine Firebase-Bewerbung laden"
+            ? "Bitte zuerst eine Bewerbung laden"
             : "Bitte zuerst Exportdaten laden";
 
         let initialized = false;
@@ -516,7 +518,8 @@
             let appData = null;
 
             if (urlAppId) {
-                const stored = window.sessionStorage.getItem(firebaseApplicationStoragePrefix + urlAppId);
+                const stored = window.sessionStorage.getItem(applicationStoragePrefix + urlAppId)
+                    || window.sessionStorage.getItem(firebaseApplicationStoragePrefix + urlAppId);
                 if (stored) {
                     try {
                         appData = JSON.parse(stored);
@@ -525,9 +528,11 @@
             }
             
             if (!appData) {
-                const lastSelectedId = window.sessionStorage.getItem(firebaseLastApplicationKey);
+                const lastSelectedId = window.sessionStorage.getItem(lastApplicationKey)
+                    || window.sessionStorage.getItem(firebaseLastApplicationKey);
                 if (lastSelectedId) {
-                    const stored = window.sessionStorage.getItem(firebaseApplicationStoragePrefix + lastSelectedId);
+                    const stored = window.sessionStorage.getItem(applicationStoragePrefix + lastSelectedId)
+                        || window.sessionStorage.getItem(firebaseApplicationStoragePrefix + lastSelectedId);
                     if (stored) {
                         try {
                             appData = JSON.parse(stored);
@@ -1050,12 +1055,27 @@
 
             const urlParams = new URLSearchParams(window.location.search);
             const applicationId = urlParams.get("application_id") || "";
-            let url = `${API_BASE}/create-anschreibens/bootstrap?filename=${encodeURIComponent(normalizedFilename)}`;
-            if (applicationId) {
-                url += `&application_id=${encodeURIComponent(applicationId)}`;
-            }
+            const cachedApplication = getCachedApplication(applicationId);
 
-            const payload = await fetchJson(url);
+            let payload;
+            if (applicationId && cachedApplication) {
+                payload = await fetchJson(`${API_BASE}/create-anschreibens/application-bootstrap`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        filename: normalizedFilename,
+                        application_id: applicationId,
+                        application: cachedApplication,
+                        source_label: cachedApplication.source_label || "Supabase",
+                    }),
+                });
+            } else {
+                let url = `${API_BASE}/create-anschreibens/bootstrap?filename=${encodeURIComponent(normalizedFilename)}`;
+                if (applicationId) {
+                    url += `&application_id=${encodeURIComponent(applicationId)}`;
+                }
+                payload = await fetchJson(url);
+            }
             if (!payload.session) {
                 hideProgress();
                 return;
@@ -1105,6 +1125,11 @@
             return {
                 key: query.toString(),
                 query: query.toString(),
+                editCampaignId,
+                autoloadSource,
+                filename,
+                applicationId,
+                application: getCachedApplication(applicationId),
             };
         }
 
@@ -1119,7 +1144,21 @@
             showProgress("Anschreiben-Daten werden geladen...", 25);
 
             try {
-                const payload = await fetchJson(`${API_BASE}/create-anschreibens/bootstrap?${bootstrap.query}`);
+                let payload;
+                if (bootstrap.applicationId && bootstrap.application && !bootstrap.editCampaignId && !bootstrap.autoloadSource) {
+                    payload = await fetchJson(`${API_BASE}/create-anschreibens/application-bootstrap`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            filename: bootstrap.filename || "",
+                            application_id: bootstrap.applicationId,
+                            application: bootstrap.application,
+                            source_label: bootstrap.application.source_label || "Supabase",
+                        }),
+                    });
+                } else {
+                    payload = await fetchJson(`${API_BASE}/create-anschreibens/bootstrap?${bootstrap.query}`);
+                }
                 if (!payload.session) {
                     hideProgress();
                     return;
@@ -1133,7 +1172,9 @@
                 } else if (payload.mode === "export_file") {
                     displayName = displayName || payload.session.filename || "Exportdatei";
                 } else if (payload.mode === "firebase_only") {
-                    displayName = "Firebase Bewerbung (Bitte Domain waehlen)";
+                    displayName = "Bewerbung (Bitte Domain waehlen)";
+                } else if (payload.mode === "application") {
+                    displayName = displayName || "Bewerbung";
                 }
 
                 applyLoadedSession(payload.session, displayName);
@@ -1145,12 +1186,12 @@
                 if (payload.session.application_summary) {
                     const summary = payload.session.application_summary;
                     firebaseBereich = String(summary.bereich || "").trim();
-                    if (firebaseBereich && payload.mode === "firebase_only") {
+                    if (firebaseBereich && (payload.mode === "firebase_only" || payload.mode === "application")) {
                         autoSelectBereichDomain();
                     }
                 }
 
-                if (payload.mode === "firebase_only") {
+                if (payload.mode === "firebase_only" || (payload.mode === "application" && !payload.session.filename)) {
                     showProgress("Bewerbung geladen", 100);
                     window.setTimeout(hideProgress, 600);
                     showToast("Bewerbung geladen. Bitte waehle eine Export-Domain aus.");
@@ -1173,20 +1214,23 @@
             }
         }
 
-        function getCachedFirebaseApplication(applicationId) {
+        function getCachedApplication(applicationId) {
             const normalizedApplicationId = String(applicationId || "").trim();
             if (!normalizedApplicationId) {
                 return null;
             }
 
             try {
-                const rawValue = window.sessionStorage.getItem(
-                    `${firebaseApplicationStoragePrefix}${normalizedApplicationId}`,
-                );
+                const rawValue = window.sessionStorage.getItem(`${applicationStoragePrefix}${normalizedApplicationId}`)
+                    || window.sessionStorage.getItem(`${firebaseApplicationStoragePrefix}${normalizedApplicationId}`);
                 return rawValue ? JSON.parse(rawValue) : null;
             } catch (_error) {
                 return null;
             }
+        }
+
+        function getCachedFirebaseApplication(applicationId) {
+            return getCachedApplication(applicationId);
         }
 
         function getFirebaseBootstrapInfo() {
@@ -1196,7 +1240,9 @@
 
             try {
                 fallbackApplicationId = String(
-                    window.sessionStorage.getItem(firebaseLastApplicationKey) || "",
+                    window.sessionStorage.getItem(lastApplicationKey)
+                    || window.sessionStorage.getItem(firebaseLastApplicationKey)
+                    || "",
                 ).trim();
             } catch (_error) {
                 fallbackApplicationId = "";
@@ -1206,14 +1252,14 @@
             return {
                 key: applicationId,
                 applicationId,
-                application: getCachedFirebaseApplication(applicationId),
+                application: getCachedApplication(applicationId),
             };
         }
 
         async function bootstrapFirebaseFromUrl() {
             const bootstrap = getFirebaseBootstrapInfo();
             if (!bootstrap.applicationId) {
-                setSourcePrompt("Noch keine Firebase-Bewerbung ausgewaehlt. Oeffne die Firebase-Liste und klicke bei einem Eintrag auf Next step.");
+                setSourcePrompt("Noch keine Bewerbung ausgewaehlt. Oeffne die Supabase-Liste und klicke bei einem Eintrag auf Next step.");
                 renderApplicationSummary(null);
                 return;
             }
@@ -1223,15 +1269,16 @@
 
             lastBootstrapKey = bootstrap.key;
             clearInlineError();
-            showProgress("Firebase-Bewerbung wird geladen...", 25);
+            showProgress("Bewerbung wird geladen...", 25);
 
             try {
-                const payload = await fetchJson(`${API_BASE}/create-anschreibens/firebase-bootstrap`, {
+                const payload = await fetchJson(`${API_BASE}/create-anschreibens/application-bootstrap`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         application_id: bootstrap.applicationId,
                         application: bootstrap.application || undefined,
+                        source_label: "Supabase",
                     }),
                 });
                 if (!payload.session) {
@@ -1241,7 +1288,7 @@
 
                 applyLoadedSession(
                     payload.session,
-                    payload.session.display_name || `Firebase ${bootstrap.applicationId}`,
+                    payload.session.display_name || `Bewerbung ${bootstrap.applicationId}`,
                 );
                 renderApplicationSummary(payload.session.application_summary || {});
                 setSourcePrompt("");
@@ -1250,16 +1297,16 @@
                 params.set("application_id", bootstrap.applicationId);
                 updateSectionQuery(params);
 
-                showProgress("Firebase-Bewerbung geladen", 100);
+                showProgress("Bewerbung geladen", 100);
                 window.setTimeout(hideProgress, 600);
-                showToast("Firebase-Bewerbung wurde geladen");
+                showToast("Bewerbung wurde geladen");
 
                 const summary = payload.session.application_summary || {};
                 firebaseBereich = String(summary.bereich || "").trim();
             } catch (error) {
                 hideProgress();
-                showInlineError(error.message || "Firebase-Bewerbung konnte nicht geladen werden.");
-                showToast(error.message || "Firebase-Bewerbung konnte nicht geladen werden.");
+                showInlineError(error.message || "Bewerbung konnte nicht geladen werden.");
+                showToast(error.message || "Bewerbung konnte nicht geladen werden.");
             }
         }
 

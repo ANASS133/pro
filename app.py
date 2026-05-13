@@ -53,6 +53,8 @@ app.secret_key = os.getenv("SECRET_KEY", "change-me-local")
 CAPTCHA_USERID = os.getenv("TRUECAPTCHA_USERID", "").strip()
 CAPTCHA_APIKEY = os.getenv("TRUECAPTCHA_APIKEY", "").strip()
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
+SUPABASE_URL = os.getenv("VITE_SUPABASE_URL", os.getenv("SUPABASE_URL", ""))
+SUPABASE_ANON_KEY = os.getenv("VITE_SUPABASE_ANON_KEY", os.getenv("SUPABASE_ANON_KEY", ""))
 
 if not CAPTCHA_USERID:
     raise RuntimeError("TRUECAPTCHA_USERID is not set")
@@ -2765,7 +2767,11 @@ def _build_pdf_autoload_session_payload(source: str) -> Tuple[Dict, int]:
     return payload, 200
 
 
-def _build_pdf_export_file_session_payload(filename: str, application_id: str = None) -> Tuple[Dict, int]:
+def _build_pdf_export_file_session_payload(
+    filename: str,
+    application_id: str = None,
+    application: Optional[Dict] = None,
+) -> Tuple[Dict, int]:
     file_path = _resolve_auto_extraction_export_path(filename)
     if not file_path:
         return {"error": "Exportdatei nicht gefunden."}, 404
@@ -2775,11 +2781,19 @@ def _build_pdf_export_file_session_payload(filename: str, application_id: str = 
     if not prepared_rows:
         return {"error": "Keine gueltigen Datensaetze in der Exportdatei gefunden."}, 400
 
-    application = _get_firebase_application_by_id(application_id) if application_id else None
-    if application:
-        bewerbungen_str = str(application.get("bewerbungen") or "").strip()
+    application_payload = dict(application or {})
+    if not application_payload and application_id:
+        application_payload = _get_firebase_application_by_id(application_id) or {}
+
+    if application_payload:
+        bewerbungen_str = str(
+            application_payload.get("bewerbungen")
+            or application_payload.get("pack")
+            or ""
+        ).strip()
         try:
-            limit = int(bewerbungen_str)
+            limit_match = re.search(r"\d+", bewerbungen_str)
+            limit = int(limit_match.group(0)) if limit_match else int(bewerbungen_str)
             if limit > 0:
                 prepared_rows = prepared_rows[:limit]
         except ValueError:
@@ -2790,9 +2804,9 @@ def _build_pdf_export_file_session_payload(filename: str, application_id: str = 
     payload["filename"] = file_path.name
     payload["display_name"] = _format_auto_export_domain_name(file_path)
 
-    if application:
-        payload["application_data"] = application
-        payload["application_summary"] = _build_pdf_firebase_application_summary(application)
+    if application_payload:
+        payload["application_data"] = application_payload
+        payload["application_summary"] = _build_pdf_application_summary(application_payload)
         
     return payload, 200
 
@@ -2884,15 +2898,61 @@ def _build_email_templates_from_anschreiben(
         }
 
 
-def _build_pdf_firebase_application_summary(application: Optional[Dict]) -> Dict[str, object]:
-    payload = dict(application or {})
-    documents = payload.get("documents")
+def _application_document_name(item: object) -> str:
+    if isinstance(item, dict):
+        for key in ("name", "filename", "fileName", "path", "url", "downloadURL", "href"):
+            value = str(item.get(key) or "").strip()
+            if value:
+                return value.split("?", 1)[0].rstrip("/").split("/")[-1] or value
+        return "Dokument"
+
+    value = str(item or "").strip()
+    if not value:
+        return "Dokument"
+    return value.split("?", 1)[0].rstrip("/").split("/")[-1] or value
+
+
+def _normalize_application_documents(documents: object) -> List[Dict[str, str]]:
     if not isinstance(documents, list):
-        documents = []
+        return []
+
+    normalized: List[Dict[str, str]] = []
+    for item in documents:
+        if isinstance(item, dict):
+            document = {
+                str(key): str(value).strip()
+                for key, value in item.items()
+                if str(key or "").strip() and str(value or "").strip()
+            }
+            if not document:
+                continue
+            document.setdefault("name", _application_document_name(document))
+            normalized.append(document)
+            continue
+
+        value = str(item or "").strip()
+        if value:
+            normalized.append({"path": value, "name": _application_document_name(value)})
+
+    return normalized
+
+
+def _format_application_datetime(value: object) -> str:
+    timestamp = _coerce_firebase_datetime(value)
+    if timestamp is None:
+        return "k. A."
+    return timestamp.strftime("%d.%m.%Y %H:%M")
+
+
+def _build_pdf_application_summary(application: Optional[Dict]) -> Dict[str, object]:
+    payload = dict(application or {})
+    documents = _normalize_application_documents(payload.get("documents"))
 
     created_at_display = str(payload.get("created_at_display") or "").strip()
     if not created_at_display:
-        created_at_display = _format_firebase_datetime(_coerce_firebase_datetime(payload.get("createdAt")))
+        created_at_display = _format_application_datetime(
+            payload.get("createdAt") or payload.get("created_at")
+        )
 
     document_count = payload.get("document_count")
     try:
@@ -2900,28 +2960,42 @@ def _build_pdf_firebase_application_summary(application: Optional[Dict]) -> Dict
     except Exception:
         normalized_document_count = len(documents)
 
+    source_label = str(
+        payload.get("source_label")
+        or payload.get("_source")
+        or payload.get("source")
+        or "Application"
+    ).strip()
+
     return {
         "id": str(payload.get("id") or "").strip(),
         "full_name": str(payload.get("fullName") or payload.get("full_name") or payload.get("name") or "").strip(),
         "email": _normalize_email(_pick_best_first_value(payload, ["email", "sender_email", "gmail"])),
         "sender_email": _normalize_email(_pick_best_first_value(payload, ["sender_email", "email", "gmail"])),
         "whatsapp": str(payload.get("whatsapp") or "").strip(),
-        "bereich": str(payload.get("bereich") or "").strip(),
-        "bewerbungen": str(payload.get("bewerbungen") or "").strip(),
+        "bereich": str(payload.get("bereich") or payload.get("field") or "").strip(),
+        "bewerbungen": str(payload.get("bewerbungen") or payload.get("pack") or "").strip(),
         "bank": str(payload.get("bank") or "").strip(),
         "language_level": str(payload.get("languageLevel") or payload.get("language_level") or "").strip(),
+        "source_label": source_label,
         "document_count": max(0, normalized_document_count),
         "created_at_display": created_at_display,
         "documents": documents,
     }
 
 
+def _build_pdf_firebase_application_summary(application: Optional[Dict]) -> Dict[str, object]:
+    payload = dict(application or {})
+    payload.setdefault("source_label", "Firebase")
+    return _build_pdf_application_summary(payload)
+
+
 def _build_pdf_row_from_firebase_application(application: Optional[Dict]) -> Dict[str, str]:
-    summary = _build_pdf_firebase_application_summary(application)
+    summary = _build_pdf_application_summary(application)
     document_names = ", ".join(
-        str((item or {}).get("name") or "").strip()
+        _application_document_name(item)
         for item in (summary.get("documents") or [])
-        if str((item or {}).get("name") or "").strip()
+        if _application_document_name(item)
     )
     created_at_display = str(summary.get("created_at_display") or "").strip()
     full_name = str(summary.get("full_name") or "").strip()
@@ -2955,7 +3029,7 @@ def _build_pdf_row_from_firebase_application(application: Optional[Dict]) -> Dic
         "company": display_name,
         "Unternehmen": display_name,
         "Firma": display_name,
-        "source_label": "Firebase",
+        "source_label": str(summary.get("source_label") or "Application").strip(),
     }
 
     return {
@@ -2975,19 +3049,38 @@ def _build_pdf_firebase_application_session_payload(
     if not application_payload and normalized_application_id:
         application_payload = _get_firebase_application_by_id(normalized_application_id) or {}
 
+    if application_payload:
+        application_payload.setdefault("source_label", "Firebase")
+
+    return _build_pdf_application_session_payload(
+        application_payload,
+        normalized_application_id,
+        source_label="Firebase",
+    )
+
+
+def _build_pdf_application_session_payload(
+    application: Optional[Dict],
+    application_id: str,
+    source_label: str = "Application",
+) -> Tuple[Dict, int]:
+    normalized_application_id = str(application_id or "").strip()
+    application_payload = dict(application or {})
+
     if not application_payload:
-        return {"error": "Firebase-Bewerbung nicht gefunden."}, 404
+        return {"error": "Bewerbung nicht gefunden."}, 404
 
     if normalized_application_id and not str(application_payload.get("id") or "").strip():
         application_payload["id"] = normalized_application_id
+    application_payload.setdefault("source_label", source_label)
 
     row = _build_pdf_row_from_firebase_application(application_payload)
     if not row:
-        return {"error": "Firebase-Bewerbung enthaelt keine gueltigen Daten."}, 400
+        return {"error": "Bewerbung enthaelt keine gueltigen Daten."}, 400
 
     payload = _create_pdf_session_from_rows([row])
-    summary = _build_pdf_firebase_application_summary(application_payload)
-    payload["source"] = "firebase_application"
+    summary = _build_pdf_application_summary(application_payload)
+    payload["source"] = "application"
     payload["application_id"] = str(summary.get("id") or normalized_application_id).strip()
     payload["display_name"] = (
         str(summary.get("full_name") or "").strip()
@@ -3136,6 +3229,33 @@ def create_anschreibens_firebase_bootstrap_api():
     return jsonify({"success": True, "mode": "firebase_application", "session": payload})
 
 
+@app.route("/api/create-anschreibens/application-bootstrap", methods=["POST"])
+def create_anschreibens_application_bootstrap_api():
+    data = request.get_json(silent=True) or {}
+    application_payload = data.get("application") if isinstance(data.get("application"), dict) else {}
+    application_id = str(data.get("application_id") or "").strip()
+    filename = str(data.get("filename") or "").strip()
+    source_label = str(data.get("source_label") or application_payload.get("source_label") or "Supabase").strip()
+
+    if filename:
+        payload, status_code = _build_pdf_export_file_session_payload(
+            filename,
+            application_id=application_id,
+            application=application_payload,
+        )
+    else:
+        payload, status_code = _build_pdf_application_session_payload(
+            application_payload,
+            application_id,
+            source_label=source_label,
+        )
+
+    if status_code != 200:
+        return jsonify(payload), status_code
+
+    return jsonify({"success": True, "mode": "application", "session": payload})
+
+
 @app.route("/send-emails", methods=["GET", "POST"])
 def send_emails():
     return _render_app_shell("send-emails")
@@ -3199,7 +3319,12 @@ def dashboard():
 
 @app.route("/firebase", methods=["GET"])
 def firebase_page():
-    return _render_app_shell("firebase")
+    return redirect(url_for("supabase_page"))
+
+
+@app.route("/supabase", methods=["GET"])
+def supabase_page():
+    return _render_app_shell("supabase")
 
 
 @app.route("/api/firebase/applications", methods=["GET"])
@@ -3402,14 +3527,19 @@ def _render_app_shell(initial_section: str = "search"):
     if section not in {
         "search",
         "dashboard",
-        "firebase",
+        "supabase",
         "ausbildungen",
         "create-anschreibens",
         "send-emails",
         "add",
     }:
         section = "search"
-    return render_template("app_shell.html", initial_section=section)
+    return render_template(
+        "app_shell.html",
+        initial_section=section,
+        supabase_url=SUPABASE_URL,
+        supabase_anon_key=SUPABASE_ANON_KEY,
+    )
 
 
 def _execute_bulk_send(

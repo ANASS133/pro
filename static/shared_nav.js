@@ -1,8 +1,7 @@
 (function () {
     const NAV_ITEMS = [
         { key: "search", href: "/", label: "E-Mails finden" },
-        { key: "firebase", href: "/firebase", label: "Firebase" },
-        { key: "firebase-anschreiben", href: "/firebase-anschreiben", label: "Firebase Anschreiben" },
+        { key: "supabase", href: "/supabase", label: "Supabase" },
         { key: "anschreiben", href: "/create-anschreibens", label: "Anschreiben" },
         { key: "send", href: "/send-emails", label: "E-Mails senden" },
         { key: "dashboard", href: "/dashboard", label: "Dashboard" },
@@ -22,11 +21,8 @@
         if (path === "/dashboard" || path.startsWith("/dashboard/")) {
             return "dashboard";
         }
-        if (path === "/firebase" || path.startsWith("/firebase/")) {
-            return "firebase";
-        }
-        if (path === "/firebase-anschreiben" || path.startsWith("/firebase-anschreiben/")) {
-            return "firebase-anschreiben";
+        if (path === "/supabase" || path === "/firebase" || path.startsWith("/supabase/") || path.startsWith("/firebase/")) {
+            return "supabase";
         }
         if (path === "/send-emails" || path.startsWith("/send-emails")) {
             return "send";

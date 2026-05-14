@@ -9,30 +9,30 @@
         "/dashboard": "dashboard",
         "/firebase": "supabase",
         "/supabase": "supabase",
+        "/money": "money",
         "/ausbildungen": "ausbildungen",
         "/create-anschreibens": "create-anschreibens",
         "/send-emails": "send-emails",
-        "/add": "add",
     };
 
     const sectionToRoute = {
         search: "/",
         dashboard: "/dashboard",
         supabase: "/supabase",
+        money: "/money",
         ausbildungen: "/ausbildungen",
         "create-anschreibens": "/create-anschreibens",
         "send-emails": "/send-emails",
-        add: "/add",
     };
 
     const titleBySection = {
         search: "Arbeitsagentur Scraper | Suche",
         dashboard: "Arbeitsagentur Scraper | Dashboard",
         supabase: "Arbeitsagentur Scraper | Supabase",
+        money: "Arbeitsagentur Scraper | Money",
         ausbildungen: "Arbeitsagentur Scraper | Ausbildungen",
         "create-anschreibens": "Arbeitsagentur Scraper | Anschreiben",
         "send-emails": "Arbeitsagentur Scraper | E-Mails senden",
-        add: "Arbeitsagentur Scraper | Add",
     };
 
     const sections = Array.from(document.querySelectorAll("[data-section]"));
@@ -48,6 +48,9 @@
         supabase: typeof factories.createSupabaseSection === "function"
             ? factories.createSupabaseSection()
             : { show() {}, hide() {} },
+        money: typeof factories.createMoneySection === "function"
+            ? factories.createMoneySection()
+            : { show() {}, hide() {} },
         ausbildungen: typeof factories.createAusbildungenSection === "function"
             ? factories.createAusbildungenSection()
             : { show() {}, hide() {} },
@@ -56,9 +59,6 @@
             : { show() {}, hide() {} },
         "send-emails": typeof factories.createSendEmailsSection === "function"
             ? factories.createSendEmailsSection()
-            : { show() {}, hide() {} },
-        add: typeof factories.createAddSection === "function"
-            ? factories.createAddSection()
             : { show() {}, hide() {} },
     };
 

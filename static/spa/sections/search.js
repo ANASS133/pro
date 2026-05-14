@@ -95,7 +95,7 @@
             ui.metaEl.textContent = `${total} Stellen gefunden | Veroeffentlicht seit: ${publishedSince}`;
 
             if (!ui.lastJobs.length) {
-                ui.listEl.innerHTML = '<div class="job-item">Keine Stellen fuer diese Suche gefunden.</div>';
+                ui.listEl.innerHTML = '<div class="job-item">Keine Stellen für diese Suche gefunden.</div>';
                 ui.autoBtn.style.display = "none";
                 return;
             }

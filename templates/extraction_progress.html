@@ -80,10 +80,10 @@
     <nav class="navbar">
         <a href="{{ url_for('index') }}" class="nav-link active">E-Mails finden</a>
         <a href="{{ url_for('firebase_page') }}" class="nav-link">Firebase</a>
+        <a href="{{ url_for('money') }}" class="nav-link">Money</a>
         <a href="{{ url_for('create_anschreibens') }}" class="nav-link">Anschreiben erstellen</a>
         <a href="{{ url_for('send_emails') }}" class="nav-link">E-Mails senden</a>
         <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
-        <a href="{{ url_for('add') }}" class="nav-link">Add</a>
         <a href="{{ url_for('ausbildungen') }}" class="nav-link">Ausbildungen</a>
     </nav>
     <h1>Fortschritt E-Mail-Extraktion</h1>
@@ -101,7 +101,7 @@
     <div id="captchaAlert" class="captcha-alert" style="display: none;">
         <h3>CAPTCHA erkannt</h3>
         <p>Die Extraktion ist pausiert. CAPTCHA im Selenium-Fenster loesen und dann fortsetzen.</p>
-        <a href="/captcha_solve" target="_blank" class="button">CAPTCHA-Hilfe oeffnen</a>
+        <a href="/captcha_solve" target="_blank" class="button">CAPTCHA-Hilfe öffnen</a>
     </div>
 
     <div id="failurePauseAlert" class="captcha-alert" style="display: none; background:#fbeaea; border-color:#f5c2c7; color:#842029;">

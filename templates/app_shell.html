@@ -12,15 +12,15 @@
             <div class="shell-brand">
                 <span class="brand-kicker">Arbeitsagentur Scraper</span>
                 <h1>Workbench</h1>
-                <p>Suche, Anschreiben, Add, Versand und Operations laufen jetzt in einer gemeinsamen Shell.</p>
+                <p>Suche, Anschreiben, Versand und Operations laufen jetzt in einer gemeinsamen Shell.</p>
             </div>
             <nav class="shell-nav" aria-label="Hauptnavigation">
                 <a href="{{ url_for('index') }}" data-section-link="search">E-Mails finden</a>
                 <a href="{{ url_for('supabase_page') }}" data-section-link="supabase">Supabase</a>
+                <a href="{{ url_for('money') }}" data-section-link="money">Money</a>
                 <a href="{{ url_for('create_anschreibens') }}" data-section-link="create-anschreibens">Anschreiben</a>
                 <a href="{{ url_for('send_emails') }}" data-section-link="send-emails">E-Mails senden</a>
                 <a href="{{ url_for('dashboard') }}" data-section-link="dashboard">Dashboard</a>
-                <a href="{{ url_for('add') }}" data-section-link="add">Add</a>
                 <a href="{{ url_for('ausbildungen') }}" data-section-link="ausbildungen">Ausbildungen</a>
             </nav>
         </header>
@@ -258,6 +258,88 @@
                     <div id="supabase-cards" class="cards-grid"></div>
                 </section>
 
+                <section
+                    id="money-section"
+                    class="app-section"
+                    data-section="money"
+                    {% if initial_section != "money" %}hidden{% endif %}
+                >
+                    <div class="section-hero money-hero">
+                        <div>
+                            <span class="section-kicker money-kicker">Money</span>
+                            <h2>Earnings Dashboard</h2>
+                            <p>Umsatz aus Supabase-Bewerbungen, berechnet aus 500er- und 1000er-Paketen.</p>
+                        </div>
+                        <div class="hero-actions">
+                            <button type="button" id="money-refresh" class="money-refresh-btn">Refresh</button>
+                        </div>
+                    </div>
+
+                    <div id="money-status" class="section-status" hidden></div>
+                    <div id="money-dashboard" class="money-dashboard" hidden>
+                        <div class="money-total-panel">
+                            <span class="money-label">Total Earned</span>
+                            <strong id="money-total">0 dh</strong>
+                            <p id="money-total-note">0 bezahlte Bewerbungen aus Supabase</p>
+                        </div>
+
+                        <div class="money-stat-grid">
+                            <article class="money-stat-card">
+                                <span>This Week</span>
+                                <strong id="money-week">0 dh</strong>
+                                <small id="money-week-count">0 Bewerbungen</small>
+                            </article>
+                            <article class="money-stat-card">
+                                <span>This Month</span>
+                                <strong id="money-month">0 dh</strong>
+                                <small id="money-month-count">0 Bewerbungen</small>
+                            </article>
+                            <article class="money-stat-card">
+                                <span>Today</span>
+                                <strong id="money-today">0 dh</strong>
+                                <small id="money-today-count">0 Bewerbungen</small>
+                            </article>
+                            <article class="money-stat-card">
+                                <span>Average</span>
+                                <strong id="money-average">0 dh</strong>
+                                <small>pro bezahlter Bewerbung</small>
+                            </article>
+                        </div>
+
+                        <div class="money-insights-grid">
+                            <article class="money-panel">
+                                <div class="money-panel-head">
+                                    <div>
+                                        <h3>Package Split</h3>
+                                        <p>Revenue by Bewerbung package.</p>
+                                    </div>
+                                </div>
+                                <div id="money-package-bars" class="money-bars"></div>
+                            </article>
+
+                            <article class="money-panel">
+                                <div class="money-panel-head">
+                                    <div>
+                                        <h3>Last 6 Months</h3>
+                                        <p>Monthly revenue trend.</p>
+                                    </div>
+                                </div>
+                                <div id="money-monthly-bars" class="money-bars money-monthly-bars"></div>
+                            </article>
+                        </div>
+
+                        <article class="money-panel">
+                            <div class="money-panel-head">
+                                <div>
+                                    <h3>Latest Earnings</h3>
+                                    <p>Newest paid applications from Supabase.</p>
+                                </div>
+                            </div>
+                            <div id="money-latest-list" class="money-latest-list"></div>
+                        </article>
+                    </div>
+                </section>
+
 
                 <section
                     id="ausbildungen-section"
@@ -269,7 +351,7 @@
                         <div>
                             <span class="section-kicker">Ausbildungen</span>
                             <h2>Exportdateien und Updates</h2>
-                            <p>Update-Jobs laufen weiter ueber dieselben APIs, jetzt ohne Seitenwechsel.</p>
+                            <p>Update-Jobs laufen weiter über dieselben APIs, jetzt ohne Seitenwechsel.</p>
                         </div>
                     </div>
 
@@ -303,12 +385,12 @@
                             <div class="anschreiben-card-head">
                                 <div>
                                     <h3>1. Export-Domain auswaehlen</h3>
-                                    <p>Verfuegbare Datendateien aus <code>data/auto_extraction_exports</code> direkt als PDF-Quelle laden.</p>
+                                    <p>Verfügbare Datendateien aus <code>data/auto_extraction_exports</code> direkt als PDF-Quelle laden.</p>
                                 </div>
                             </div>
                             <div class="anschreiben-inline-form">
                                 <label class="anschreiben-field" for="create-anschreibens-exportSelect">
-                                    <span>Verfuegbare Domains</span>
+                                    <span>Verfügbare Domains</span>
                                     <select id="create-anschreibens-exportSelect">
                                         <option value="">Bitte Domain waehlen</option>
                                     </select>
@@ -326,7 +408,7 @@
                             <div class="anschreiben-card-head">
                                 <div>
                                     <h3>2. Spalten aus Datei</h3>
-                                    <p>Verfuegbare Felder werden direkt fuer Platzhalter und Vorschau vorbereitet.</p>
+                                    <p>Verfügbare Felder werden direkt für Platzhalter und Vorschau vorbereitet.</p>
                                 </div>
                             </div>
                             <div id="create-anschreibens-columnList" class="anschreiben-column-list"></div>
@@ -382,7 +464,7 @@
 
                             <div class="anschreiben-template-editor">
                                 <div class="anschreiben-placeholder-help">
-                                    <p>Verfuegbare Platzhalter: <span id="create-anschreibens-placeholderTags"></span></p>
+                                    <p>Verfügbare Platzhalter: <span id="create-anschreibens-placeholderTags"></span></p>
                                     <small>Formatierung unterstuetzt z. B. <b>&lt;b&gt;fett&lt;/b&gt;</b>, <i>&lt;i&gt;kursiv&lt;/i&gt;</i> und <u>&lt;u&gt;unterstrichen&lt;/u&gt;</u>.</small>
                                 </div>
 
@@ -391,7 +473,7 @@
                                     <div style="display: flex; gap: 10px; align-items: center;">
                                         <label for="create-anschreibens-extractPageInput" style="font-size: 0.9rem;">Seitenzahl (Anschreiben):</label>
                                         <input type="number" id="create-anschreibens-extractPageInput" min="1" value="1" style="width: 80px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px;">
-                                        <button id="create-anschreibens-extractBtn" type="button" class="anschreiben-btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">Text extrahieren & einfuegen</button>
+                                        <button id="create-anschreibens-extractBtn" type="button" class="anschreiben-btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">Text extrahieren & einfügen</button>
                                         <span id="create-anschreibens-extractStatus" style="font-size: 0.85rem; color: var(--text-secondary);" hidden>Extrahiere...</span>
                                     </div>
                                     <small style="display: block; margin-top: 8px; color: var(--text-secondary);">Achtung: Ueberschreibt den aktuellen Text im Editor.</small>
@@ -400,7 +482,7 @@
                                 <div class="anschreiben-extract-area" style="background: var(--surface); padding: 16px; border-radius: 6px; border: 1px solid var(--border); margin-bottom: 20px;">
                                     <h4 style="margin-top: 0; margin-bottom: 12px; font-size: 0.95rem; color: var(--text-primary);">KI-Vorlage erstellen</h4>
                                     <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                                        <button id="create-anschreibens-aiTemplatizeBtn" type="button" class="anschreiben-btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">Platzhalter per KI einfuegen</button>
+                                        <button id="create-anschreibens-aiTemplatizeBtn" type="button" class="anschreiben-btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">Platzhalter per KI einfügen</button>
                                         <span id="create-anschreibens-aiTemplatizeStatus" style="font-size: 0.85rem; color: var(--text-secondary);" hidden>KI verarbeitet den Text...</span>
                                     </div>
                                     <small style="display: block; margin-top: 8px; color: var(--text-secondary);">Nach der Textextraktion analysiert die KI den Text und fuegt automatisch die verfuegbaren Platzhalter ein. Der Vorgang wird nach der Extraktion automatisch gestartet oder kann manuell ausgeloest werden.</small>
@@ -414,7 +496,7 @@
                                     <div id="create-anschreibens-templateList" class="anschreiben-template-list"></div>
                                     <div class="anschreiben-template-actions">
                                         <button id="create-anschreibens-addTemplateBtn" class="anschreiben-btn-secondary" type="button">Neue Variante</button>
-                                        <button id="create-anschreibens-deleteTemplateBtn" class="anschreiben-btn-secondary" type="button">Aktive loeschen</button>
+                                        <button id="create-anschreibens-deleteTemplateBtn" class="anschreiben-btn-secondary" type="button">Aktive löschen</button>
                                     </div>
                                 </div>
 
@@ -445,7 +527,7 @@
                             <div class="anschreiben-card-head">
                                 <div>
                                     <h3>5. PDFs generieren</h3>
-                                    <p>Layout feinjustieren, Vorschau pruefen und die fertigen PDFs direkt in den Versand uebergeben.</p>
+                                    <p>Layout feinjustieren, Vorschau prüfen und die fertigen PDFs direkt in den Versand übergeben.</p>
                                 </div>
                             </div>
 
@@ -606,7 +688,7 @@
                                         <label for="send-emails-one_document_action">Aktion</label>
                                         <select id="send-emails-one_document_action" name="one_document_action">
                                             <option value="replace">Replace - Seite ersetzen</option>
-                                            <option value="add">Add - vor dieser Seite einfuegen</option>
+                                            <option value="add">Add - vor dieser Seite einfügen</option>
                                         </select>
                                     </div>
                                     <div class="muted-note">Pro Empf&#228;nger wird eine frische Kopie des Basis-PDFs erstellt und mit dem personalisierten Anschreiben kombiniert.</div>
@@ -724,128 +806,6 @@
                     </div>
                 </section>
 
-                <section
-                    id="add-section"
-                    class="app-section"
-                    data-section="add"
-                    {% if initial_section != "add" %}hidden{% endif %}
-                >
-                    <div class="section-hero">
-                        <div>
-                            <span class="section-kicker">Add</span>
-                            <h2>Kandidatenformular</h2>
-                            <p>Erfasst Bewerberdaten, Dokumente und speichert die Eintraege direkt in Supabase.</p>
-                        </div>
-                        <div class="hero-actions">
-                            <a href="{{ url_for('supabase_page') }}" data-section-link="supabase">Zu Supabase</a>
-                            <a href="{{ url_for('dashboard') }}" data-section-link="dashboard">Zum Dashboard</a>
-                        </div>
-                    </div>
-
-                    <div class="add-form-card">
-                        <form id="add-candidate-form" class="add-candidate-form" novalidate>
-                            <div class="add-form-grid">
-                                <label class="add-field">
-                                    <span>Full Name</span>
-                                    <input
-                                        type="text"
-                                        id="add-fullName"
-                                        name="fullName"
-                                        placeholder="Enter the full name"
-                                        autocomplete="name"
-                                        required
-                                    >
-                                </label>
-
-                                <label class="add-field">
-                                    <span>Email</span>
-                                    <input
-                                        type="email"
-                                        id="add-email"
-                                        name="email"
-                                        placeholder="name@example.com"
-                                        autocomplete="email"
-                                        required
-                                    >
-                                </label>
-                            </div>
-
-                            <div class="add-form-grid">
-                                <label class="add-field">
-                                    <span>WhatsApp</span>
-                                    <input
-                                        type="tel"
-                                        id="add-whatsapp"
-                                        name="whatsapp"
-                                        placeholder="+212 600000000"
-                                        autocomplete="tel"
-                                        required
-                                    >
-                                </label>
-
-                                <label class="add-field">
-                                    <span>Bank</span>
-                                    <select id="add-bank" name="bank" required>
-                                        <option value="">Choose bank</option>
-                                        <option value="Banque Populaire">Banque Populaire</option>
-                                        <option value="CIH">CIH</option>
-                                        <option value="Cash Plus">Cash Plus</option>
-                                    </select>
-                                </label>
-                            </div>
-
-                            <fieldset class="add-fieldset">
-                                <legend>Language level</legend>
-                                <div class="add-choice-grid">
-                                    <label class="add-choice-card">
-                                        <input type="radio" name="languageLevel" value="B1" required>
-                                        <span>B1</span>
-                                    </label>
-                                    <label class="add-choice-card">
-                                        <input type="radio" name="languageLevel" value="B2" required>
-                                        <span>B2</span>
-                                    </label>
-                                </div>
-                            </fieldset>
-
-                            <div class="add-form-grid">
-                                <label class="add-field">
-                                    <span>Bereich</span>
-                                    <select id="add-bereich" name="bereich" required>
-                                        <option value="">Choose domain</option>
-                                    </select>
-                                    <small>These options are loaded from the Ausbildungen page.</small>
-                                </label>
-
-                                <label class="add-field">
-                                    <span>Applications</span>
-                                    <select id="add-bewerbungen" name="bewerbungen" required>
-                                        <option value="">Choose amount</option>
-                                        <option value="500 Bewerbung">500 Bewerbung</option>
-                                        <option value="1000 Bewerbung">1000 Bewerbung</option>
-                                    </select>
-                                </label>
-                            </div>
-
-                            <label class="add-field">
-                                <span>Documents</span>
-                                <input
-                                    class="add-file-input"
-                                    type="file"
-                                    id="add-documents"
-                                    name="documents"
-                                    multiple
-                                    accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                                >
-                                <div class="add-file-meta" id="add-file-meta">Keine Datei ausgewaehlt</div>
-                                <small>PDF, DOC, DOCX, JPG, PNG. Max 10 MB per file and 25 MB total.</small>
-                            </label>
-
-                            <p class="add-status-message" id="add-status-message" aria-live="polite"></p>
-                            <button type="submit" class="add-submit-button" id="add-submit-button">Save to Supabase</button>
-                        </form>
-                    </div>
-                </section>
             </div>
         </main>
     </div>
@@ -864,10 +824,10 @@
     <script src="{{ url_for('static', filename='spa/sections/search.js') }}?v=2.0"></script>
     <script src="{{ url_for('static', filename='spa/sections/dashboard.js') }}?v=2.0"></script>
     <script src="{{ url_for('static', filename='spa/sections/supabase.js') }}?v=2.0"></script>
+    <script src="{{ url_for('static', filename='spa/sections/money.js') }}?v=2.0"></script>
     <script src="{{ url_for('static', filename='spa/sections/ausbildungen.js') }}?v=2.0"></script>
     <script src="{{ url_for('static', filename='spa/sections/create-anschreibens.js') }}?v=2.0"></script>
     <script src="{{ url_for('static', filename='spa/sections/send-emails.js') }}?v=2.0"></script>
-    <script src="{{ url_for('static', filename='spa/sections/add.js') }}?v=2.0"></script>
     <script src="{{ url_for('static', filename='spa/app.js') }}?v=2.0"></script>
 </body>
 </html>

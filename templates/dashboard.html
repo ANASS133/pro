@@ -324,10 +324,10 @@
     <nav class="navbar">
         <a href="{{ url_for('index') }}" class="nav-link">E-Mails finden</a>
         <a href="{{ url_for('firebase_page') }}" class="nav-link">Firebase</a>
+        <a href="{{ url_for('money') }}" class="nav-link">Money</a>
         <a href="{{ url_for('create_anschreibens') }}" class="nav-link">Anschreiben erstellen</a>
         <a href="{{ url_for('send_emails') }}" class="nav-link">E-Mails senden</a>
         <a href="{{ url_for('dashboard') }}" class="nav-link active">Dashboard</a>
-        <a href="{{ url_for('add') }}" class="nav-link">Add</a>
         <a href="{{ url_for('ausbildungen') }}" class="nav-link">Ausbildungen</a>
     </nav>
 
@@ -380,7 +380,7 @@
                     </div>
                 </div>
                 <div class="actions">
-                    <a class="open-btn" href="{{ url_for('send_emails', campaign=campaign.id) }}">Versand oeffnen</a>
+                    <a class="open-btn" href="{{ url_for('send_emails', campaign=campaign.id) }}">Versand öffnen</a>
                     <a
                         class="edit-btn{% if campaign.has_active_job or not campaign.has_anschreiben_data or campaign.mode != 'transfer' %} disabled{% endif %}"
                         href="{% if campaign.has_anschreiben_data and campaign.mode == 'transfer' and not campaign.has_active_job %}{{ url_for('create_anschreibens') }}?edit_campaign={{ campaign.id }}{% else %}#{% endif %}"
@@ -389,7 +389,7 @@
                         {% if campaign.has_active_job %}
                         title="Anschreiben kann erst bearbeitet werden, wenn der Versand gestoppt ist"
                         {% elif not campaign.has_anschreiben_data or campaign.mode != 'transfer' %}
-                        title="Kein gespeichertes Anschreiben fuer diese Karte verfuegbar"
+                        title="Kein gespeichertes Anschreiben für diese Karte verfügbar"
                         {% endif %}
                     >
                         Edit Anschreiben
@@ -407,19 +407,19 @@
                         class="delete-form"
                         method="POST"
                         action="{{ url_for('delete_dashboard_campaign', campaign_id=campaign.id) }}"
-                        onsubmit="return confirm('Diese gespeicherte Vorlage loeschen? Das kann nicht rueckgaengig gemacht werden.');"
+                        onsubmit="return confirm('Diese gespeicherte Vorlage löschen? Das kann nicht rückgängig gemacht werden.');"
                     >
                         <button
                             type="submit"
                             class="delete-btn"
-                            {% if campaign.has_active_job %}disabled title="Laufenden oder pausierten Versand zuerst abschliessen"{% endif %}
+                            {% if campaign.has_active_job %}disabled title="Laufenden oder pausierten Versand zuerst abschließen"{% endif %}
                         >
-                            {% if campaign.has_active_job %}Versand aktiv{% else %}Loeschen{% endif %}
+                            {% if campaign.has_active_job %}Versand aktiv{% else %}Löschen{% endif %}
                         </button>
                     </form>
                 </div>
                 <div class="delete-note" {% if not campaign.has_active_job %}hidden{% endif %}>
-                    Loeschen ist waehrend eines laufenden oder pausierten Versands gesperrt.
+                    Löschen ist während eines laufenden oder pausierten Versands gesperrt.
                 </div>
                 <div class="campaign-progress">
                     <div class="campaign-progress-head">
@@ -527,8 +527,8 @@
                     ? (resolvedPendingAction === 'pause' ? 'Pausing...' : 'Continuing...')
                     : (isPaused ? 'Continue' : 'Pause');
                 pauseBtn.title = isPaused
-                    ? 'Pausierten Versand fuer diese Karte fortsetzen'
-                    : 'Laufenden Versand fuer diese Karte pausieren';
+                    ? 'Pausierten Versand für diese Karte fortsetzen'
+                    : 'Laufenden Versand für diese Karte pausieren';
                 pauseBtn.classList.toggle('is-continue', isPaused || resolvedPendingAction === 'continue');
             }
 
@@ -590,9 +590,9 @@
                 }
                 if (deleteBtn) {
                     deleteBtn.disabled = hasActiveJob;
-                    deleteBtn.textContent = hasActiveJob ? 'Versand aktiv' : 'Loeschen';
+                    deleteBtn.textContent = hasActiveJob ? 'Versand aktiv' : 'Löschen';
                     deleteBtn.title = hasActiveJob
-                        ? 'Laufenden oder pausierten Versand zuerst abschliessen'
+                        ? 'Laufenden oder pausierten Versand zuerst abschließen'
                         : '';
                 }
                 if (deleteNote) {
@@ -608,7 +608,7 @@
                         ? ''
                         : (hasActiveJob
                             ? 'Anschreiben kann erst bearbeitet werden, wenn der Versand gestoppt ist'
-                            : 'Kein gespeichertes Anschreiben fuer diese Karte verfuegbar');
+                            : 'Kein gespeichertes Anschreiben für diese Karte verfügbar');
                 }
 
                 if (subtextEl) {

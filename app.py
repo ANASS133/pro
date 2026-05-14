@@ -989,19 +989,19 @@ def _delete_saved_email_campaign(campaign_id: str) -> bool:
 def _delete_saved_email_campaign_with_guard(campaign_id: str) -> Tuple[bool, str, int]:
     normalized_campaign_id = str(campaign_id or "").strip()
     if not normalized_campaign_id:
-        return False, "Ungueltige Vorlagen-ID.", 400
+        return False, "Ungültige Vorlagen-ID.", 400
 
     if _get_active_email_send_job_for_campaign(normalized_campaign_id):
         return (
             False,
-            "Die Vorlage kann waehrend eines laufenden oder pausierten Versands nicht geloescht werden.",
+            "Die Vorlage kann während eines laufenden oder pausierten Versands nicht gelöscht werden.",
             409,
         )
 
     if not _delete_saved_email_campaign(normalized_campaign_id):
         return False, "Gespeicherte Vorlage nicht gefunden.", 404
 
-    return True, "Gespeicherte Vorlage wurde geloescht.", 200
+    return True, "Gespeicherte Vorlage wurde gelöscht.", 200
 
 
 def _save_new_email_campaign(
@@ -1313,7 +1313,7 @@ def _load_personalized_pdf_from_row(
     return (
         None,
         (
-            f"Zeile {row_index + 1}: One Document Mode braucht pro Empfaenger ein "
+            f"Zeile {row_index + 1}: One Document Mode braucht pro Empfänger ein "
             "personalisiertes Anschreiben-PDF (Transfer-Zeile oder PDF-Pfad-Spalte)."
         ),
     )
@@ -2606,7 +2606,7 @@ def index():
 
 @app.route("/add")
 def add():
-    return _render_app_shell("add")
+    return redirect(url_for("index"))
 
 
 @app.route("/ausbildungen")
@@ -2614,15 +2614,9 @@ def ausbildungen():
     return _render_app_shell("ausbildungen")
 
 
-@app.route("/api/add/options", methods=["GET"])
-def add_options_api():
-    return jsonify(
-        {
-            "success": True,
-            "ausbildung_domains": _list_available_ausbildung_domains(),
-            "updated_at": datetime.now().isoformat(),
-        }
-    )
+@app.route("/money")
+def money():
+    return _render_app_shell("money")
 
 
 @app.route("/api/ausbildungen/files", methods=["GET"])
@@ -2779,7 +2773,7 @@ def _build_pdf_export_file_session_payload(
     rows = _load_spreadsheet_records(file_path)
     prepared_rows = _prepare_download_jobs(rows)
     if not prepared_rows:
-        return {"error": "Keine gueltigen Datensaetze in der Exportdatei gefunden."}, 400
+        return {"error": "Keine gültigen Datensätze in der Exportdatei gefunden."}, 400
 
     application_payload = dict(application or {})
     if not application_payload and application_id:
@@ -3076,7 +3070,7 @@ def _build_pdf_application_session_payload(
 
     row = _build_pdf_row_from_firebase_application(application_payload)
     if not row:
-        return {"error": "Bewerbung enthaelt keine gueltigen Daten."}, 400
+        return {"error": "Bewerbung enthält keine gültigen Daten."}, 400
 
     payload = _create_pdf_session_from_rows([row])
     summary = _build_pdf_application_summary(application_payload)
@@ -3095,7 +3089,7 @@ def _build_pdf_application_session_payload(
 def _build_pdf_campaign_editor_session_payload(campaign_id: str) -> Tuple[Dict, int]:
     normalized_campaign_id = str(campaign_id or "").strip()
     if not normalized_campaign_id:
-        return {"error": "Ungueltige Kampagnen-ID"}, 400
+        return {"error": "Ungültige Kampagnen-ID"}, 400
 
     if _get_active_email_send_job_for_campaign(normalized_campaign_id):
         return {
@@ -3106,13 +3100,13 @@ def _build_pdf_campaign_editor_session_payload(campaign_id: str) -> Tuple[Dict, 
     if not campaign:
         return {"error": "Gespeicherte Vorlage nicht gefunden."}, 404
     if str(campaign.get("mode") or "") != "transfer":
-        return {"error": "Anschreiben-Bearbeitung ist nur fuer PDF-Kampagnen verfuegbar."}, 400
+        return {"error": "Anschreiben-Bearbeitung ist nur für PDF-Kampagnen verfügbar."}, 400
     if not _campaign_has_saved_anschreiben(campaign):
-        return {"error": "Fuer diese Kampagne wurden keine gespeicherten Anschreiben-Daten gefunden."}, 409
+        return {"error": "Für diese Kampagne wurden keine gespeicherten Anschreiben-Daten gefunden."}, 409
 
     editor_rows, campaign_row_indices = _build_pdf_editor_rows_from_campaign(campaign)
     if not editor_rows:
-        return {"error": "Keine offenen Empfaenger mehr fuer diese Kampagne."}, 400
+        return {"error": "Keine offenen Empfänger mehr für diese Kampagne."}, 400
 
     session_payload = _create_pdf_session_from_rows(editor_rows)
     session_id = str(session_payload.get("session_id") or "").strip()
@@ -3528,10 +3522,10 @@ def _render_app_shell(initial_section: str = "search"):
         "search",
         "dashboard",
         "supabase",
+        "money",
         "ausbildungen",
         "create-anschreibens",
         "send-emails",
-        "add",
     }:
         section = "search"
     return render_template(
@@ -3670,7 +3664,7 @@ def _execute_bulk_send(
             payload_transfer.get("anschreiben_snapshot") or {}
         )
         if not source_rows:
-            return {"success": False, "message": "Die Transfer-Sitzung enthaelt keine zu sendenden Zeilen."}, 400
+            return {"success": False, "message": "Die Transfer-Sitzung enthält keine zu sendenden Zeilen."}, 400
         campaign_mode = "transfer"
     else:
         source_rows = list(payload.get("uploaded_rows") or [])
@@ -3826,7 +3820,7 @@ def _execute_bulk_send(
     rows = list(campaign.get("rows") or [])
     total = len(rows)
     if total == 0:
-        return {"success": False, "message": "Die gespeicherte Vorlage enthaelt keine zu sendenden Zeilen."}, 400
+        return {"success": False, "message": "Die gespeicherte Vorlage enthält keine zu sendenden Zeilen."}, 400
 
     if save_only:
         campaign = _update_saved_email_campaign(campaign)
@@ -4046,7 +4040,7 @@ def _execute_bulk_send(
             row = rows[row_index]
             to_email = _normalize_email(row.get("recipient"))
             if not _is_valid_email(to_email):
-                failed.append(f"Zeile {row_index + 1}: Ungueltige Empfaenger-E-Mail")
+                failed.append(f"Zeile {row_index + 1}: Ungültige Empfänger-E-Mail")
                 processed += 1
                 if progress_callback:
                     remaining_items = max(run_total - processed, 0)
@@ -4096,7 +4090,7 @@ def _execute_bulk_send(
             pdf_path = str(row.get("pdf_path") or "").strip()
             if not pdf_path or not os.path.exists(pdf_path) or os.path.getsize(pdf_path) <= 0:
                 failed.append(
-                    f"Zeile {row_index + 1} ({to_email}): PDF fehlt fuer {company_name or 'Unternehmen'}"
+                    f"Zeile {row_index + 1} ({to_email}): PDF fehlt für {company_name or 'Unternehmen'}"
                 )
                 processed += 1
                 if progress_callback:
@@ -4252,7 +4246,7 @@ def _execute_bulk_send(
             to_email = _normalize_email(row.get(recipient_column))
             if not _is_valid_email(to_email):
                 failed.append(
-                    f'Zeile {row_index + 1}: Fehlender oder ungueltiger Empfaenger in Spalte "{recipient_column}"'
+                    f'Zeile {row_index + 1}: Fehlender oder ungültiger Empfänger in Spalte "{recipient_column}"'
                 )
                 processed += 1
                 if progress_callback:
@@ -4596,7 +4590,7 @@ def start_bulk_email_job():
                         "success": True,
                         "job_id": active_job["job_id"],
                         "already_running": True,
-                        "message": "Fuer diese Vorlage existiert bereits ein laufender oder pausierter Massenversand.",
+                        "message": "Für diese Vorlage existiert bereits ein laufender oder pausierter Massenversand.",
                     }
                 )
 
@@ -5224,11 +5218,11 @@ def api_inline_start_auto_extraction():
     data = request.get_json(silent=True) or {}
     raw_jobs = data.get("jobs")
     if not isinstance(raw_jobs, list) or not raw_jobs:
-        return jsonify({"success": False, "message": "Keine Stellen fuer die Extraktion uebergeben"}), 400
+        return jsonify({"success": False, "message": "Keine Stellen für die Extraktion übergeben"}), 400
 
     jobs = [dict(item) for item in raw_jobs if isinstance(item, dict)]
     if not jobs:
-        return jsonify({"success": False, "message": "Keine gueltigen Stellen uebergeben"}), 400
+        return jsonify({"success": False, "message": "Keine gültigen Stellen übergeben"}), 400
 
     keyword = str(data.get("keyword") or "").strip()
     location = str(data.get("location") or "").strip()
@@ -5325,7 +5319,7 @@ def api_inline_download_auto_job(job_id: str):
 
     prepared_jobs = _prepare_download_jobs(jobs)
     if not prepared_jobs:
-        return jsonify({"success": False, "message": "Keine Stellen mit gueltiger E-Mail verfuegbar"}), 400
+        return jsonify({"success": False, "message": "Keine Stellen mit gültiger E-Mail verfügbar"}), 400
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     slug = _sanitize_export_slug(keyword, fallback=f"auto_{job_id[:8]}")
@@ -5344,7 +5338,7 @@ def api_inline_use_auto_job_for_anschreiben(job_id: str):
 
     prepared_jobs = _prepare_download_jobs(jobs)
     if not prepared_jobs:
-        return jsonify({"success": False, "message": "Keine gesammelten Stellen mit gueltiger E-Mail gefunden"}), 400
+        return jsonify({"success": False, "message": "Keine gesammelten Stellen mit gültiger E-Mail gefunden"}), 400
 
     with status_lock:
         auto_extraction_status["jobs"] = prepared_jobs
@@ -6119,11 +6113,11 @@ def download_results():
     keyword = str(search_cache.get("keyword") or "").strip()
 
     if not jobs:
-        return jsonify({"error": "Keine Extraktionsergebnisse verfuegbar."}), 400
+        return jsonify({"error": "Keine Extraktionsergebnisse verfügbar."}), 400
 
     jobs = _prepare_download_jobs(jobs)
     if not jobs:
-        return jsonify({"error": "Keine Stellen mit gueltiger E-Mail zum Download verfuegbar."}), 400
+        return jsonify({"error": "Keine Stellen mit gültiger E-Mail zum Download verfügbar."}), 400
 
     temp_file = _save_auto_extraction_export_records(
         jobs,
@@ -6145,11 +6139,11 @@ def download_auto_results():
     keyword = str(search_cache.get("keyword") or "").strip()
 
     if not jobs:
-        return jsonify({"error": "Keine Auto-Extraktionsergebnisse verfuegbar."}), 400
+        return jsonify({"error": "Keine Auto-Extraktionsergebnisse verfügbar."}), 400
 
     jobs = _prepare_download_jobs(jobs)
     if not jobs:
-        return jsonify({"error": "Keine Stellen mit gueltiger E-Mail zum Download verfuegbar."}), 400
+        return jsonify({"error": "Keine Stellen mit gültiger E-Mail zum Download verfügbar."}), 400
 
     temp_file = _save_auto_extraction_export_records(
         jobs,

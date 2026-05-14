@@ -161,10 +161,10 @@
     <nav class="navbar">
         <a href="{{ url_for('index') }}" class="nav-link">E-Mails finden</a>
         <a href="{{ url_for('firebase_page') }}" class="nav-link active">Firebase</a>
+        <a href="{{ url_for('money') }}" class="nav-link">Money</a>
         <a href="{{ url_for('create_anschreibens') }}" class="nav-link">Anschreiben erstellen</a>
         <a href="{{ url_for('send_emails') }}" class="nav-link">E-Mails senden</a>
         <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
-        <a href="{{ url_for('add') }}" class="nav-link">Add</a>
         <a href="{{ url_for('ausbildungen') }}" class="nav-link">Ausbildungen</a>
     </nav>
 
@@ -192,7 +192,7 @@
                         Eingereicht: <span>{{ app.created_at_display or 'k. A.' }}</span>
                     </div>
                     <div class="actions">
-                        <button type="button" class="firebase-delete-btn" data-firebase-delete="{{ app.id }}">Loeschen</button>
+                        <button type="button" class="firebase-delete-btn" data-firebase-delete="{{ app.id }}">Löschen</button>
                     </div>
                 </div>
                 {% endfor %}

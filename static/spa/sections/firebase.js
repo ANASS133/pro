@@ -175,7 +175,7 @@
                             data-firebase-id="${escapeHtml(applicationId)}"
                             ${pendingDeletes.has(applicationId) ? "disabled" : ""}
                         >
-                            ${pendingDeletes.has(applicationId) ? "Loesche..." : "Loeschen"}
+                            ${pendingDeletes.has(applicationId) ? "Lösche..." : "Löschen"}
                         </button>
                     </div>
                 </article>
@@ -277,7 +277,7 @@
             }
 
             const confirmed = window.confirm(
-                "Diese Firebase-Bewerbung loeschen? Das kann nicht rueckgaengig gemacht werden.",
+                "Diese Firebase-Bewerbung löschen? Das kann nicht rückgängig gemacht werden.",
             );
             if (!confirmed) {
                 return;
@@ -288,21 +288,21 @@
 
             try {
                 await deleteApplicationViaClient(applicationId);
-                setStatus("Firebase-Bewerbung geloescht.", false);
+                setStatus("Firebase-Bewerbung gelöscht.", false);
             } catch (clientError) {
                 try {
                     const payload = await fetchJson(`/api/firebase/delete/${encodeURIComponent(applicationId)}`, {
                         method: "POST",
                     });
                     if (!payload.success) {
-                        throw new Error(payload.message || "Firebase-Bewerbung konnte nicht geloescht werden");
+                        throw new Error(payload.message || "Firebase-Bewerbung konnte nicht gelöscht werden");
                     }
-                    setStatus("Firebase-Bewerbung geloescht.", false);
+                    setStatus("Firebase-Bewerbung gelöscht.", false);
                 } catch (apiError) {
                     setStatus(
                         apiError.message
                         || clientError.message
-                        || "Firebase-Bewerbung konnte nicht geloescht werden.",
+                        || "Firebase-Bewerbung konnte nicht gelöscht werden.",
                         true,
                     );
                 }

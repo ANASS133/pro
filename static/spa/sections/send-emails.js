@@ -125,9 +125,9 @@
 
             const hasCampaignId = Boolean(String(campaignIdInput?.value || '').trim());
             deleteCampaignBtn.disabled = !hasCampaignId || isSending;
-            deleteCampaignBtn.textContent = isSending ? 'Versand aktiv' : 'Vorlage loeschen';
+            deleteCampaignBtn.textContent = isSending ? 'Versand aktiv' : 'Vorlage löschen';
             deleteCampaignBtn.title = isSending
-                ? 'Laufenden Versand zuerst stoppen oder abschliessen'
+                ? 'Laufenden Versand zuerst stoppen oder abschließen'
                 : '';
         }
 
@@ -468,7 +468,7 @@
             if (!campaignId) {
                 return;
             }
-            if (!window.confirm('Diese gespeicherte Vorlage loeschen? Das kann nicht rueckgaengig gemacht werden.')) {
+            if (!window.confirm('Diese gespeicherte Vorlage löschen? Das kann nicht rückgängig gemacht werden.')) {
                 return;
             }
 
@@ -483,12 +483,12 @@
                 });
                 const data = await response.json();
                 if (!response.ok || !data.success) {
-                    throw new Error(data.message || 'Vorlage konnte nicht geloescht werden');
+                    throw new Error(data.message || 'Vorlage konnte nicht gelöscht werden');
                 }
 
                 sessionStorage.setItem(SEND_RESULT_FLASH_KEY, JSON.stringify({
                     level: 'success',
-                    message: data.message || 'Vorlage wurde geloescht.'
+                    message: data.message || 'Vorlage wurde gelöscht.'
                 }));
 
                 const currentUrl = new URL(window.location.href);
@@ -496,7 +496,7 @@
                 window.location.href = currentUrl.toString();
             } catch (deleteError) {
                 resultDiv.className = 'result error';
-                resultDiv.textContent = deleteError.message || 'Vorlage konnte nicht geloescht werden.';
+                resultDiv.textContent = deleteError.message || 'Vorlage konnte nicht gelöscht werden.';
                 resultDiv.style.display = 'block';
                 deleteCampaignBtn.textContent = previousLabel;
                 setLoadedCampaignDeleteState(Boolean(activeSendJobId));
@@ -559,9 +559,9 @@
                         class="btn btn-danger btn-inline"
                         type="button"
                         id="send-emails-deleteCampaignBtn"
-                        ${activeSendJob ? 'disabled title="Laufenden Versand zuerst stoppen oder abschliessen"' : ''}
+                        ${activeSendJob ? 'disabled title="Laufenden Versand zuerst stoppen oder abschließen"' : ''}
                     >
-                        ${activeSendJob ? 'Versand aktiv' : 'Vorlage loeschen'}
+                        ${activeSendJob ? 'Versand aktiv' : 'Vorlage löschen'}
                     </button>
                 </div>
                 ${campaignInfo.preview ? `

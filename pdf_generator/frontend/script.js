@@ -344,7 +344,7 @@ async function saveTemplate(options = {}) {
     if (data.missing_placeholders?.length) {
         setValidation('warn', `Unbekannte Platzhalter: ${data.missing_placeholders.join(', ')}`);
     } else {
-        setValidation('ok', 'Vorlage gespeichert. Alle Platzhalter sind gueltig.');
+        setValidation('ok', 'Vorlage gespeichert. Alle Platzhalter sind gültig.');
     }
 
     if (!silent) {
@@ -444,11 +444,11 @@ async function generatePdfs() {
     if (state.editCampaignId) {
         showToast(
             skipped > 0
-                ? `Kampagne aktualisiert: ${data.count || 0} PDFs, ${skipped} Zeilen uebersprungen`
-                : 'Anschreiben fuer offene Empfaenger aktualisiert'
+                ? `Kampagne aktualisiert: ${data.count || 0} PDFs, ${skipped} Zeilen übersprungen`
+                : 'Anschreiben für offene Empfänger aktualisiert'
         );
     } else if (skipped > 0) {
-        showToast(`Fertig: ${data.count || 0} PDFs, ${skipped} Zeilen uebersprungen`);
+        showToast(`Fertig: ${data.count || 0} PDFs, ${skipped} Zeilen übersprungen`);
     } else {
         showToast(`Fertig: ${data.count || 0} PDFs in ${data.output_folder || 'Projektordner'}`);
     }

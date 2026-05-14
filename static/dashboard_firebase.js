@@ -132,7 +132,7 @@ function renderFirebaseCard(application) {
           class="firebase-delete-btn"
           data-firebase-delete="${escapeHtml(application.id)}"
         >
-          Loeschen
+          Löschen
         </button>
       </div>
     </div>
@@ -161,7 +161,7 @@ function bindDeleteButtons() {
       }
 
       const confirmed = window.confirm(
-        "Diese Firebase-Bewerbung loeschen? Das kann nicht rueckgaengig gemacht werden.",
+        "Diese Firebase-Bewerbung löschen? Das kann nicht rückgängig gemacht werden.",
       );
       if (!confirmed) {
         return;
@@ -179,7 +179,7 @@ function bindDeleteButtons() {
         console.error("Failed to delete Firebase application.", error);
         button.disabled = false;
         button.textContent = originalLabel;
-        window.alert("Firebase-Bewerbung konnte nicht geloescht werden.");
+        window.alert("Firebase-Bewerbung konnte nicht gelöscht werden.");
       }
     });
   });

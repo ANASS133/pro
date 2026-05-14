@@ -2,21 +2,21 @@
     const NAV_ITEMS = [
         { key: "search", href: "/", label: "E-Mails finden" },
         { key: "supabase", href: "/supabase", label: "Supabase" },
+        { key: "money", href: "/money", label: "Money" },
         { key: "anschreiben", href: "/create-anschreibens", label: "Anschreiben" },
         { key: "send", href: "/send-emails", label: "E-Mails senden" },
         { key: "dashboard", href: "/dashboard", label: "Dashboard" },
-        { key: "add", href: "/add", label: "Add" },
         { key: "ausbildungen", href: "/ausbildungen", label: "Ausbildungen" },
     ];
 
     function getActiveKey(pathname) {
         const path = String(pathname || "/");
 
-        if (path === "/add" || path.startsWith("/add/")) {
-            return "add";
-        }
         if (path === "/ausbildungen" || path.startsWith("/ausbildungen")) {
             return "ausbildungen";
+        }
+        if (path === "/money" || path.startsWith("/money/")) {
+            return "money";
         }
         if (path === "/dashboard" || path.startsWith("/dashboard/")) {
             return "dashboard";

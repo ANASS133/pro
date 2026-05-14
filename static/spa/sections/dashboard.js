@@ -109,7 +109,7 @@
                     </div>
 
                     <div class="campaign-actions">
-                        <a class="action-btn primary" href="/send-emails?campaign=${encodeURIComponent(campaignId)}">Versand oeffnen</a>
+                        <a class="action-btn primary" href="/send-emails?campaign=${encodeURIComponent(campaignId)}">Versand öffnen</a>
                         <a class="action-btn secondary${canEdit ? "" : " disabled"}" href="${canEdit ? `/create-anschreibens?edit_campaign=${encodeURIComponent(campaignId)}` : "#"}">Edit Anschreiben</a>
                         ${hasActiveJob ? `
                             <button
@@ -129,7 +129,7 @@
                             data-campaign-id="${escapeHtml(campaignId)}"
                             ${hasActiveJob || pendingDeletes.has(campaignId) ? "disabled" : ""}
                         >
-                            ${pendingDeletes.has(campaignId) ? "Loesche..." : (hasActiveJob ? "Versand aktiv" : "Loeschen")}
+                            ${pendingDeletes.has(campaignId) ? "Lösche..." : (hasActiveJob ? "Versand aktiv" : "Löschen")}
                         </button>
                     </div>
 
@@ -228,7 +228,7 @@
                 return;
             }
 
-            const confirmed = window.confirm("Diese gespeicherte Vorlage loeschen? Das kann nicht rueckgaengig gemacht werden.");
+            const confirmed = window.confirm("Diese gespeicherte Vorlage löschen? Das kann nicht rückgängig gemacht werden.");
             if (!confirmed) {
                 return;
             }
@@ -241,11 +241,11 @@
                     method: "POST",
                 });
                 if (!payload.success) {
-                    throw new Error(payload.message || "Kampagne konnte nicht geloescht werden");
+                    throw new Error(payload.message || "Kampagne konnte nicht gelöscht werden");
                 }
-                setStatus("Kampagne geloescht.", false);
+                setStatus("Kampagne gelöscht.", false);
             } catch (error) {
-                setStatus(error.message || "Kampagne konnte nicht geloescht werden.", true);
+                setStatus(error.message || "Kampagne konnte nicht gelöscht werden.", true);
             } finally {
                 pendingDeletes.delete(campaignId);
                 await loadDashboard();

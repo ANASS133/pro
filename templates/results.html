@@ -166,10 +166,10 @@
     <nav class="navbar">
         <a href="{{ url_for('index') }}" class="nav-link active">E-Mails finden</a>
         <a href="{{ url_for('firebase_page') }}" class="nav-link">Firebase</a>
+        <a href="{{ url_for('money') }}" class="nav-link">Money</a>
         <a href="{{ url_for('create_anschreibens') }}" class="nav-link">Anschreiben erstellen</a>
         <a href="{{ url_for('send_emails') }}" class="nav-link">E-Mails senden</a>
         <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
-        <a href="{{ url_for('add') }}" class="nav-link">Add</a>
         <a href="{{ url_for('ausbildungen') }}" class="nav-link">Ausbildungen</a>
     </nav>
     <div class="container">
@@ -236,7 +236,7 @@
         </div>
         <div style="margin-top: 10px; text-align: center;">
             <p style="color: #666; margin-top: 10px;">
-                <small>{{ total }} Stellen werden verarbeitet. Der Auto-Modus benoetigt TRUECAPTCHA-Zugangsdaten in den Umgebungsvariablen.</small>
+                <small>{{ total }} Stellen werden verarbeitet. Der Auto-Modus benötigt TRUECAPTCHA-Zugangsdaten in den Umgebungsvariablen.</small>
             </p>
         </div>
         {% endif %}

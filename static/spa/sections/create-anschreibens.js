@@ -732,7 +732,7 @@
             if (Array.isArray(data.missing_placeholders) && data.missing_placeholders.length) {
                 setValidation("warn", `Unbekannte Platzhalter: ${data.missing_placeholders.join(", ")}`);
             } else {
-                setValidation("ok", "Vorlage gespeichert. Alle Platzhalter sind gueltig.");
+                setValidation("ok", "Vorlage gespeichert. Alle Platzhalter sind gültig.");
             }
 
             if (!configOptions.silent) {
@@ -807,11 +807,11 @@
             if (state.editCampaignId) {
                 showToast(
                     skipped > 0
-                        ? `Kampagne aktualisiert: ${data.count || 0} PDFs, ${skipped} Zeilen uebersprungen`
-                        : "Anschreiben fuer offene Empfaenger aktualisiert",
+                        ? `Kampagne aktualisiert: ${data.count || 0} PDFs, ${skipped} Zeilen übersprungen`
+                        : "Anschreiben für offene Empfänger aktualisiert",
                 );
             } else if (skipped > 0) {
-                showToast(`Fertig: ${data.count || 0} PDFs, ${skipped} Zeilen uebersprungen`);
+                showToast(`Fertig: ${data.count || 0} PDFs, ${skipped} Zeilen übersprungen`);
             } else {
                 showToast(`Fertig: ${data.count || 0} PDFs in ${data.output_folder || "Projektordner"}`);
             }
@@ -868,7 +868,7 @@
                 placeholders.push("heutigenDatum");
             }
             if (!placeholders.length) {
-                showToast("Keine Platzhalter verfuegbar. Bitte zuerst Daten laden.");
+                showToast("Keine Platzhalter verfügbar. Bitte zuerst Daten laden.");
                 return;
             }
 
@@ -1371,11 +1371,11 @@
                     const pdfUrl = els.pdfContainer ? els.pdfContainer.dataset.pdfUrl : null;
                     
                     if (!pdfUrl) {
-                        showToast("Kein PDF verfuegbar. Bitte lade zuerst eine Bewerbung.");
+                        showToast("Kein PDF verfügbar. Bitte lade zuerst eine Bewerbung.");
                         return;
                     }
                     if (isNaN(page) || page < 1) {
-                        showToast("Bitte eine gueltige Seitenzahl (>= 1) eingeben.");
+                        showToast("Bitte eine gültige Seitenzahl (>= 1) eingeben.");
                         return;
                     }
 

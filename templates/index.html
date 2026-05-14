@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jobsuche - Bundesagentur fuer Arbeit</title>
+    <title>Jobsuche - Bundesagentur für Arbeit</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -315,17 +315,17 @@
     <nav class="navbar">
         <a href="{{ url_for('index') }}" class="nav-link active">E-Mails finden</a>
         <a href="{{ url_for('firebase_page') }}" class="nav-link">Firebase</a>
+        <a href="{{ url_for('money') }}" class="nav-link">Money</a>
         <a href="{{ url_for('create_anschreibens') }}" class="nav-link">Anschreiben erstellen</a>
         <a href="{{ url_for('send_emails') }}" class="nav-link">E-Mails senden</a>
         <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
-        <a href="{{ url_for('add') }}" class="nav-link">Add</a>
         <a href="{{ url_for('ausbildungen') }}" class="nav-link">Ausbildungen</a>
     </nav>
 
     <div class="container">
         <div class="header">
             <h1>Jobsuche</h1>
-            <p>Stellen von der Bundesagentur fuer Arbeit abrufen</p>
+            <p>Stellen von der Bundesagentur für Arbeit abrufen</p>
         </div>
 
         <div class="search-grid">
@@ -568,7 +568,7 @@
             ui.metaEl.textContent = `${total} Stellen gefunden | Veroeffentlicht seit: ${publishedSince}`;
             const jobs = ui.lastJobs;
             if (!jobs.length) {
-                ui.listEl.innerHTML = '<div class="job-item">Keine Stellen fuer diese Suche gefunden.</div>';
+                ui.listEl.innerHTML = '<div class="job-item">Keine Stellen für diese Suche gefunden.</div>';
                 ui.autoBtn.style.display = 'none';
                 return;
             }

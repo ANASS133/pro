@@ -225,7 +225,7 @@
                         escapeHtml(documentItem.path) +
                         '">' +
                         escapeHtml(documentItem.name) +
-                        " nicht verfuegbar</li>"
+                        " nicht verfügbar</li>"
                     );
                 }
 
@@ -241,9 +241,21 @@
             }).join("");
         }
 
+        function getPriceForPack(pack) {
+            const normalizedPack = String(pack || "").toLowerCase();
+            if (normalizedPack.includes("1000")) {
+                return "400 dh";
+            }
+            if (normalizedPack.includes("500")) {
+                return "200 dh";
+            }
+            return "k. A.";
+        }
+
         function renderCard(application, signedDocuments) {
             const isPending = pendingDeletes.has(application.id);
             const documentList = renderDocumentList(signedDocuments);
+            const price = getPriceForPack(application.pack);
 
             return (
                 '<article class="card supabase-card' +
@@ -262,6 +274,7 @@
                 '<div><span>E-Mail</span><strong>' + escapeHtml(application.email) + "</strong></div>" +
                 '<div><span>WhatsApp</span><strong>' + escapeHtml(application.whatsapp) + "</strong></div>" +
                 '<div><span>Paket</span><strong>' + escapeHtml(application.pack) + "</strong></div>" +
+                '<div><span>Price</span><strong>' + escapeHtml(price) + "</strong></div>" +
                 '<div><span>Bank</span><strong>' + escapeHtml(application.bank) + "</strong></div>" +
                 '<div><span>Sprachniveau</span><strong>' + escapeHtml(application.language_level) + "</strong></div>" +
                 '<div><span>Bereich</span><strong>' + escapeHtml(application.field) + "</strong></div>" +
@@ -273,19 +286,33 @@
                 documentList +
                 "</ul>" +
                 "</div>" +
-                '<div class="actions supabase-actions">' +
+                '<div class="supabase-actions">' +
+                '<div class="supabase-actions-menu">' +
+                '<button type="button" class="supabase-dots-btn" data-supabase-id="' +
+                escapeHtml(application.id) +
+                '" aria-label="Aktionen" aria-expanded="false">' +
+                '<span class="supabase-dots-icon">&#8942;</span>' +
+                '</button>' +
+                '<div class="supabase-actions-dropdown" hidden>' +
                 '<button type="button" class="supabase-next-step-btn" data-supabase-id="' +
                 escapeHtml(application.id) +
                 '"' +
                 (isPending ? " disabled" : "") +
-                ">Next step</button>" +
+                '>Next step</button>' +
+                '<button type="button" class="supabase-edit-btn" data-supabase-id="' +
+                escapeHtml(application.id) +
+                '"' +
+                (isPending ? " disabled" : "") +
+                '>Bearbeiten</button>' +
                 '<button type="button" class="supabase-delete-btn" data-supabase-id="' +
                 escapeHtml(application.id) +
                 '"' +
                 (isPending ? " disabled" : "") +
-                ">" +
-                (isPending ? "Loesche..." : "Loeschen") +
-                "</button>" +
+                '>' +
+                (isPending ? "Lösche..." : "Löschen") +
+                '</button>' +
+                '</div>' +
+                '</div>' +
                 "</div>" +
                 "</article>"
             );
@@ -427,7 +454,7 @@
             }
 
             const confirmed = window.confirm(
-                "Diese Bewerbung loeschen? Das kann nicht rueckgaengig gemacht werden."
+                "Diese Bewerbung löschen? Das kann nicht rückgängig gemacht werden."
             );
             if (!confirmed) {
                 return;
@@ -462,14 +489,34 @@
                     return item.id !== applicationId;
                 });
                 updatePackFilterOptions();
-                setStatus("Bewerbung geloescht.", false);
+                setStatus("Bewerbung gelöscht.", false);
             } catch (error) {
                 console.error("Supabase application delete failed.", error);
-                setStatus(error.message || "Bewerbung konnte nicht geloescht werden.", true);
+                setStatus(error.message || "Bewerbung konnte nicht gelöscht werden.", true);
             } finally {
                 pendingDeletes.delete(applicationId);
                 await renderFilteredApplications();
             }
+        }
+
+        async function editApplication(applicationId) {
+            const application = getApplicationById(applicationId);
+            if (!application) {
+                return;
+            }
+
+            closeActionMenus();
+
+            const signedDocuments = await getSignedDocuments(application.documents);
+            const prepared = {
+                ...application,
+                source_label: "Supabase",
+                documents: signedDocuments,
+                document_count: signedDocuments.length,
+            };
+
+            persistApplicationForNextStep(prepared);
+            window.location.href = "/create-anschreibens?application_id=" + encodeURIComponent(applicationId) + "&source=supabase&mode=edit";
         }
 
         function debounce(callback, delay) {
@@ -484,7 +531,52 @@
             };
         }
 
+        function closeActionMenus() {
+            cardsRoot.querySelectorAll(".supabase-actions-menu").forEach(function (menu) {
+                const dropdown = menu.querySelector(".supabase-actions-dropdown");
+                const button = menu.querySelector(".supabase-dots-btn");
+                if (dropdown) {
+                    dropdown.hidden = true;
+                }
+                if (button) {
+                    button.setAttribute("aria-expanded", "false");
+                }
+            });
+        }
+
         cardsRoot.addEventListener("click", function (event) {
+            const dotsButton = event.target.closest(".supabase-dots-btn");
+            if (dotsButton) {
+                event.stopPropagation();
+                const card = dotsButton.closest(".supabase-card");
+                if (!card) {
+                    return;
+                }
+                const dropdown = card.querySelector(".supabase-actions-dropdown");
+                if (!dropdown) {
+                    return;
+                }
+                const isOpen = !dropdown.hidden;
+                closeActionMenus();
+                if (!isOpen) {
+                    dropdown.hidden = false;
+                    dotsButton.setAttribute("aria-expanded", "true");
+                }
+                return;
+            }
+
+            const editButton = event.target.closest(".supabase-edit-btn");
+            if (editButton && !editButton.disabled) {
+                const applicationId = String(editButton.dataset.supabaseId || "").trim();
+                if (applicationId) {
+                    editApplication(applicationId).catch(function (error) {
+                        console.error("Supabase edit failed.", error);
+                        setStatus(error.message || "Bearbeiten konnte nicht gestartet werden.", true);
+                    });
+                }
+                return;
+            }
+
             const nextButton = event.target.closest(".supabase-next-step-btn");
             if (nextButton && !nextButton.disabled) {
                 const applicationId = String(nextButton.dataset.supabaseId || "").trim();
@@ -503,9 +595,15 @@
                 if (applicationId) {
                     deleteApplication(applicationId).catch(function (error) {
                         console.error("Supabase delete failed.", error);
-                        setStatus(error.message || "Bewerbung konnte nicht geloescht werden.", true);
+                        setStatus(error.message || "Bewerbung konnte nicht gelöscht werden.", true);
                     });
                 }
+            }
+        });
+
+        document.addEventListener("click", function (event) {
+            if (!event.target.closest(".supabase-actions-menu")) {
+                closeActionMenus();
             }
         });
 

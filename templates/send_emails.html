@@ -279,10 +279,10 @@
     <nav class="navbar">
         <a href="{{ url_for('index') }}" class="nav-link">E-Mails finden</a>
         <a href="{{ url_for('firebase_page') }}" class="nav-link">Firebase</a>
+        <a href="{{ url_for('money') }}" class="nav-link">Money</a>
         <a href="{{ url_for('create_anschreibens') }}" class="nav-link">Anschreiben erstellen</a>
         <a href="{{ url_for('send_emails') }}" class="nav-link active">E-Mails senden</a>
         <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
-        <a href="{{ url_for('add') }}" class="nav-link">Add</a>
         <a href="{{ url_for('ausbildungen') }}" class="nav-link">Ausbildungen</a>
     </nav>
 
@@ -315,13 +315,13 @@
                         class="btn btn-danger btn-inline"
                         type="button"
                         id="deleteCampaignBtn"
-                        {% if active_send_job %}disabled title="Laufenden Versand zuerst stoppen oder abschliessen"{% endif %}
+                        {% if active_send_job %}disabled title="Laufenden Versand zuerst stoppen oder abschließen"{% endif %}
                     >
-                        {% if active_send_job %}Versand aktiv{% else %}Vorlage loeschen{% endif %}
+                        {% if active_send_job %}Versand aktiv{% else %}Vorlage löschen{% endif %}
                     </button>
                 </div>
                 <div class="muted-note" id="deleteCampaignNote" {% if not active_send_job %}hidden{% endif %}>
-                    Loeschen ist waehrend eines laufenden Versands gesperrt.
+                    Löschen ist während eines laufenden Versands gesperrt.
                 </div>
                 {% if campaign_info.preview %}
                 <ul class="campaign-list">
@@ -623,9 +623,9 @@
 
             const hasCampaignId = Boolean(String(campaignIdInput?.value || '').trim());
             deleteCampaignBtn.disabled = !hasCampaignId || isSending;
-            deleteCampaignBtn.textContent = isSending ? 'Versand aktiv' : 'Vorlage loeschen';
+            deleteCampaignBtn.textContent = isSending ? 'Versand aktiv' : 'Vorlage löschen';
             deleteCampaignBtn.title = isSending
-                ? 'Laufenden Versand zuerst stoppen oder abschliessen'
+                ? 'Laufenden Versand zuerst stoppen oder abschließen'
                 : '';
 
             if (deleteCampaignNote) {
@@ -928,7 +928,7 @@
             if (!campaignId) {
                 return;
             }
-            if (!window.confirm('Diese gespeicherte Vorlage loeschen? Das kann nicht rueckgaengig gemacht werden.')) {
+            if (!window.confirm('Diese gespeicherte Vorlage löschen? Das kann nicht rückgängig gemacht werden.')) {
                 return;
             }
 
@@ -943,12 +943,12 @@
                 });
                 const data = await response.json();
                 if (!response.ok || !data.success) {
-                    throw new Error(data.message || 'Vorlage konnte nicht geloescht werden');
+                    throw new Error(data.message || 'Vorlage konnte nicht gelöscht werden');
                 }
 
                 sessionStorage.setItem(SEND_RESULT_FLASH_KEY, JSON.stringify({
                     level: 'success',
-                    message: data.message || 'Vorlage wurde geloescht.'
+                    message: data.message || 'Vorlage wurde gelöscht.'
                 }));
 
                 const currentUrl = new URL(window.location.href);
@@ -956,7 +956,7 @@
                 window.location.href = currentUrl.toString();
             } catch (deleteError) {
                 resultDiv.className = 'result error';
-                resultDiv.textContent = deleteError.message || 'Vorlage konnte nicht geloescht werden.';
+                resultDiv.textContent = deleteError.message || 'Vorlage konnte nicht gelöscht werden.';
                 resultDiv.style.display = 'block';
                 deleteCampaignBtn.textContent = previousLabel;
                 setLoadedCampaignDeleteState(Boolean(activeSendJobId));

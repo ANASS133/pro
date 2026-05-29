@@ -8,3 +8,4 @@ fpdf2>=2.8
 pypdf>=4.3
 openpyxl>=3.1
 firebase-admin>=6.0
+beautifulsoup4>=4.12

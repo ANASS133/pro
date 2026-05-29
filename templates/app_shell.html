@@ -22,6 +22,7 @@
                 <a href="{{ url_for('send_emails') }}" data-section-link="send-emails">E-Mails senden</a>
                 <a href="{{ url_for('dashboard') }}" data-section-link="dashboard">Dashboard</a>
                 <a href="{{ url_for('ausbildungen') }}" data-section-link="ausbildungen">Ausbildungen</a>
+                <a href="{{ url_for('google_maps_page') }}" data-section-link="google-maps">Google Maps</a>
             </nav>
         </header>
 
@@ -267,80 +268,173 @@
                     <div class="section-hero money-hero">
                         <div>
                             <span class="section-kicker money-kicker">Money</span>
-                            <h2>Earnings Dashboard</h2>
-                            <p>Umsatz aus Supabase-Bewerbungen, berechnet aus 500er- und 1000er-Paketen.</p>
+                            <h2>Payments Dashboard</h2>
+                            <p>Alle Zahlungen aus der Supabase-Tabelle &quot;payed&quot;.</p>
                         </div>
                         <div class="hero-actions">
                             <button type="button" id="money-refresh" class="money-refresh-btn">Refresh</button>
+                            <button type="button" id="money-export" class="money-export-btn">Export CSV</button>
                         </div>
                     </div>
 
                     <div id="money-status" class="section-status" hidden></div>
-                    <div id="money-dashboard" class="money-dashboard" hidden>
-                        <div class="money-total-panel">
-                            <span class="money-label">Total Earned</span>
-                            <strong id="money-total">0 dh</strong>
-                            <p id="money-total-note">0 bezahlte Bewerbungen aus Supabase</p>
-                        </div>
 
-                        <div class="money-stat-grid">
-                            <article class="money-stat-card">
-                                <span>This Week</span>
-                                <strong id="money-week">0 dh</strong>
-                                <small id="money-week-count">0 Bewerbungen</small>
+                    <!-- Skeleton -->
+                    <div id="money-skeleton" class="money-skeleton" hidden>
+                        <div class="money-skeleton-summary">
+                            <div class="money-skel-card"></div><div class="money-skel-card"></div>
+                            <div class="money-skel-card"></div><div class="money-skel-card"></div>
+                        </div>
+                        <div class="money-skel-chart"></div>
+                        <div class="money-skel-table">
+                            <div class="money-skel-row"></div><div class="money-skel-row"></div>
+                            <div class="money-skel-row"></div><div class="money-skel-row"></div>
+                        </div>
+                    </div>
+
+                    <div id="money-dashboard" class="money-dashboard-body" hidden>
+
+                        <!-- Smart Insights -->
+                        <div id="money-insights" class="money-insights-box" hidden></div>
+
+                        <!-- KPI Strip -->
+                        <div class="money-kpi-strip">
+                            <article class="money-kpi-card">
+                                <span>Total Paid</span>
+                                <strong id="money-kpi-total">0 DH</strong>
                             </article>
-                            <article class="money-stat-card">
-                                <span>This Month</span>
-                                <strong id="money-month">0 dh</strong>
-                                <small id="money-month-count">0 Bewerbungen</small>
-                            </article>
-                            <article class="money-stat-card">
-                                <span>Today</span>
-                                <strong id="money-today">0 dh</strong>
-                                <small id="money-today-count">0 Bewerbungen</small>
-                            </article>
-                            <article class="money-stat-card">
+                            <article class="money-kpi-card">
                                 <span>Average</span>
-                                <strong id="money-average">0 dh</strong>
-                                <small>pro bezahlter Bewerbung</small>
+                                <strong id="money-kpi-avg">0 DH</strong>
+                            </article>
+                            <article class="money-kpi-card">
+                                <span>Highest</span>
+                                <strong id="money-kpi-highest">0 DH</strong>
+                            </article>
+                            <article class="money-kpi-card">
+                                <span>Today</span>
+                                <strong id="money-kpi-today">0 DH</strong>
+                                <small id="money-kpi-today-count">0 payments</small>
                             </article>
                         </div>
 
-                        <div class="money-insights-grid">
-                            <article class="money-panel">
-                                <div class="money-panel-head">
-                                    <div>
-                                        <h3>Package Split</h3>
-                                        <p>Revenue by Bewerbung package.</p>
-                                    </div>
-                                </div>
-                                <div id="money-package-bars" class="money-bars"></div>
+                        <!-- Month-over-Month -->
+                        <div class="money-mom-grid">
+                            <article class="money-mom-card">
+                                <span>Total Amount</span>
+                                <strong id="money-mom-total">0 DH</strong>
+                                <small id="money-mom-total-change">&mdash;</small>
                             </article>
-
-                            <article class="money-panel">
-                                <div class="money-panel-head">
-                                    <div>
-                                        <h3>Last 6 Months</h3>
-                                        <p>Monthly revenue trend.</p>
-                                    </div>
-                                </div>
-                                <div id="money-monthly-bars" class="money-bars money-monthly-bars"></div>
+                            <article class="money-mom-card">
+                                <span>Number of Payments</span>
+                                <strong id="money-mom-count">0</strong>
+                                <small id="money-mom-count-change">&mdash;</small>
+                            </article>
+                            <article class="money-mom-card">
+                                <span>Average Payment</span>
+                                <strong id="money-mom-avg">0 DH</strong>
+                                <small id="money-mom-avg-change">&mdash;</small>
                             </article>
                         </div>
 
-                        <article class="money-panel">
-                            <div class="money-panel-head">
-                                <div>
-                                    <h3>Latest Earnings</h3>
-                                    <p>Newest paid applications from Supabase.</p>
+                        <!-- Filters & Search -->
+                        <div class="money-controls">
+                            <div class="money-search-wrap">
+                                <input type="text" id="money-search" class="money-search" placeholder="Nach Name suchen...">
+                            </div>
+                            <select id="money-sort" class="money-sort">
+                                <option value="date-desc">Neueste zuerst</option>
+                                <option value="date-asc">&Auml;lteste zuerst</option>
+                                <option value="amount-desc">H&ouml;chster Betrag</option>
+                                <option value="amount-asc">Niedrigster Betrag</option>
+                            </select>
+                        </div>
+
+                        <!-- Chart: Monthly Trend -->
+                        <div class="money-chart-panel">
+                            <h3>Monthly Trend</h3>
+                            <div id="money-chart-bars" class="money-chart-bars"></div>
+                        </div>
+
+                        <!-- Two-column: Top Payers + Recent Activity -->
+                        <div class="money-side-grid">
+                            <div class="money-side-panel">
+                                <h3>Top Payers</h3>
+                                <div id="money-top-payers" class="money-top-list"></div>
+                            </div>
+                            <div class="money-side-panel">
+                                <h3>Recent Activity</h3>
+                                <div id="money-timeline" class="money-timeline-list"></div>
+                            </div>
+                        </div>
+
+                        <!-- Health Indicators -->
+                        <div class="money-health-grid">
+                            <article class="money-health-card">
+                                <span>&#9888; Large Payments</span>
+                                <strong id="money-health-large">0</strong>
+                                <small>Payments &gt; 5.000 DH</small>
+                            </article>
+                            <article class="money-health-card">
+                                <span>&#128200; Daily Avg</span>
+                                <strong id="money-health-daily">0 DH</strong>
+                                <small>Last 30 days</small>
+                            </article>
+                            <article class="money-health-card">
+                                <span>&#128064; Unusual Spikes</span>
+                                <strong id="money-health-spikes">0</strong>
+                                <small>Days &gt; 2x avg</small>
+                            </article>
+                        </div>
+
+                        <!-- Goal Panel -->
+                        <div class="money-goal-panel">
+                            <div class="money-goal-head">
+                                <h3>Monthly Target</h3>
+                                <div class="money-goal-input-wrap">
+                                    <input type="number" id="money-goal-input" class="money-goal-input" value="10000" min="0" step="100">
+                                    <span>DH</span>
                                 </div>
                             </div>
-                            <div id="money-latest-list" class="money-latest-list"></div>
-                        </article>
+                            <div class="money-goal-track">
+                                <div id="money-goal-fill" class="money-goal-fill"></div>
+                            </div>
+                            <div class="money-goal-stats">
+                                <span id="money-goal-current">0 DH</span>
+                                <span id="money-goal-percent">0%</span>
+                                <span id="money-goal-target">/ 10.000 DH</span>
+                            </div>
+                        </div>
+
+                        <!-- Table -->
+                        <div class="money-table-wrapper">
+                            <table class="money-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Amount (DH)</th>
+                                        <th>Created At</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="money-table-body"></tbody>
+                            </table>
+                        </div>
+
+                    </div>
+
+                    <!-- Empty State -->
+                    <div id="money-empty" class="money-empty" hidden>
+                        <div class="money-empty-icon">&#128184;</div>
+                        <h3>Keine Zahlungen vorhanden</h3>
+                        <p>Sobald Zahlungen in der Supabase-Tabelle &quot;payed&quot; erscheinen, werden sie hier angezeigt.</p>
+                    </div>
+
+                    <div id="money-no-results" class="money-empty" hidden>
+                        <div class="money-empty-icon">&#128269;</div>
+                        <h3>Keine Ergebnisse</h3>
+                        <p>Keine Zahlungen entsprechen den aktuellen Filtern.</p>
                     </div>
                 </section>
-
-
                 <section
                     id="ausbildungen-section"
                     class="app-section"
@@ -806,6 +900,136 @@
                     </div>
                 </section>
 
+                <section
+                    id="google-maps-section"
+                    class="app-section"
+                    data-section="google-maps"
+                    {% if initial_section != "google-maps" %}hidden{% endif %}
+                >
+                    <div class="section-hero gmaps-hero">
+                        <div>
+                            <span class="section-kicker gmaps-kicker">Google Maps</span>
+                            <h2>Business E-Mail Extraktion</h2>
+                            <p>Unternehmen auf Google Maps finden und automatisch E-Mail-Adressen von deren Websites extrahieren.</p>
+                        </div>
+                    </div>
+
+                    <div class="gmaps-workspace">
+                        <form id="gmaps-search-form" class="gmaps-search-card">
+                            <div class="gmaps-form-grid">
+                                <div class="gmaps-field gmaps-field--wide">
+                                    <label for="gmaps-query">Suchbegriff</label>
+                                    <input
+                                        type="text"
+                                        id="gmaps-query"
+                                        placeholder="z.B. Zahnarzt Berlin, IT Unternehmen M&uuml;nchen, Friseur Hamburg"
+                                        required
+                                        autocomplete="off"
+                                    >
+                                </div>
+                                <div class="gmaps-field">
+                                    <label for="gmaps-radius">Umkreis</label>
+                                    <select id="gmaps-radius">
+                                        <option value="1">1 km</option>
+                                        <option value="5">5 km</option>
+                                        <option value="10" selected>10 km</option>
+                                        <option value="25">25 km</option>
+                                        <option value="50">50 km</option>
+                                    </select>
+                                </div>
+                                <div class="gmaps-field">
+                                    <label for="gmaps-max-results">Max. Ergebnisse: <strong id="gmaps-max-results-value">50</strong></label>
+                                    <input type="range" id="gmaps-max-results" min="5" max="200" value="50" step="5">
+                                </div>
+                            </div>
+                            <div class="gmaps-form-actions">
+                                <button id="gmaps-search-btn" type="submit" class="gmaps-btn-primary">
+                                    Businesses &amp; Emails von Google Maps extrahieren
+                                </button>
+                            </div>
+                            <div id="gmaps-loading" class="gmaps-loading" hidden>
+                                <div class="gmaps-spinner"></div>
+                                <p>Google Maps wird durchsucht, bitte warten&hellip;</p>
+                            </div>
+                        </form>
+
+                        <section id="gmaps-progress-panel" class="gmaps-progress-panel" hidden>
+                            <h4 class="gmaps-progress-title">Fortschritt</h4>
+                            <div id="gmaps-phase-label" class="gmaps-phase-label">Warte auf Start&hellip;</div>
+                            <div class="gmaps-progress-stats">
+                                <div class="gmaps-progress-stat">
+                                    <span id="gmaps-stat-businesses" class="value">0</span>
+                                    <span class="label">Unternehmen</span>
+                                </div>
+                                <div class="gmaps-progress-stat">
+                                    <span id="gmaps-stat-emails" class="value">0</span>
+                                    <span class="label">E-Mails</span>
+                                </div>
+                                <div class="gmaps-progress-stat">
+                                    <span id="gmaps-stat-no-email" class="value">0</span>
+                                    <span class="label">Keine E-Mail</span>
+                                </div>
+                                <div class="gmaps-progress-stat">
+                                    <span id="gmaps-stat-failed" class="value">0</span>
+                                    <span class="label">Fehler</span>
+                                </div>
+                            </div>
+                            <div class="gmaps-progress-track">
+                                <div id="gmaps-progress-fill" class="gmaps-progress-fill"></div>
+                            </div>
+                            <div id="gmaps-progress-status" class="gmaps-progress-status">Leerlauf</div>
+                            <div id="gmaps-progress-error" class="gmaps-progress-error" hidden></div>
+                            <div class="gmaps-progress-actions">
+                                <button id="gmaps-stop-btn" type="button" class="gmaps-progress-stop-btn" hidden>Stoppen</button>
+                            </div>
+                        </section>
+
+                        <div id="gmaps-discovery-summary" class="gmaps-discovery-summary" hidden>
+                            <div class="gmaps-discovery-card">
+                                <span class="gmaps-discovery-icon">&#128269;</span>
+                                <div>
+                                    <strong><span id="gmaps-discovery-count">0</span> Businesses gefunden</strong>
+                                    <p>Klicke auf &bdquo;E-Mails extrahieren starten&ldquo;, um die Websites zu durchsuchen.</p>
+                                </div>
+                                <button id="gmaps-start-extract-btn" type="button" class="gmaps-extract-btn" hidden>
+                                    E-Mails extrahieren starten
+                                </button>
+                            </div>
+                        </div>
+
+                        <section id="gmaps-results-panel" class="gmaps-results-panel" hidden>
+                            <div class="gmaps-results-head">
+                                <h3>Ergebnisse</h3>
+                                <span id="gmaps-results-summary" class="gmaps-results-summary"></span>
+                            </div>
+                            <div class="gmaps-results-table-wrap">
+                                <table class="gmaps-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Adresse</th>
+                                            <th>Telefon</th>
+                                            <th>Website</th>
+                                            <th>E-Mails</th>
+                                            <th>Bewertung</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="gmaps-results-body"></tbody>
+                                </table>
+                            </div>
+                        </section>
+
+                        <div id="gmaps-export-bar" class="gmaps-export-bar" hidden>
+                            <span>Export:</span>
+                            <button type="button" id="gmaps-dl-excel" class="gmaps-export-btn">Excel</button>
+                            <button type="button" id="gmaps-dl-csv" class="gmaps-export-btn">CSV</button>
+                            <button type="button" id="gmaps-dl-json" class="gmaps-export-btn">JSON</button>
+                        </div>
+                    </div>
+                </section>
+
+
             </div>
         </main>
     </div>
@@ -828,6 +1052,7 @@
     <script src="{{ url_for('static', filename='spa/sections/ausbildungen.js') }}?v=2.0"></script>
     <script src="{{ url_for('static', filename='spa/sections/create-anschreibens.js') }}?v=2.0"></script>
     <script src="{{ url_for('static', filename='spa/sections/send-emails.js') }}?v=2.0"></script>
+    <script src="{{ url_for('static', filename='spa/sections/google-maps.js') }}?v=2.0"></script>
     <script src="{{ url_for('static', filename='spa/app.js') }}?v=2.0"></script>
 </body>
 </html>

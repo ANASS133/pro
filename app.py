@@ -40,6 +40,7 @@ from werkzeug.utils import secure_filename
 
 from email_sender import EmailSender
 from scraper.enhanced_api_scraper import EnhancedJobScraper
+from scraper.google_maps_scraper import GoogleMapsBusinessScraper
 from scraper.working_email_extractor import WorkingEmailExtractor
 
 logging.basicConfig(level=logging.INFO)
@@ -128,6 +129,9 @@ captcha_context_lock = threading.Lock()
 captcha_context = {"scope": "", "job_id": ""}
 AUTO_EXTRACTION_EXPORT_DIR = Path("data") / "auto_extraction_exports"
 EMAIL_CAMPAIGN_ASSET_DIR = Path("data") / "email_campaign_assets"
+google_maps_jobs_lock = threading.Lock()
+google_maps_jobs: Dict[str, Dict] = {}
+GOOGLE_MAPS_EXPORT_DIR = Path("data") / "google_maps_exports"
 
 # Firebase configuration
 FIREBASE_CONFIG = {
@@ -561,6 +565,7 @@ for directory in (
 PARALLEL_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 AUTO_EXTRACTION_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 EMAIL_CAMPAIGN_ASSET_DIR.mkdir(parents=True, exist_ok=True)
+GOOGLE_MAPS_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 DEFAULT_MAX_JOBS = 8000
 SEARCH_CACHE_FILE = Path("search_cache.json")
@@ -3526,6 +3531,7 @@ def _render_app_shell(initial_section: str = "search"):
         "ausbildungen",
         "create-anschreibens",
         "send-emails",
+        "google-maps",
     }:
         section = "search"
     return render_template(
@@ -6341,6 +6347,537 @@ def ai_templatize():
     except Exception as exc:
         logger.error("AI templatize error: %s", exc)
         return jsonify({"error": f"KI-Verarbeitung fehlgeschlagen: {exc}"}), 500
+
+
+# ---------------------------------------------------------------------------
+# Google Maps Business Email Scraper
+# ---------------------------------------------------------------------------
+
+def _create_google_maps_job(query: str, max_results: int, radius: int) -> str:
+    job_id = str(uuid.uuid4())
+    now = datetime.now().isoformat()
+    job = {
+        "job_id": job_id,
+        "query": query,
+        "max_results": max_results,
+        "radius": radius,
+        "phase": "queued",
+        "is_running": False,
+        "stop_requested": False,
+        "current_index": 0,
+        "total_businesses": 0,
+        "emails_found": 0,
+        "no_email": 0,
+        "failed": 0,
+        "results": [],
+        "last_error": "",
+        "created_at": now,
+        "updated_at": now,
+        "finished_at": "",
+    }
+    with google_maps_jobs_lock:
+        google_maps_jobs[job_id] = job
+    return job_id
+
+
+def _set_google_maps_job(job_id: str, **kwargs) -> bool:
+    with google_maps_jobs_lock:
+        job = google_maps_jobs.get(job_id)
+        if not job:
+            return False
+        job.update(kwargs)
+        job["updated_at"] = datetime.now().isoformat()
+        return True
+
+
+def _run_google_maps_discovery(job_id: str) -> None:
+    """Phase 1 only: Search Google Maps for businesses, return count.
+    Does NOT process businesses or extract emails."""
+    with google_maps_jobs_lock:
+        job = google_maps_jobs.get(job_id)
+        if not job:
+            return
+        query = str(job.get("query") or "")
+        max_results = int(job.get("max_results") or 50)
+
+    if not query:
+        _set_google_maps_job(job_id, phase="error", last_error="Kein Suchbegriff angegeben")
+        return
+
+    _set_google_maps_job(job_id, is_running=True, phase="scraping_maps")
+
+    scraper = None
+    try:
+        scraper = GoogleMapsBusinessScraper(headless=True)
+
+        def stop_check():
+            with google_maps_jobs_lock:
+                j = google_maps_jobs.get(job_id)
+                return not j or j.get("stop_requested", False)
+
+        businesses = scraper.search_businesses(
+            query, max_results=max_results, stop_check=stop_check,
+        )
+
+        if stop_check():
+            _set_google_maps_job(
+                job_id,
+                is_running=False,
+                phase="stopped",
+                total_businesses=len(businesses),
+                results=businesses,
+            )
+            return
+
+        _set_google_maps_job(
+            job_id,
+            is_running=False,
+            phase="ready_to_extract",
+            total_businesses=len(businesses),
+            results=businesses,
+            finished_at=datetime.now().isoformat(),
+        )
+
+    except Exception as exc:
+        logger.error("Google Maps discovery %s failed: %s", job_id, exc)
+        _set_google_maps_job(
+            job_id,
+            is_running=False,
+            phase="error",
+            last_error=str(exc),
+            finished_at=datetime.now().isoformat(),
+        )
+    finally:
+        if scraper:
+            scraper.close()
+
+
+def _run_google_maps_extraction(job_id: str) -> None:
+    """Phase 2 only: Process each discovered business link by link."""
+    with google_maps_jobs_lock:
+        job = google_maps_jobs.get(job_id)
+        if not job:
+            return
+        businesses = list(job.get("results") or [])
+
+    if not businesses:
+        _set_google_maps_job(job_id, phase="done", is_running=False)
+        return
+
+    _set_google_maps_job(job_id, is_running=True, phase="extracting_emails")
+
+    scraper = None
+    try:
+        scraper = GoogleMapsBusinessScraper(headless=True)
+
+        def stop_check():
+            with google_maps_jobs_lock:
+                j = google_maps_jobs.get(job_id)
+                return not j or j.get("stop_requested", False)
+
+        # Process each business link by link
+        for idx, business in enumerate(businesses):
+            if stop_check():
+                _set_google_maps_job(job_id, phase="stopped", is_running=False)
+                return
+
+            scraper.process_business(business, stop_check=stop_check)
+
+            with google_maps_jobs_lock:
+                j = google_maps_jobs.get(job_id)
+                if j:
+                    j["current_index"] = idx + 1
+                    j["results"] = businesses
+                    j["emails_found"] = scraper.stats.get("emails_found", 0)
+                    j["no_email"] = scraper.stats.get("no_email", 0)
+                    j["failed"] = scraper.stats.get("failed", 0)
+                    j["updated_at"] = datetime.now().isoformat()
+
+        _save_google_maps_export(job_id, businesses, str(job.get("query") or ""))
+        _set_google_maps_job(
+            job_id,
+            is_running=False,
+            phase="done",
+            finished_at=datetime.now().isoformat(),
+        )
+
+    except Exception as exc:
+        logger.error("Google Maps extraction %s failed: %s", job_id, exc)
+        _set_google_maps_job(
+            job_id,
+            is_running=False,
+            phase="error",
+            last_error=str(exc),
+            finished_at=datetime.now().isoformat(),
+        )
+    finally:
+        if scraper:
+            scraper.close()
+
+
+def _run_google_maps_job(job_id: str) -> None:
+    with google_maps_jobs_lock:
+        job = google_maps_jobs.get(job_id)
+        if not job:
+            return
+        query = str(job.get("query") or "")
+        max_results = int(job.get("max_results") or 50)
+
+    if not query:
+        _set_google_maps_job(job_id, phase="error", last_error="Kein Suchbegriff angegeben")
+        return
+
+    _set_google_maps_job(job_id, is_running=True, phase="scraping_maps")
+
+    scraper = None
+    try:
+        scraper = GoogleMapsBusinessScraper(headless=True)
+
+        def stop_check():
+            with google_maps_jobs_lock:
+                j = google_maps_jobs.get(job_id)
+                return not j or j.get("stop_requested", False)
+
+        # Phase 1: Search Google Maps for businesses
+        businesses = scraper.search_businesses(
+            query, max_results=max_results, stop_check=stop_check,
+        )
+
+        if stop_check():
+            _set_google_maps_job(
+                job_id,
+                is_running=False,
+                phase="stopped",
+                total_businesses=len(businesses),
+                results=businesses,
+            )
+            return
+
+        _set_google_maps_job(
+            job_id,
+            phase="extracting_emails",
+            total_businesses=len(businesses),
+            results=businesses,
+        )
+
+        # Phase 2: Process each business (enrich details + extract emails)
+        for idx, business in enumerate(businesses):
+            if stop_check():
+                _set_google_maps_job(job_id, phase="stopped", is_running=False)
+                return
+
+            scraper.process_business(business, stop_check=stop_check)
+
+            with google_maps_jobs_lock:
+                j = google_maps_jobs.get(job_id)
+                if j:
+                    j["current_index"] = idx + 1
+                    j["results"] = businesses
+                    j["emails_found"] = scraper.stats.get("emails_found", 0)
+                    j["no_email"] = scraper.stats.get("no_email", 0)
+                    j["failed"] = scraper.stats.get("failed", 0)
+                    j["updated_at"] = datetime.now().isoformat()
+
+        # Done — save export file
+        _save_google_maps_export(job_id, businesses, query)
+        _set_google_maps_job(
+            job_id,
+            is_running=False,
+            phase="done",
+            finished_at=datetime.now().isoformat(),
+        )
+
+    except Exception as exc:
+        logger.error("Google Maps job %s failed: %s", job_id, exc)
+        _set_google_maps_job(
+            job_id,
+            is_running=False,
+            phase="error",
+            last_error=str(exc),
+            finished_at=datetime.now().isoformat(),
+        )
+    finally:
+        if scraper:
+            scraper.close()
+
+
+def _save_google_maps_export(job_id: str, businesses: List[Dict], query: str) -> Optional[Path]:
+    if not businesses:
+        return None
+
+    GOOGLE_MAPS_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+
+    rows = []
+    for biz in businesses:
+        emails_str = ", ".join(biz.get("emails") or [])
+        rows.append({
+            "Name": biz.get("name", ""),
+            "Adresse": biz.get("address", ""),
+            "Telefon": biz.get("phone", ""),
+            "Website": biz.get("website", ""),
+            "E-Mails": emails_str,
+            "Bewertung": biz.get("rating", ""),
+            "Rezensionen": biz.get("reviews_count", ""),
+            "Kategorie": biz.get("category", ""),
+            "Status": biz.get("status", ""),
+            "Google Maps URL": biz.get("maps_url", ""),
+        })
+
+    df = pd.DataFrame(rows)
+    safe_query = re.sub(r"[^\w\s-]", "", query)[:40].strip().replace(" ", "_")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"gmaps_{safe_query}_{timestamp}_{job_id[:8]}.xlsx"
+    file_path = GOOGLE_MAPS_EXPORT_DIR / filename
+    df.to_excel(file_path, index=False)
+
+    with google_maps_jobs_lock:
+        job = google_maps_jobs.get(job_id)
+        if job:
+            job["export_filename"] = filename
+
+    return file_path
+
+
+@app.route("/google-maps")
+def google_maps_page():
+    return _render_app_shell("google-maps")
+
+
+@app.route("/api/google-maps/discover", methods=["POST"])
+def api_google_maps_discover():
+    """Phase 1 only: Search Google Maps for businesses, show count."""
+    data = request.get_json(silent=True) or {}
+    query = str(data.get("query") or "").strip()
+    if not query:
+        return jsonify({"success": False, "message": "Bitte einen Suchbegriff eingeben"}), 400
+
+    max_results = min(int(data.get("max_results") or 50), 500)
+    if max_results < 1:
+        max_results = 10
+    radius = int(data.get("radius") or 10)
+
+    job_id = _create_google_maps_job(query, max_results, radius)
+    thread = threading.Thread(target=_run_google_maps_discovery, args=(job_id,), daemon=True)
+    thread.start()
+
+    return jsonify({
+        "success": True,
+        "job_id": job_id,
+        "query": query,
+        "max_results": max_results,
+        "message": "Discovery gestartet. Status unter /api/google-maps/status/<job_id> abrufen.",
+    })
+
+
+@app.route("/api/google-maps/start", methods=["POST"])
+def api_google_maps_start():
+    data = request.get_json(silent=True) or {}
+    query = str(data.get("query") or "").strip()
+    if not query:
+        return jsonify({"success": False, "message": "Bitte einen Suchbegriff eingeben"}), 400
+
+    max_results = min(int(data.get("max_results") or 50), 500)
+    if max_results < 1:
+        max_results = 10
+    radius = int(data.get("radius") or 10)
+
+    job_id = _create_google_maps_job(query, max_results, radius)
+    thread = threading.Thread(target=_run_google_maps_job, args=(job_id,), daemon=True)
+    thread.start()
+
+    return jsonify({
+        "success": True,
+        "job_id": job_id,
+        "query": query,
+        "max_results": max_results,
+    })
+
+
+@app.route("/api/google-maps/extract/<job_id>", methods=["POST"])
+def api_google_maps_extract(job_id: str):
+    """Phase 2: Start link-by-link email extraction for discovered businesses."""
+    with google_maps_jobs_lock:
+        job = google_maps_jobs.get(job_id)
+        if not job:
+            return jsonify({"success": False, "message": "Job nicht gefunden"}), 404
+        phase = str(job.get("phase") or "")
+        if phase not in ("ready_to_extract", "done", "stopped"):
+            return jsonify({
+                "success": False,
+                "message": f"Extraktion kann nicht gestartet werden. Aktuelle Phase: {phase}",
+            }), 400
+        total = int(job.get("total_businesses") or 0)
+
+    if total == 0:
+        return jsonify({"success": False, "message": "Keine Businesses zum Verarbeiten gefunden"}), 400
+
+    thread = threading.Thread(target=_run_google_maps_extraction, args=(job_id,), daemon=True)
+    thread.start()
+
+    return jsonify({
+        "success": True,
+        "job_id": job_id,
+        "total_businesses": total,
+        "message": f"Extraktion gestartet. {total} Businesses werden verarbeitet.",
+    })
+
+
+@app.route("/api/google-maps/status/<job_id>", methods=["GET"])
+def api_google_maps_status(job_id: str):
+    with google_maps_jobs_lock:
+        job = google_maps_jobs.get(job_id)
+        if not job:
+            return jsonify({"success": False, "message": "Job nicht gefunden"}), 404
+
+        total = int(job.get("total_businesses") or 0)
+        current = int(job.get("current_index") or 0)
+
+        # Build safe results payload (limit result details for polling)
+        results = []
+        for biz in (job.get("results") or []):
+            results.append({
+                "name": biz.get("name", ""),
+                "address": biz.get("address", ""),
+                "phone": biz.get("phone", ""),
+                "website": biz.get("website", ""),
+                "emails": biz.get("emails", []),
+                "rating": biz.get("rating", ""),
+                "reviews_count": biz.get("reviews_count", ""),
+                "category": biz.get("category", ""),
+                "status": biz.get("status", "pending"),
+            })
+
+        payload = {
+            "success": True,
+            "job": {
+                "job_id": job.get("job_id"),
+                "query": job.get("query", ""),
+                "phase": job.get("phase", "queued"),
+                "is_running": bool(job.get("is_running")),
+                "stop_requested": bool(job.get("stop_requested")),
+                "current_index": current,
+                "total_businesses": total,
+                "emails_found": int(job.get("emails_found") or 0),
+                "no_email": int(job.get("no_email") or 0),
+                "failed": int(job.get("failed") or 0),
+                "last_error": str(job.get("last_error") or ""),
+                "percentage": (current / total * 100) if total else 0,
+                "results": results,
+                "updated_at": job.get("updated_at", ""),
+                "finished_at": job.get("finished_at", ""),
+            },
+        }
+    return jsonify(payload)
+
+
+@app.route("/api/google-maps/stop/<job_id>", methods=["POST"])
+def api_google_maps_stop(job_id: str):
+    with google_maps_jobs_lock:
+        job = google_maps_jobs.get(job_id)
+        if not job:
+            return jsonify({"success": False, "message": "Job nicht gefunden"}), 404
+        job["stop_requested"] = True
+        job["updated_at"] = datetime.now().isoformat()
+    return jsonify({"success": True, "message": "Stop-Signal gesendet"})
+
+
+@app.route("/api/google-maps/download/<job_id>", methods=["GET"])
+def api_google_maps_download(job_id: str):
+    with google_maps_jobs_lock:
+        job = google_maps_jobs.get(job_id)
+        if not job:
+            return jsonify({"success": False, "message": "Job nicht gefunden"}), 404
+        export_filename = str(job.get("export_filename") or "").strip()
+        results = list(job.get("results") or [])
+        query = str(job.get("query") or "export")
+
+    # If we have an export file, serve it
+    if export_filename:
+        file_path = GOOGLE_MAPS_EXPORT_DIR / export_filename
+        if file_path.exists():
+            return send_file(
+                str(file_path),
+                as_attachment=True,
+                download_name=export_filename,
+            )
+
+    # Generate export on the fly
+    if not results:
+        return jsonify({"success": False, "message": "Keine Ergebnisse vorhanden"}), 404
+
+    file_path = _save_google_maps_export(job_id, results, query)
+    if file_path and file_path.exists():
+        return send_file(
+            str(file_path),
+            as_attachment=True,
+            download_name=file_path.name,
+        )
+
+    return jsonify({"success": False, "message": "Export fehlgeschlagen"}), 500
+
+
+@app.route("/api/google-maps/export/<job_id>/<fmt>", methods=["GET"])
+def api_google_maps_export(job_id: str, fmt: str):
+    with google_maps_jobs_lock:
+        job = google_maps_jobs.get(job_id)
+        if not job:
+            return jsonify({"success": False, "message": "Job nicht gefunden"}), 404
+        results = list(job.get("results") or [])
+        query = str(job.get("query") or "export")
+
+    if not results:
+        return jsonify({"success": False, "message": "Keine Ergebnisse vorhanden"}), 404
+
+    rows = []
+    for biz in results:
+        emails_str = ", ".join(biz.get("emails") or [])
+        rows.append({
+            "Name": biz.get("name", ""),
+            "Adresse": biz.get("address", ""),
+            "Telefon": biz.get("phone", ""),
+            "Website": biz.get("website", ""),
+            "E-Mails": emails_str,
+            "Bewertung": biz.get("rating", ""),
+            "Rezensionen": biz.get("reviews_count", ""),
+            "Kategorie": biz.get("category", ""),
+            "Status": biz.get("status", ""),
+        })
+
+    df = pd.DataFrame(rows)
+    safe_query = re.sub(r"[^\w\s-]", "", query)[:40].strip().replace(" ", "_")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    fmt = str(fmt or "xlsx").strip().lower()
+
+    if fmt == "csv":
+        output = io.StringIO()
+        df.to_csv(output, index=False, encoding="utf-8")
+        output.seek(0)
+        return send_file(
+            io.BytesIO(output.getvalue().encode("utf-8-sig")),
+            mimetype="text/csv",
+            as_attachment=True,
+            download_name=f"gmaps_{safe_query}_{timestamp}.csv",
+        )
+
+    if fmt == "json":
+        json_data = json.dumps(rows, ensure_ascii=False, indent=2)
+        return send_file(
+            io.BytesIO(json_data.encode("utf-8")),
+            mimetype="application/json",
+            as_attachment=True,
+            download_name=f"gmaps_{safe_query}_{timestamp}.json",
+        )
+
+    # Default: xlsx
+    GOOGLE_MAPS_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    file_path = GOOGLE_MAPS_EXPORT_DIR / f"gmaps_{safe_query}_{timestamp}_{job_id[:8]}.xlsx"
+    df.to_excel(file_path, index=False)
+    return send_file(
+        str(file_path),
+        as_attachment=True,
+        download_name=file_path.name,
+    )
 
 
 if __name__ == "__main__":

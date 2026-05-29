@@ -13,6 +13,7 @@
         "/ausbildungen": "ausbildungen",
         "/create-anschreibens": "create-anschreibens",
         "/send-emails": "send-emails",
+        "/google-maps": "google-maps",
     };
 
     const sectionToRoute = {
@@ -23,6 +24,7 @@
         ausbildungen: "/ausbildungen",
         "create-anschreibens": "/create-anschreibens",
         "send-emails": "/send-emails",
+        "google-maps": "/google-maps",
     };
 
     const titleBySection = {
@@ -33,6 +35,7 @@
         ausbildungen: "Arbeitsagentur Scraper | Ausbildungen",
         "create-anschreibens": "Arbeitsagentur Scraper | Anschreiben",
         "send-emails": "Arbeitsagentur Scraper | E-Mails senden",
+        "google-maps": "Arbeitsagentur Scraper | Google Maps",
     };
 
     const sections = Array.from(document.querySelectorAll("[data-section]"));
@@ -59,6 +62,9 @@
             : { show() {}, hide() {} },
         "send-emails": typeof factories.createSendEmailsSection === "function"
             ? factories.createSendEmailsSection()
+            : { show() {}, hide() {} },
+        "google-maps": typeof factories.createGoogleMapsSection === "function"
+            ? factories.createGoogleMapsSection()
             : { show() {}, hide() {} },
     };
 

@@ -128,6 +128,7 @@
                 created_at: createdAt,
                 created_at_display: formatCreatedAt(createdAt),
                 sort_time: createdAt ? new Date(createdAt).getTime() || 0 : 0,
+                is_payed: Boolean(row.is_payed),
                 raw: row,
             };
         }
@@ -287,6 +288,15 @@
                 "</ul>" +
                 "</div>" +
                 '<div class="supabase-actions">' +
+                '<button type="button" class="supabase-payed-btn' +
+                (application.is_payed ? " supabase-payed-btn--done" : "") +
+                '" data-supabase-id="' +
+                escapeHtml(application.id) +
+                '"' +
+                (isPending || application.is_payed ? " disabled" : "") +
+                ">" +
+                (application.is_payed ? "&#10003; Bezahlt" : "Bezahlt") +
+                "</button>" +
                 '<div class="supabase-actions-menu">' +
                 '<button type="button" class="supabase-dots-btn" data-supabase-id="' +
                 escapeHtml(application.id) +
@@ -381,7 +391,7 @@
                 const client = await getSupabaseClient();
                 const response = await client
                     .from("applications")
-                    .select("id,created_at,pack,full_name,email,whatsapp,bank,language_level,field,documents")
+                    .select("id,created_at,pack,full_name,email,whatsapp,bank,language_level,field,documents,is_payed")
                     .order("created_at", { ascending: false });
 
                 if (response.error) {
@@ -519,6 +529,37 @@
             window.location.href = "/create-anschreibens?application_id=" + encodeURIComponent(applicationId) + "&source=supabase&mode=edit";
         }
 
+        async function markAsPayed(applicationId) {
+            setStatus("Markiere als bezahlt...", false);
+
+            var client = await getSupabaseClient();
+            var response = await client
+                .from("applications")
+                .update({ is_payed: true })
+                .eq("id", applicationId);
+
+            if (response.error) {
+                throw response.error;
+            }
+
+            var app = getApplicationById(applicationId);
+            if (app) {
+                app.is_payed = true;
+            }
+
+            var card = cardsRoot.querySelector('[data-supabase-id="' + applicationId + '"]');
+            if (card) {
+                var btn = card.querySelector(".supabase-payed-btn");
+                if (btn) {
+                    btn.disabled = true;
+                    btn.classList.add("supabase-payed-btn--done");
+                    btn.innerHTML = "&#10003; Bezahlt";
+                }
+            }
+
+            setStatus("Als bezahlt markiert.", false);
+        }
+
         function debounce(callback, delay) {
             let timer = null;
             return function debouncedCallback() {
@@ -584,6 +625,22 @@
                     nextStep(applicationId).catch(function (error) {
                         console.error("Supabase next step failed.", error);
                         setStatus(error.message || "Next step konnte nicht gestartet werden.", true);
+                    });
+                }
+                return;
+            }
+
+            const payedButton = event.target.closest(".supabase-payed-btn");
+            if (payedButton && !payedButton.disabled) {
+                var applicationId = String(payedButton.dataset.supabaseId || "").trim();
+                if (applicationId) {
+                    payedButton.disabled = true;
+                    payedButton.textContent = "Wird gespeichert...";
+                    markAsPayed(applicationId).catch(function (error) {
+                        console.error("Payed update failed.", error);
+                        payedButton.disabled = false;
+                        payedButton.textContent = "Bezahlt";
+                        setStatus(error.message || "Bezahlt-Status konnte nicht gespeichert werden.", true);
                     });
                 }
                 return;

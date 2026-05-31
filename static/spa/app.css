@@ -2903,3 +2903,9 @@ textarea {
     border-radius: 50%;
     animation: spin 0.7s linear infinite;
 }
+
+.gmaps-muted {
+    color: var(--muted);
+    font-style: italic;
+    opacity: 0.8;
+}

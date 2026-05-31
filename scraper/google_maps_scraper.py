@@ -186,6 +186,11 @@ class GoogleMapsBusinessScraper:
         self.http_session.headers.update({"User-Agent": CRAWL_USER_AGENT})
         self.headless = headless
         self.global_emails: Set[str] = set()
+
+        # Suppress SSL warnings for flaky business sites
+        import urllib3
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        self.http_session.verify = False
         self.stats = {
             "businesses_found": 0,
             "emails_found": 0,
@@ -432,44 +437,91 @@ class GoogleMapsBusinessScraper:
             return None
 
     def enrich_business_details(self, business: Dict) -> Dict:
-        """Open the business detail page to get phone and website."""
+        """Open the business detail page to get phone and website.
+
+        Strategy:
+        1. Navigate to the Maps place URL
+        2. Wait for the detail panel to render
+        3. Try CSS selectors for website/phone buttons
+        4. FALLBACK: extract all visible text and regex-parse for URLs/phones
+        5. Try clicking info tabs to reveal hidden contact data
+        """
         driver = self._ensure_driver()
         maps_url = business.get("maps_url", "")
 
         if not maps_url:
             return business
 
+        name = business.get("name", "Unknown")
+        logger.info("Enriching: %s", name)
+
         try:
             driver.get(maps_url)
-            time.sleep(3)
+            time.sleep(4)  # Allow detail panel JS to render
 
-            # Extract phone — try multiple selectors
+            # --- Wait for detail panel to load ---
+            panel_selectors = [
+                "div[role='main']",
+                "div.m6QErb[aria-label]",
+                "div[aria-label*='Information']",
+                "div.hh2c6",
+            ]
+            for sel in panel_selectors:
+                try:
+                    WebDriverWait(driver, 8).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, sel))
+                    )
+                    break
+                except (TimeoutException, NoSuchElementException):
+                    continue
+            time.sleep(1.5)
+
+            # ================================================================
+            # PHASE A: CSS Selector-based (try current Google Maps DOM)
+            # ================================================================
+            phone_found = False
+            website_found = False
+
+            # --- Phone ---
             phone_selectors = [
-                "button[data-tooltip*='Phone']",
-                "button[aria-label*='Phone']",
                 "button[aria-label*='Telefon']",
-                "button[data-item-id*='phone']",
-                "a[data-tooltip*='Phone']",
+                "button[aria-label*='Anrufen']",
+                "button[aria-label*='Phone']",
+                "button[aria-label*='Call']",
+                "a[aria-label*='Telefon']",
                 "a[aria-label*='Phone']",
                 "a[href^='tel:']",
+                "button[data-tooltip*='Phone']",
+                "button[data-tooltip*='Telefon']",
+                "button[data-item-id*='phone']",
+                "a[data-tooltip*='Phone']",
             ]
             for sel in phone_selectors:
                 try:
                     el = driver.find_element(By.CSS_SELECTOR, sel)
-                    phone_text = (el.text or el.get_attribute("aria-label") or el.get_attribute("href") or "").strip()
+                    phone_text = (
+                        el.get_attribute("aria-label")
+                        or el.get_attribute("href")
+                        or el.text
+                        or ""
+                    ).strip()
                     if phone_text:
                         phone_text = phone_text.replace("tel:", "").strip()
-                        if re.search(r"\d", phone_text):
+                        phone_text = re.sub(r'[\ue000-\uf8ff\n\r]', '', phone_text).strip()
+                        if re.search(r"\d", phone_text) and len(phone_text) >= 6:
                             business["phone"] = phone_text
+                            phone_found = True
+                            logger.info("  phone (selector): %s", phone_text)
                             break
                 except (NoSuchElementException, WebDriverException):
                     continue
 
-            # Extract website
+            # --- Website ---
             website_selectors = [
-                "a[data-tooltip*='Website']",
-                "a[aria-label*='Website']",
                 "a[aria-label*='Webseite']",
+                "a[aria-label*='Website']",
+                "a[data-tooltip*='Website']",
+                "a[data-tooltip*='Webseite']",
                 "a[data-item-id='authority']",
                 "a[href][data-value]",
             ]
@@ -481,24 +533,130 @@ class GoogleMapsBusinessScraper:
                         if not url.startswith("http"):
                             url = "https://" + url
                         business["website"] = url
+                        website_found = True
+                        logger.info("  website (selector): %s", url)
                         break
                 except (NoSuchElementException, WebDriverException):
                     continue
 
-            # Extract address if missing
+            # ================================================================
+            # PHASE B: Text-based fallback — extract from all visible text
+            # ================================================================
+            if not phone_found or not website_found:
+                try:
+                    # Grab all text from the main content area
+                    content_selectors = [
+                        "div[role='main']",
+                        "div.hh2c6",
+                        "div.m6QErb",
+                        "body",
+                    ]
+                    page_text = ""
+                    for sel in content_selectors:
+                        try:
+                            el = driver.find_element(By.CSS_SELECTOR, sel)
+                            page_text = (el.text or "").strip()
+                            if len(page_text) > 50:
+                                break
+                        except (NoSuchElementException, WebDriverException):
+                            continue
+
+                    if page_text:
+                        # --- Website via regex ---
+                        if not website_found:
+                            url_match = re.search(
+                                r'(https?://[^\s<>"]+|www\.[^\s<>"]+\.[a-z]{2,}[^\s<>"]*)',
+                                page_text, re.IGNORECASE,
+                            )
+                            if url_match:
+                                url = url_match.group(1).strip().rstrip(".,;:)")
+                                if not url.startswith("http"):
+                                    url = "https://" + url
+                                # Filter out Google URLs
+                                if "google." not in url and "gstatic" not in url:
+                                    business["website"] = url
+                                    website_found = True
+                                    logger.info("  website (text fallback): %s", url)
+
+                        # --- Phone via regex ---
+                        if not phone_found:
+                            phone_match = re.search(
+                                r'(\+?\d[\d\s\-./()]{7,}\d)',
+                                page_text,
+                            )
+                            if phone_match:
+                                phone = phone_match.group(1).strip()
+                                if len(phone) >= 8:
+                                    business["phone"] = phone
+                                    phone_found = True
+                                    logger.info("  phone (text fallback): %s", phone)
+                except Exception:
+                    pass
+
+            # ================================================================
+            # PHASE C: Try clicking info tabs to reveal more data
+            # ================================================================
+            if not website_found or not phone_found:
+                info_tab_selectors = [
+                    "button[aria-label*='Information']",
+                    "button[aria-label*='Info']",
+                    "div button[jsaction*='pane']",
+                    "button.hh2c6",
+                ]
+                for sel in info_tab_selectors:
+                    try:
+                        tabs = driver.find_elements(By.CSS_SELECTOR, sel)
+                        for tab in tabs:
+                            try:
+                                tab.click()
+                                time.sleep(1.5)
+                            except WebDriverException:
+                                continue
+                    except (NoSuchElementException, WebDriverException):
+                        continue
+
+                # Retry selectors after clicking tabs
+                if not website_found:
+                    for sel in website_selectors:
+                        try:
+                            el = driver.find_element(By.CSS_SELECTOR, sel)
+                            url = (el.get_attribute("href") or "").strip()
+                            if url and "google" not in url and not url.startswith("tel:"):
+                                if not url.startswith("http"):
+                                    url = "https://" + url
+                                business["website"] = url
+                                website_found = True
+                                logger.info("  website (after tab click): %s", url)
+                                break
+                        except (NoSuchElementException, WebDriverException):
+                            continue
+
+            # ================================================================
+            # PHASE D: Extract address if missing
+            # ================================================================
             if not business.get("address"):
                 try:
-                    addr_els = driver.find_elements(By.CSS_SELECTOR, "button[data-item-id='address']")
+                    addr_els = driver.find_elements(
+                        By.CSS_SELECTOR,
+                        "button[data-item-id='address'], button[aria-label*='Adresse'], button[aria-label*='Address']",
+                    )
                     for el in addr_els:
                         addr = (el.text or "").strip()
                         if addr:
+                            addr = re.sub(r'[\ue000-\uf8ff\n\r]', '', addr).strip()
                             business["address"] = addr
                             break
                 except (NoSuchElementException, WebDriverException):
                     pass
 
+            # Final status
+            if not website_found:
+                logger.info("  -> no website found for %s", name)
+            if not phone_found:
+                logger.debug("  -> no phone found for %s", name)
+
         except Exception as exc:
-            logger.debug("Error enriching %s: %s", business.get("name"), exc)
+            logger.error("Error enriching %s: %s", name, exc)
 
         return business
 
@@ -542,14 +700,78 @@ class GoogleMapsBusinessScraper:
         self.stats["websites_crawled"] += 1
         return list(all_emails)
 
-    def _fetch_page(self, url: str) -> Optional[str]:
-        """Fetch a web page using requests."""
-        try:
-            response = self.http_session.get(url, timeout=CRAWL_TIMEOUT, allow_redirects=True)
-            if response.status_code == 200:
-                return response.text
-        except Exception as exc:
-            logger.debug("Failed to fetch %s: %s", url, exc)
+    def _fetch_page(self, url: str, retries: int = 2) -> Optional[str]:
+        """Fetch a web page using requests with anti-bot headers and retry.
+
+        Many business websites block default Python requests. We mimic a
+        real Chrome browser and retry once on failure.
+        """
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Cache-Control": "no-cache",
+            "Pragma": "no-cache",
+            "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1",
+            "Connection": "keep-alive",
+        }
+
+        for attempt in range(retries + 1):
+            try:
+                resp = self.http_session.get(
+                    url,
+                    headers=headers,
+                    timeout=CRAWL_TIMEOUT,
+                    allow_redirects=True,
+                    verify=False,  # Skip SSL verification for flaky business sites
+                )
+                if resp.status_code == 200:
+                    content_type = resp.headers.get("Content-Type", "")
+                    if "text/html" in content_type or not content_type:
+                        return resp.text
+                    # If it's not HTML, try extracting text anyway
+                    return resp.text[:500000]  # Cap at 500KB
+                elif resp.status_code in (403, 429, 503):
+                    logger.debug("Fetch %s -> %d (attempt %d)", url, resp.status_code, attempt + 1)
+                    if attempt < retries:
+                        time.sleep(2 * (attempt + 1))  # Exponential backoff
+                        continue
+                else:
+                    logger.debug("Fetch %s -> %d", url, resp.status_code)
+                    break
+            except requests.exceptions.SSLError:
+                # Retry without verify
+                try:
+                    resp = self.http_session.get(
+                        url, headers=headers, timeout=CRAWL_TIMEOUT,
+                        allow_redirects=True, verify=False,
+                    )
+                    if resp.status_code == 200:
+                        return resp.text
+                except Exception:
+                    pass
+            except requests.exceptions.Timeout:
+                logger.debug("Timeout fetching %s (attempt %d)", url, attempt + 1)
+                if attempt < retries:
+                    time.sleep(3)
+                    continue
+            except Exception as exc:
+                logger.debug("Failed to fetch %s: %s", url, exc)
+                if attempt < retries:
+                    time.sleep(2)
+                    continue
         return None
 
     def process_business(

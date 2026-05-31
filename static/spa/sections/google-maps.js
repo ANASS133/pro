@@ -151,22 +151,22 @@
             }
 
             resultsBody.innerHTML = results.map((biz, idx) => {
+                const isPending = biz.status === 'pending';
                 const name = escapeHtml(biz.name || "—");
-                const address = escapeHtml(biz.address || "—");
-                const phone = escapeHtml(biz.phone || "—");
+                const address = biz.address ? escapeHtml(biz.address) : (isPending ? '<span class="gmaps-muted">Wird extrahiert...</span>' : "—");
+                const phone = biz.phone ? escapeHtml(biz.phone) : (isPending ? '<span class="gmaps-muted">Wird extrahiert...</span>' : "—");
                 const website = biz.website
                     ? `<a href="${escapeHtml(biz.website)}" target="_blank" rel="noopener" class="gmaps-link">${escapeHtml(biz.website.replace(/^https?:\/\//, "").slice(0, 35))}</a>`
-                    : "—";
+                    : (isPending ? '<span class="gmaps-muted">Wird extrahiert...</span>' : "—");
                 const emails = (biz.emails || []).length
                     ? biz.emails.map(e => `<span class="gmaps-email">${escapeHtml(e)}</span>`).join("<br>")
-                    : "—";
+                    : (isPending ? '<span class="gmaps-muted">Wird extrahiert...</span>' : "—");
                 const rating = biz.rating
                     ? `<span class="gmaps-rating">★ ${escapeHtml(biz.rating)}</span>`
-                    : "—";
+                    : (isPending ? '<span class="gmaps-muted">Wird extrahiert...</span>' : "—");
                 const badge = statusBadge(biz.status || "pending");
 
                 return `<tr class="gmaps-row gmaps-row--${biz.status || 'pending'}">
-                    <td class="gmaps-cell-num">${idx + 1}</td>
                     <td class="gmaps-cell-name">${name}</td>
                     <td>${address}</td>
                     <td>${phone}</td>
@@ -281,6 +281,8 @@
             if (progressError) { progressError.textContent = ""; progressError.hidden = true; }
             if (resultsPanel) resultsPanel.hidden = true;
             if (exportBar) exportBar.hidden = true;
+            if (discoverySummary) discoverySummary.hidden = true;
+            if (startExtractBtn) startExtractBtn.hidden = true;
 
             try {
                 const response = await fetch("/api/google-maps/start", {
@@ -340,12 +342,9 @@
                         pollTimer = null;
                     }
 
-                    // Show extraction button when discovery is done
                     if (job.phase === "ready_to_extract") {
-                        if (discoverySummary) {
-                            discoverySummary.hidden = false;
-                            if (discoveryCount) discoveryCount.textContent = job.total_businesses;
-                        }
+                        // Not used in 1-click mode, but keeping just in case
+                        if (discoverySummary) discoverySummary.hidden = false;
                         if (startExtractBtn) startExtractBtn.hidden = false;
                         if (searchBtn) {
                             searchBtn.disabled = true;
@@ -381,7 +380,7 @@
         // ── Event listeners ──────────────────────────────────────────
         form.addEventListener("submit", (event) => {
             event.preventDefault();
-            discoverBusinesses();
+            startSearch();
         });
 
         if (stopBtn) {

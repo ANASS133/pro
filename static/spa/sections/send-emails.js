@@ -171,6 +171,23 @@
             localStorage.setItem(SEND_FORM_STATE_KEY, JSON.stringify(state));
         }
 
+        function setInputValue(element, value) {
+            if (!element) {
+                return false;
+            }
+            const normalizedValue = String(value ?? '').trim();
+            element.value = normalizedValue;
+            return true;
+        }
+
+        function setTextareaValue(element, value) {
+            if (!element) {
+                return false;
+            }
+            element.value = String(value ?? '');
+            return true;
+        }
+
         function setInputValueIfEmpty(element, value) {
             if (!element) {
                 return false;
@@ -179,8 +196,7 @@
             if (!normalizedValue || String(element.value || '').trim()) {
                 return false;
             }
-            element.value = normalizedValue;
-            return true;
+            return setInputValue(element, normalizedValue);
         }
 
         function setTextareaValueIfEmpty(element, value) {
@@ -191,8 +207,7 @@
             if (!normalizedValue.trim() || String(element.value || '').trim()) {
                 return false;
             }
-            element.value = normalizedValue;
-            return true;
+            return setTextareaValue(element, normalizedValue);
         }
 
         function applyTransferDefaults(transferInfo) {
@@ -201,10 +216,10 @@
             const subjectInput = document.getElementById('send-emails-subject_template');
             const bodyInput = document.getElementById('send-emails-body_template');
 
-            const fullNameApplied = setInputValueIfEmpty(fullNameInput, transferInfo.full_name);
-            const senderApplied = setInputValueIfEmpty(senderEmailInput, transferInfo.sender_email);
-            const subjectApplied = setInputValueIfEmpty(subjectInput, transferInfo.email_subject_template);
-            const bodyApplied = setTextareaValueIfEmpty(bodyInput, transferInfo.email_body_template);
+            const fullNameApplied = setInputValue(fullNameInput, transferInfo.full_name);
+            const senderApplied = setInputValue(senderEmailInput, transferInfo.sender_email);
+            const subjectApplied = setInputValue(subjectInput, transferInfo.email_subject_template);
+            const bodyApplied = setTextareaValue(bodyInput, transferInfo.email_body_template);
 
             if (fullNameApplied || senderApplied || subjectApplied || bodyApplied) {
                 saveSendFormState();
@@ -578,21 +593,11 @@
                 newDeleteBtn.addEventListener('click', () => deleteLoadedCampaign());
             }
 
-            if (campaignInfo.full_name) {
-                setInputValueIfEmpty(document.getElementById('send-emails-full_name'), campaignInfo.full_name);
-            }
-            if (campaignInfo.sender_email) {
-                setInputValueIfEmpty(document.getElementById('send-emails-sender_email'), campaignInfo.sender_email);
-            }
-            if (campaignInfo.recipient_column) {
-                setInputValueIfEmpty(document.getElementById('send-emails-recipient_column'), campaignInfo.recipient_column);
-            }
-            if (campaignInfo.subject_template) {
-                setInputValueIfEmpty(document.getElementById('send-emails-subject_template'), campaignInfo.subject_template);
-            }
-            if (campaignInfo.body_template) {
-                setTextareaValueIfEmpty(document.getElementById('send-emails-body_template'), campaignInfo.body_template);
-            }
+            setInputValue(document.getElementById('send-emails-full_name'), campaignInfo.full_name || '');
+            setInputValue(document.getElementById('send-emails-sender_email'), campaignInfo.sender_email || '');
+            setInputValue(document.getElementById('send-emails-recipient_column'), campaignInfo.recipient_column || '');
+            setInputValue(document.getElementById('send-emails-subject_template'), campaignInfo.subject_template || '');
+            setTextareaValue(document.getElementById('send-emails-body_template'), campaignInfo.body_template || '');
             if (campaignInfo.one_document) {
                 const oneDocumentInfo = campaignInfo.one_document;
                 if (oneDocumentToggle) {

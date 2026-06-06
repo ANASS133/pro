@@ -653,17 +653,25 @@
                 setSourcePrompt("");
             }
                 
+            const isEditCampaign = Boolean(data.edit_campaign_id);
             let docs = [];
             if (data.application_data && Array.isArray(data.application_data.documents)) {
                 docs = data.application_data.documents;
             } else if (data.application_summary && Array.isArray(data.application_summary.documents)) {
                 docs = data.application_summary.documents;
             }
-            
+
             if (docs.length > 0) {
                 renderApplicationDocuments(docs);
-            } else {
+            } else if (!isEditCampaign) {
                 renderCachedApplicationDocuments();
+            } else {
+                currentDocuments = [];
+                if (els.pdfContainer) els.pdfContainer.hidden = true;
+                if (els.sourcePrompt) {
+                    els.sourcePrompt.hidden = false;
+                    els.sourcePrompt.textContent = "Für diese gespeicherte Kampagne sind keine separaten Bewerbungsdokumente im Editor hinterlegt.";
+                }
             }
 
             renderColumns(state.columns);

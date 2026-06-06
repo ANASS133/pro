@@ -3146,10 +3146,39 @@ def _build_pdf_campaign_editor_session_payload(campaign_id: str) -> Tuple[Dict, 
         if isinstance(design_payload, dict)
         else ""
     )
+
+    campaign_display_name = str(campaign.get("full_name") or campaign.get("name") or "").strip()
+    campaign_sender_email = str(campaign.get("sender_email") or "").strip()
+    campaign_application_summary = {
+        "id": normalized_campaign_id,
+        "full_name": campaign_display_name,
+        "email": campaign_sender_email,
+        "sender_email": campaign_sender_email,
+        "whatsapp": "",
+        "bereich": "",
+        "bewerbungen": "",
+        "bank": "",
+        "language_level": "",
+        "source_label": "Campaign",
+        "document_count": 0,
+        "created_at_display": str(campaign.get("created_at") or "").strip(),
+        "documents": [],
+    }
+    campaign_application_data = {
+        "id": normalized_campaign_id,
+        "full_name": campaign_display_name,
+        "email": campaign_sender_email,
+        "sender_email": campaign_sender_email,
+        "documents": [],
+        "source_label": "Campaign",
+    }
+    session_data["application_summary"] = dict(campaign_application_summary)
+    session_data["application_data"] = dict(campaign_application_data)
+    session_payload["application_summary"] = dict(campaign_application_summary)
+    session_payload["application_data"] = dict(campaign_application_data)
+
     session_payload["edit_campaign_id"] = normalized_campaign_id
-    session_payload["display_name"] = str(
-        campaign.get("full_name") or campaign.get("name") or ""
-    ).strip()
+    session_payload["display_name"] = campaign_display_name
     return session_payload, 200
 
 

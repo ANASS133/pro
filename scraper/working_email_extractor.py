@@ -9,10 +9,9 @@ from typing import Dict, List, Optional, Set
 import pandas as pd
 import requests
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
-from webdriver_manager.chrome import ChromeDriverManager
 
+from .browser_driver import find_browser, new_options, start_driver
 from .true_captcha_solver import TrueCaptchaSolver
 
 logger = logging.getLogger(__name__)
@@ -66,7 +65,9 @@ class WorkingEmailExtractor:
         return str(value).strip().strip(".,;:").lower()
 
     def setup_driver(self, headless: bool):
-        options = webdriver.ChromeOptions()
+        browser_name, binary_path = find_browser()
+        options = new_options(browser_name)
+        options.binary_location = binary_path
         if headless:
             options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
@@ -75,10 +76,7 @@ class WorkingEmailExtractor:
             "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         )
 
-        self.driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()),
-            options=options,
-        )
+        self.driver = start_driver(browser_name, options)
 
     def check_for_captcha(self) -> bool:
         captcha_selectors = [

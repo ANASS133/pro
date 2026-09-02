@@ -38,6 +38,7 @@ Optional local environment values in `.env`:
 
 ```env
 SECRET_KEY=change-me
+SELENIUM_BROWSER=auto
 TRUECAPTCHA_USERID=
 TRUECAPTCHA_APIKEY=
 GMAIL_SENDER_EMAIL=

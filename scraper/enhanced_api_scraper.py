@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 from typing import Dict, List, Optional
 
@@ -28,6 +29,12 @@ class EnhancedJobScraper:
             }
         )
 
+    @staticmethod
+    def normalize_keyword(keyword: str) -> str:
+        """Correct common search typos rejected by the upstream API."""
+        value = str(keyword or "").strip()
+        return re.sub(r"\bausbildungplatz\b", "Ausbildungsplatz", value, flags=re.IGNORECASE)
+
     def fetch_all_jobs(
         self,
         keyword: str,
@@ -41,12 +48,13 @@ class EnhancedJobScraper:
         page = 1
         size = 25
 
-        logger.info("Start fetch: keyword=%s location=%s max_jobs=%s", keyword, location, max_jobs)
+        search_keyword = self.normalize_keyword(keyword)
+        logger.info("Start fetch: keyword=%s location=%s max_jobs=%s", search_keyword, location, max_jobs)
 
         while len(all_jobs) < max_jobs:
             params = {
                 "angebotsart": 4,
-                "was": keyword.strip(),
+                "was": search_keyword,
                 "page": page,
                 "size": size,
                 "pav": "false",
@@ -62,6 +70,7 @@ class EnhancedJobScraper:
             try:
                 response = self.session.get(self.base_url, params=params, timeout=30)
                 response.raise_for_status()
+                response.encoding = "utf-8"
                 data = response.json()
             except requests.RequestException as exc:
                 logger.error("Error on page %s: %s", page, exc)

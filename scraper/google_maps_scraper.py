@@ -6,7 +6,6 @@ and crawl their websites to find email addresses.
 """
 
 import logging
-import os as _os_module
 import re
 import time
 import random
@@ -17,7 +16,6 @@ from urllib.parse import urljoin, urlparse
 import requests
 from bs4 import BeautifulSoup
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
@@ -28,7 +26,8 @@ from selenium.common.exceptions import (
     TimeoutException,
     WebDriverException,
 )
-from webdriver_manager.chrome import ChromeDriverManager
+
+from .browser_driver import find_browser, new_options, start_driver
 
 logger = logging.getLogger(__name__)
 
@@ -181,7 +180,7 @@ class GoogleMapsBusinessScraper:
     """Scrapes Google Maps for business listings and extracts emails from their websites."""
 
     def __init__(self, headless: bool = True):
-        self.driver: Optional[webdriver.Chrome] = None
+        self.driver = None
         self.http_session = requests.Session()
         self.http_session.headers.update({"User-Agent": CRAWL_USER_AGENT})
         self.headless = headless
@@ -199,29 +198,13 @@ class GoogleMapsBusinessScraper:
             "websites_crawled": 0,
         }
 
-    @staticmethod
-    def _find_chrome_binary() -> str:
-        """Locate Chrome/Chromium browser binary."""
-        candidates = [
-            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-            _os_module.path.expandvars(r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"),
-            r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-        ]
-        for path in candidates:
-            if _os_module.path.exists(path):
-                return path
-        raise FileNotFoundError(
-            "Chrome/Chromium browser not found. Install Chrome from https://www.google.com/chrome/"
-        )
-
-    def _ensure_driver(self) -> webdriver.Chrome:
+    def _ensure_driver(self):
         if self.driver is not None:
             return self.driver
 
-        options = webdriver.ChromeOptions()
-        options.binary_location = self._find_chrome_binary()
+        browser_name, binary_path = find_browser()
+        options = new_options(browser_name)
+        options.binary_location = binary_path
         if self.headless:
             options.add_argument("--headless=new")
         options.add_argument("--no-sandbox")
@@ -237,10 +220,7 @@ class GoogleMapsBusinessScraper:
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option("useAutomationExtension", False)
 
-        self.driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()),
-            options=options,
-        )
+        self.driver = start_driver(browser_name, options)
         self.driver.execute_cdp_cmd(
             "Page.addScriptToEvaluateOnNewDocument",
             {

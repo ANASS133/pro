@@ -394,7 +394,7 @@
                         <div id="progress_error_1" class="progress-error"></div>
                         <div class="progress-actions">
                             <button id="stop_btn_1" type="button" class="progress-btn stop">Stoppen + Ergebnis herunterladen</button>
-                            <button id="continue_btn_1" type="button" class="progress-btn continue">Fortsetzen</button>
+                            <button data-auto-continue id="continue_btn_1" type="button" class="progress-btn continue">Fortsetzen</button>
                             <button id="download_btn_1" type="button" class="progress-btn download">Ergebnis herunterladen</button>
                             <button id="anschreiben_btn_1" type="button" class="progress-btn" style="background:#667eea; display:none;">Zu Anschreiben</button>
                         </div>
@@ -468,7 +468,7 @@
                         <div id="progress_error_2" class="progress-error"></div>
                         <div class="progress-actions">
                             <button id="stop_btn_2" type="button" class="progress-btn stop">Stoppen + Ergebnis herunterladen</button>
-                            <button id="continue_btn_2" type="button" class="progress-btn continue">Fortsetzen</button>
+                            <button data-auto-continue id="continue_btn_2" type="button" class="progress-btn continue">Fortsetzen</button>
                             <button id="download_btn_2" type="button" class="progress-btn download">Ergebnis herunterladen</button>
                             <button id="anschreiben_btn_2" type="button" class="progress-btn" style="background:#667eea; display:none;">Zu Anschreiben</button>
                         </div>
@@ -910,5 +910,6 @@
         restoreIndexState();
         bindIndexStatePersistence();
     </script>
+    <script src="{{ url_for('static', filename='auto_continue.js') }}" defer></script>
 </body>
 </html>

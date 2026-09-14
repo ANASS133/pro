@@ -107,7 +107,7 @@
     <div id="failurePauseAlert" class="captcha-alert" style="display: none; background:#fbeaea; border-color:#f5c2c7; color:#842029;">
         <h3>Pausiert nach Fehler</h3>
         <p id="failureText">Eine Stelle ist fehlgeschlagen. Auf Fortsetzen klicken.</p>
-        <button onclick="continueScraping()" class="button" style="background:#198754;">Fortsetzen</button>
+        <button data-auto-continue onclick="continueScraping()" class="button" style="background:#198754;">Fortsetzen</button>
     </div>
 
     <div style="margin-top: 20px;">
@@ -180,5 +180,6 @@
         setInterval(updateProgress, 2000);
         updateProgress();
     </script>
+    <script src="{{ url_for('static', filename='auto_continue.js') }}" defer></script>
 </body>
 </html>

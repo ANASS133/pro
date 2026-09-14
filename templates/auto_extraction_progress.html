@@ -163,7 +163,7 @@
             <p id="errorMessage" style="color:#b00;"></p>
             <div id="pauseBox" class="pause-box">
                 <p id="pauseReason">Eine Stelle ist fehlgeschlagen.</p>
-                <button onclick="continueScraping()" class="button" style="background:#198754;">Fortsetzen</button>
+                <button data-auto-continue onclick="continueScraping()" class="button" style="background:#198754;">Fortsetzen</button>
             </div>
         </div>
 
@@ -275,5 +275,6 @@
         setInterval(updateProgress, 1500);
         updateProgress();
     </script>
+    <script src="{{ url_for('static', filename='auto_continue.js') }}" defer></script>
 </body>
 </html>

@@ -1,5 +1,8 @@
 import re
+import html
 from datetime import date
+
+from .html_template import is_html_template
 
 
 class TemplateService:
@@ -86,6 +89,7 @@ class TemplateService:
             return ""
 
         builtin_values = self._builtin_values()
+        escape_values = is_html_template(template)
         exact_lookup, lower_lookup, normalized_lookup = self._build_row_lookup(
             row_data or {}, columns or []
         )
@@ -101,7 +105,7 @@ class TemplateService:
             )
             if value is None:
                 return ""
-            return str(value)
+            return html.escape(str(value), quote=True) if escape_values else str(value)
 
         return self.placeholder_pattern.sub(_replace, template)
 

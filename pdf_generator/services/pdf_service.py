@@ -1,11 +1,14 @@
 from datetime import datetime
+import base64
 import html
+import io
 import os
 import re
 import tempfile
 
 from fpdf import FPDF
 from pypdf import PdfReader, PdfWriter
+from .html_template import is_html_template
 
 MM_PER_INCH = 25.4
 PT_PER_INCH = 72.0
@@ -78,6 +81,9 @@ class PDFService:
 
     def create_pdf(self, content, output_path, metadata=None, design_pdf_path=None, layout_options=None):
         try:
+            if is_html_template(content):
+                # HTML supplies its own page layout, including @page print rules.
+                return self.create_html_pdf(content, output_path, metadata=metadata)
             if design_pdf_path:
                 return self._create_pdf_with_design(
                     content=content,
@@ -265,8 +271,73 @@ class PDFService:
             except OSError:
                 pass
 
-    def create_html_pdf(self, html_content, output_path):
-        raise NotImplementedError('Use pdfkit/weasyprint if HTML to PDF is required.')
+    def create_html_pdf(self, html_content, output_path, metadata=None):
+        from bs4 import BeautifulSoup
+        from scraper.browser_driver import find_browser, new_options, start_driver
+
+        document = BeautifulSoup(html_content, 'html.parser')
+        # Templates are static documents. Do not execute pasted scripts or redirects.
+        for tag in document.select('script, iframe, object, embed, base, meta[http-equiv]'):
+            tag.decompose()
+        if document.html is None:
+            wrapper = BeautifulSoup('<html><head></head><body></body></html>', 'html.parser')
+            wrapper.body.extend(list(document.contents))
+            document = wrapper
+        if document.head is None:
+            document.html.insert(0, document.new_tag('head'))
+        policy = document.new_tag('meta')
+        policy['http-equiv'] = 'Content-Security-Policy'
+        policy['content'] = (
+            "default-src 'none'; style-src 'unsafe-inline' https:; "
+            "img-src data: https:; font-src data: https:; base-uri 'none'; form-action 'none'"
+        )
+        document.head.insert(0, policy)
+        defaults = document.new_tag('style')
+        defaults.string = '@page { size: A4; margin: 0; } html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }'
+        document.head.insert(1, defaults)
+
+        browser_name, binary = find_browser()
+        options = new_options(browser_name)
+        options.binary_location = binary
+        options.add_argument('--headless=new')
+        options.add_argument('--disable-gpu')
+        options.add_argument('--no-first-run')
+        driver = start_driver(browser_name, options)
+        try:
+            driver.set_page_load_timeout(30)
+            driver.set_script_timeout(30)
+            driver.execute_cdp_cmd('Emulation.setEmulatedMedia', {'media': 'print'})
+            encoded = base64.b64encode(str(document).encode('utf-8')).decode('ascii')
+            driver.get('data:text/html;charset=utf-8;base64,' + encoded)
+            driver.execute_async_script('''
+                const done = arguments[arguments.length - 1];
+                Promise.all([document.fonts.ready, ...Array.from(document.images, img =>
+                    img.complete ? Promise.resolve() : new Promise(resolve => {
+                        img.onload = resolve; img.onerror = resolve;
+                    }))]).then(() => done());
+            ''')
+            result = driver.execute_cdp_cmd('Page.printToPDF', {
+                'printBackground': True, 'preferCSSPageSize': True,
+                'displayHeaderFooter': False, 'paperWidth': 210 / 25.4,
+                'paperHeight': 297 / 25.4, 'marginTop': 0, 'marginBottom': 0,
+                'marginLeft': 0, 'marginRight': 0,
+            })
+            reader = PdfReader(io.BytesIO(base64.b64decode(result['data'])))
+            if not reader.pages:
+                raise ValueError('HTML rendering produced an empty PDF')
+            writer = PdfWriter()
+            writer.append_pages_from_reader(reader)
+            if metadata:
+                writer.add_metadata({
+                    '/Title': metadata.get('title', 'Document'),
+                    '/Author': metadata.get('author', 'PDF Generator'),
+                    '/Subject': metadata.get('subject', ''),
+                })
+            with open(output_path, 'wb') as output:
+                writer.write(output)
+            return output_path
+        finally:
+            driver.quit()
 
     def set_font_style(self, font='helvetica', size=11):
         self.font = font

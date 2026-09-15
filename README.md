@@ -45,6 +45,21 @@ GMAIL_SENDER_EMAIL=
 GMAIL_APP_PASSWORD=
 ```
 
+## HTML/CSS application letters
+
+Paste a full HTML document (including its `<style>` block) or an HTML fragment
+into the Anschreiben template editor, save it, then use the PDF preview or batch
+generation. HTML is detected automatically. Existing text templates and basic
+bold/italic formatting continue to work as before.
+
+HTML templates use installed Chrome/Edge through Selenium. CSS controls the
+layout, including `@page` and `@media print`; the default is A4 with zero page
+margins. Text layout controls and uploaded PDF backgrounds do not apply to HTML.
+Placeholders such as `{{company}}` and `{{heutigenDatum}}` still work, with data
+escaped as HTML text. Use inline CSS, HTTPS assets, or embedded data images/fonts;
+relative/local assets and JavaScript are not supported. Rendering requires a
+working browser driver (downloaded automatically by webdriver-manager).
+
 ## Tests
 
 Run the built-in automated checks:

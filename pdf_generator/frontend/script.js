@@ -1,4 +1,4 @@
-﻿const API_BASE = '/api';
+const API_BASE = '/api';
 
 const state = {
     sessionId: null,
@@ -67,6 +67,33 @@ const els = {
     closeFooterBtn: document.getElementById('closeFooterBtn'),
     toast: document.getElementById('toast'),
     formatToolbar: document.getElementById('formatToolbar'),
+    atsTailorBtn: document.getElementById('atsTailorBtn'),
+    atsModal: document.getElementById('atsModal'),
+    closeAtsModalBtn: document.getElementById('closeAtsModalBtn'),
+    atsJobTitle: document.getElementById('atsJobTitle'),
+    atsCompanyName: document.getElementById('atsCompanyName'),
+    atsRequirements: document.getElementById('atsRequirements'),
+    atsCustomBullets: document.getElementById('atsCustomBullets'),
+    atsRunBtn: document.getElementById('atsRunBtn'),
+    atsCostBadge: document.getElementById('atsCostBadge'),
+    atsCostText: document.getElementById('atsCostText'),
+    atsResultArea: document.getElementById('atsResultArea'),
+    atsResultBullets: document.getElementById('atsResultBullets'),
+    atsInsertBtn: document.getElementById('atsInsertBtn'),
+    atsCopyBtn: document.getElementById('atsCopyBtn'),
+    goldenHookBtn: document.getElementById('goldenHookBtn'),
+    goldenHookModal: document.getElementById('goldenHookModal'),
+    closeGoldenHookModalBtn: document.getElementById('closeGoldenHookModalBtn'),
+    hookCompanyName: document.getElementById('hookCompanyName'),
+    hookJobTitle: document.getElementById('hookJobTitle'),
+    hookContext: document.getElementById('hookContext'),
+    hookRunBtn: document.getElementById('hookRunBtn'),
+    hookCostBadge: document.getElementById('hookCostBadge'),
+    hookCostText: document.getElementById('hookCostText'),
+    hookResultArea: document.getElementById('hookResultArea'),
+    hookResultText: document.getElementById('hookResultText'),
+    hookInsertBtn: document.getElementById('hookInsertBtn'),
+    hookCopyBtn: document.getElementById('hookCopyBtn'),
 };
 
 function ensureTemplateState() {
@@ -624,6 +651,248 @@ els.formatToolbar?.addEventListener('click', (event) => {
 els.templateEditor.addEventListener('input', () => {
     persistActiveTemplateValue();
     renderTemplateList();
+});
+
+// ---------------------------------------------------------------------------
+// ATS Keyword Tailoring Controller (powered by GPT Luna)
+// ---------------------------------------------------------------------------
+let currentTailoredBullets = [];
+
+function openAtsModal() {
+    if (!els.atsModal) return;
+    if (state.previewRows && state.previewRows.length > 0) {
+        const firstRow = state.previewRows[0];
+        const possibleCompany = firstRow['Unternehmen'] || firstRow['Firma'] || firstRow['Company'];
+        if (possibleCompany && els.atsCompanyName) {
+            els.atsCompanyName.value = possibleCompany;
+        }
+        const possibleRole = firstRow['Beruf'] || firstRow['Stelle'] || firstRow['Job'] || firstRow['Position'];
+        if (possibleRole && els.atsJobTitle) {
+            els.atsJobTitle.value = possibleRole;
+        }
+    }
+    els.atsModal.classList.remove('hidden');
+}
+
+function closeAtsModal() {
+    if (els.atsModal) els.atsModal.classList.add('hidden');
+}
+
+async function runAtsTailoring() {
+    if (!els.atsRunBtn) return;
+    const jobTitle = (els.atsJobTitle?.value || '').trim();
+    const companyName = (els.atsCompanyName?.value || '').trim();
+    const jobRequirements = (els.atsRequirements?.value || '').trim();
+    const currentBullets = (els.atsCustomBullets?.value || '').trim();
+
+    els.atsRunBtn.disabled = true;
+    els.atsRunBtn.innerHTML = '<span>⚡ Optimiere mit Luna...</span>';
+    if (els.atsCostBadge) els.atsCostBadge.classList.add('hidden');
+    if (els.atsResultArea) els.atsResultArea.classList.add('hidden');
+
+    try {
+        const resp = await fetch('/api/pdf/ats-tailor', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                job_title: jobTitle,
+                company_name: companyName,
+                job_requirements: jobRequirements,
+                current_bullets: currentBullets,
+                profile_id: 'anass_sibbi'
+            })
+        });
+
+        const data = await resp.json();
+        if (!resp.ok || !data.success) {
+            throw new Error(data.error || 'ATS-Optimierung fehlgeschlagen');
+        }
+
+        currentTailoredBullets = data.tailored_bullets || [];
+
+        if (els.atsResultBullets) {
+            els.atsResultBullets.innerHTML = currentTailoredBullets
+                .map(b => `<div class="ats-bullet-item">• ${escapeHtml(b)}</div>`)
+                .join('');
+        }
+
+        if (els.atsCostBadge && els.atsCostText) {
+            els.atsCostBadge.classList.remove('hidden');
+            if (data.from_cache) {
+                els.atsCostBadge.className = 'ats-cost-badge cached';
+                els.atsCostText.textContent = '⚡ 0 Tokens (Aus lokalem Cache - $0.00)';
+            } else {
+                const cost = data.usage?.estimated_cost_usd || 0.00003;
+                const tokens = data.usage?.total_tokens || 0;
+                els.atsCostBadge.className = 'ats-cost-badge';
+                els.atsCostText.textContent = `⚡ ${tokens} Tokens | $${cost.toFixed(6)} USD`;
+            }
+        }
+
+        if (els.atsResultArea) els.atsResultArea.classList.remove('hidden');
+        showToast('ATS-Keywords erfolgreich optimiert!');
+    } catch (err) {
+        showToast(err.message || 'Fehler beim Anpassen');
+    } finally {
+        els.atsRunBtn.disabled = false;
+        els.atsRunBtn.innerHTML = '<svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg><span>Keywords optimieren (~$0.00003)</span>';
+    }
+}
+
+function insertTailoredBullets() {
+    if (!currentTailoredBullets || !currentTailoredBullets.length) return;
+    const formattedText = '\n' + currentTailoredBullets.map(b => `• ${b}`).join('\n') + '\n';
+
+    const editor = els.templateEditor;
+    if (!editor) return;
+
+    const start = editor.selectionStart ?? editor.value.length;
+    const end = editor.selectionEnd ?? editor.value.length;
+    const before = editor.value.substring(0, start);
+    const after = editor.value.substring(end);
+    editor.value = before + formattedText + after;
+
+    persistActiveTemplateValue();
+    renderTemplateList();
+    closeAtsModal();
+    showToast('Stichpunkte ins Anschreiben eingefügt');
+}
+
+function copyTailoredBullets() {
+    if (!currentTailoredBullets || !currentTailoredBullets.length) return;
+    const formattedText = currentTailoredBullets.map(b => `• ${b}`).join('\n');
+    navigator.clipboard.writeText(formattedText).then(() => {
+        showToast('In Zwischenablage kopiert!');
+    }).catch(() => {
+        showToast('Kopieren fehlgeschlagen');
+    });
+}
+
+els.atsTailorBtn?.addEventListener('click', openAtsModal);
+els.closeAtsModalBtn?.addEventListener('click', closeAtsModal);
+els.atsRunBtn?.addEventListener('click', runAtsTailoring);
+els.atsInsertBtn?.addEventListener('click', insertTailoredBullets);
+els.atsCopyBtn?.addEventListener('click', copyTailoredBullets);
+
+// ---------------------------------------------------------------------------
+// Golden Hook Controller (powered by GPT Luna)
+// ---------------------------------------------------------------------------
+let currentGoldenHook = '';
+
+function openGoldenHookModal() {
+    if (!els.goldenHookModal) return;
+    if (state.previewRows && state.previewRows.length > 0) {
+        const firstRow = state.previewRows[0];
+        const possibleCompany = firstRow['Unternehmen'] || firstRow['Firma'] || firstRow['Company'];
+        if (possibleCompany && els.hookCompanyName) {
+            els.hookCompanyName.value = possibleCompany;
+        }
+        const possibleRole = firstRow['Beruf'] || firstRow['Stelle'] || firstRow['Job'] || firstRow['Position'];
+        if (possibleRole && els.hookJobTitle) {
+            els.hookJobTitle.value = possibleRole;
+        }
+    }
+    els.goldenHookModal.classList.remove('hidden');
+}
+
+function closeGoldenHookModal() {
+    if (els.goldenHookModal) els.goldenHookModal.classList.add('hidden');
+}
+
+async function runGoldenHook() {
+    if (!els.hookRunBtn) return;
+    const company = (els.hookCompanyName?.value || '').trim();
+    const jobTitle = (els.hookJobTitle?.value || '').trim();
+    const context = (els.hookContext?.value || '').trim();
+
+    els.hookRunBtn.disabled = true;
+    els.hookRunBtn.innerHTML = '<span>✨ Generiere Hook mit Luna...</span>';
+    if (els.hookCostBadge) els.hookCostBadge.classList.add('hidden');
+    if (els.hookResultArea) els.hookResultArea.classList.add('hidden');
+
+    try {
+        const resp = await fetch('/api/pdf/golden-hook', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                company_name: company,
+                job_title: jobTitle,
+                job_requirements: context,
+                profile_id: 'anass_sibbi'
+            })
+        });
+
+        const data = await resp.json();
+        if (!resp.ok || !data.success) {
+            throw new Error(data.error || 'Golden Hook Erstellung fehlgeschlagen');
+        }
+
+        currentGoldenHook = data.hook || '';
+        if (els.hookResultText) {
+            els.hookResultText.textContent = `"${currentGoldenHook}"`;
+        }
+
+        if (els.hookCostBadge && els.hookCostText) {
+            els.hookCostBadge.classList.remove('hidden');
+            if (data.from_cache) {
+                els.hookCostBadge.className = 'ats-cost-badge cached';
+                els.hookCostText.textContent = '⚡ 0 Tokens (Aus Cache - $0.00)';
+            } else {
+                const cost = data.usage?.estimated_cost_usd || 0.000015;
+                const tokens = data.usage?.total_tokens || 0;
+                els.hookCostBadge.className = 'ats-cost-badge';
+                els.hookCostText.textContent = `⚡ ${tokens} Tokens | $${cost.toFixed(6)} USD`;
+            }
+        }
+
+        if (els.hookResultArea) els.hookResultArea.classList.remove('hidden');
+        showToast('Golden Hook erfolgreich generiert!');
+    } catch (err) {
+        showToast(err.message || 'Fehler beim Erstellen');
+    } finally {
+        els.hookRunBtn.disabled = false;
+        els.hookRunBtn.innerHTML = '<svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg><span>Golden Hook generieren (~$0.000015)</span>';
+    }
+}
+
+function insertGoldenHook() {
+    if (!currentGoldenHook) return;
+    const editor = els.templateEditor;
+    if (!editor) return;
+
+    const start = editor.selectionStart ?? 0;
+    const end = editor.selectionEnd ?? 0;
+    const before = editor.value.substring(0, start);
+    const after = editor.value.substring(end);
+    editor.value = before + currentGoldenHook + '\n\n' + after;
+
+    persistActiveTemplateValue();
+    renderTemplateList();
+    closeGoldenHookModal();
+    showToast('Golden Hook als Einleitung eingefügt');
+}
+
+function copyGoldenHook() {
+    if (!currentGoldenHook) return;
+    navigator.clipboard.writeText(currentGoldenHook).then(() => {
+        showToast('In Zwischenablage kopiert!');
+    }).catch(() => {
+        showToast('Kopieren fehlgeschlagen');
+    });
+}
+
+els.goldenHookBtn?.addEventListener('click', openGoldenHookModal);
+els.closeGoldenHookModalBtn?.addEventListener('click', closeGoldenHookModal);
+els.hookRunBtn?.addEventListener('click', runGoldenHook);
+els.hookInsertBtn?.addEventListener('click', insertGoldenHook);
+els.hookCopyBtn?.addEventListener('click', copyGoldenHook);
+
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closePreview();
+        closeAtsModal();
+        closeGoldenHookModal();
+    }
 });
 
 const pageParams = new URLSearchParams(window.location.search);

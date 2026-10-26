@@ -41,6 +41,13 @@ class HTMLTemplateTests(unittest.TestCase):
                 self.assertIn('Hello', text)
                 self.assertIn('world', text)
 
+    def test_create_pdf_stream_in_memory(self):
+        stream = PDFService().create_pdf_stream('<b>In-Memory</b> Test')
+        reader = PdfReader(stream)
+        self.assertGreater(len(reader.pages), 0)
+        text = ''.join(page.extract_text() for page in reader.pages)
+        self.assertIn('In-Memory', text)
+
 
 if __name__ == '__main__':
     unittest.main()

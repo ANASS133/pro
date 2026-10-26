@@ -250,8 +250,34 @@
                     <div>Ort: {{ job.location or 'k. A.' }}</div>
                     <div>Erfasst: {{ job.scraped_at or 'k. A.' }}</div>
                 </div>
-                {% if job.url %}
-                <a href="{{ job.url }}" target="_blank" rel="noopener noreferrer" class="job-link">Stelle ansehen</a>
+                {% if job.email and '@' in job.email and 'FAILED' not in job.email and 'ERROR' not in job.email %}
+                <div style="margin: 8px 0; color: #059669; font-weight: 700; font-size: 13px;">
+                    ✉️ E-Mail: {{ job.email }}
+                </div>
+                {% else %}
+                <div style="margin: 8px 0; color: #d97706; font-size: 13px; font-weight: 700;">
+                    📝 Keine E-Mail hinterlegt • Bewerbung über Online-Formular
+                </div>
+                {% endif %}
+                {% set apply_link = job.apply_url or job.form_link or job.url %}
+                {% if apply_link %}
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px;">
+                    {% if not (job.email and '@' in job.email and 'FAILED' not in job.email) %}
+                    <a href="{{ apply_link }}" target="_blank" rel="noopener noreferrer" class="job-link" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; font-weight: 700;">
+                        📝 Zum Bewerbungsformular ↗
+                    </a>
+                    {% else %}
+                    <a href="{{ apply_link }}" target="_blank" rel="noopener noreferrer" class="job-link">
+                        Stelle ansehen ↗
+                    </a>
+                    <a href="mailto:{{ job.email }}?subject=Bewerbung%20als%20{{ job.title|urlencode }}" class="job-link" style="background: #10b981; color: #fff;">
+                        ✉️ E-Mail senden
+                    </a>
+                    {% endif %}
+                    <button type="button" class="job-link job-autofill-btn" data-job-url="{{ apply_link }}" data-job-title="{{ job.title }}" data-job-company="{{ job.company }}" style="background: #6366f1; color: #fff; border: none; cursor: pointer;">
+                        ⚡ Open & Autofill
+                    </button>
+                </div>
                 {% endif %}
             </div>
             {% endfor %}

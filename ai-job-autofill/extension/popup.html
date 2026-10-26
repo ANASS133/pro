@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Job Autofill</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="ambient-glow"></div>
+  <div class="container">
+    <!-- Top Global Header -->
+    <header class="header">
+      <div class="brand">
+        <div class="brand-badge">
+          <span class="brand-icon">⚡</span>
+        </div>
+        <div class="brand-text">
+          <h2>AI Job Autofill</h2>
+          <span class="brand-sub">GPT-5.6 Luna</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <button id="openSidePanelBtn" class="pill-btn" type="button" title="Open persistent Chrome side panel">
+          <span>◫ Side Panel</span>
+        </button>
+        <button id="openAppsBtn" class="pill-btn" type="button" title="View applied jobs history">
+          <span>📋 History</span>
+          <span id="appsBadge" class="count-badge" style="display: none;">0</span>
+        </button>
+        <button id="openCorrectionsBtn" class="pill-btn" type="button" title="View & manage saved site corrections">
+          <span>🧠 Memory</span>
+          <span id="correctionsBadge" class="count-badge" style="display: none;">0</span>
+        </button>
+        <div id="serverIndicator" class="indicator offline" title="Backend server status">
+          <span class="indicator-dot"></span>
+          <span id="serverStatusText">Offline</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- VIEW 1: SETUP VIEW (Profile & Document Selection) -->
+    <main id="setupView" class="view-panel active">
+      <!-- Multi-step resume notification if active -->
+      <div id="multiStepBanner" class="info-banner" style="display: none;">
+        <span class="info-icon">🔄</span>
+        <div class="info-content">
+          <strong id="multiStepTitle">Multi-Step Session Active</strong>
+          <span id="multiStepDesc">Previous approved answers saved for this domain.</span>
+        </div>
+        <button id="clearSessionBtn" class="text-btn" type="button" title="Start fresh application">Reset</button>
+      </div>
+
+      <!-- Applicant Profile Selector Card -->
+      <div class="card profile-card">
+        <div class="card-header">
+          <div class="card-header-title">
+            <span class="card-icon">👤</span>
+            <label for="profileSelect">Candidate Profile</label>
+          </div>
+          <div class="card-actions">
+            <button id="refreshProfilesBtn" class="icon-btn" title="Refresh profiles">↻</button>
+            <label for="profileFileInput" class="icon-btn-label" title="Upload profile JSON">➕ New</label>
+            <input type="file" id="profileFileInput" accept=".json" style="display: none;">
+          </div>
+        </div>
+
+        <div class="profile-select-wrap">
+          <select id="profileSelect" class="select-input">
+            <option value="">Loading profiles...</option>
+          </select>
+        </div>
+
+        <div id="profilePreview" class="profile-preview">
+          <div id="profileAvatar" class="candidate-avatar">AI</div>
+          <div class="preview-details">
+            <div id="previewName" class="preview-name">Select a profile</div>
+            <div id="previewTitle" class="preview-title"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Applicant Documents Section -->
+      <div class="card documents-card">
+        <div class="card-header">
+          <div class="card-header-title">
+            <span class="card-icon">📁</span>
+            <label>Applicant Documents</label>
+          </div>
+          <div class="card-actions">
+            <label for="docFileInput" class="icon-btn-label" title="Upload files (.pdf, .jpg, .jpeg, .png)">➕ Add Docs</label>
+            <input type="file" id="docFileInput" accept=".pdf,.jpg,.jpeg,.png" multiple style="display: none;">
+          </div>
+        </div>
+
+        <!-- Warning banner if matching folder or required documents missing -->
+        <div id="docWarningBanner" class="warning-banner" style="display: none;"></div>
+
+        <!-- Document items container -->
+        <div id="documentsList" class="documents-list">
+          <div class="doc-empty-state">No applicant selected</div>
+        </div>
+      </div>
+
+      <!-- Action Buttons Group -->
+      <div class="action-buttons-group">
+        <button id="scanBtn" class="btn primary-btn glow-btn" type="button">
+          <span class="btn-icon">⚡</span>
+          <span class="btn-text">Scan & Match Form</span>
+        </button>
+        <button id="openDockBtn" class="btn secondary-btn dock-btn" type="button" title="Float over page without closing">
+          <span class="btn-icon">📌</span>
+          <span>Floating In-Page Dock</span>
+        </button>
+      </div>
+
+      <!-- Status Indicator -->
+      <div id="status" class="status">Ready to scan current webpage</div>
+
+      <!-- Inaccessible Frames Warning Banner -->
+      <div id="framesWarning" class="warning-banner" style="display: none;"></div>
+
+      <!-- CAPTCHA Warning Banner -->
+      <div id="captchaWarningBanner" class="warning-banner captcha-banner" style="display: none;">
+        🛡️ Bot protection / CAPTCHA detected on this page. Please complete verification manually before submitting.
+      </div>
+
+      <!-- Collapsible JSON Template Section -->
+      <div class="card template-card">
+        <div class="card-header template-header">
+          <div class="template-header-title">
+            <span class="template-icon">{ }</span>
+            <label>Profile JSON Schema</label>
+          </div>
+          <button id="toggleTemplateBtn" class="toggle-btn" type="button">Show Template</button>
+        </div>
+
+        <div id="templateBody" class="template-body" style="display: none;">
+          <div class="template-actions">
+            <span class="template-hint">Blank schema template for new applicants</span>
+            <button id="copyTemplateBtn" class="copy-btn" type="button" title="Copy full template to clipboard">
+              <span id="copyBtnIcon">📋</span>
+              <span id="copyBtnText">Copy JSON</span>
+            </button>
+          </div>
+          <div id="copySuccessMsg" class="copy-success-msg" style="display: none;">
+            ✓ Copied to clipboard!
+          </div>
+          <div class="code-container">
+            <textarea id="templateCodeArea" class="template-code-area" readonly spellcheck="false" placeholder="Loading template from server..."></textarea>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- VIEW 2: REVIEW SCREEN VIEW (Structured Matching & Approval) -->
+    <div id="reviewView" class="view-panel" style="display: none;">
+      <div class="review-top-bar">
+        <button id="backToSetupBtn" class="back-pill-btn" type="button">
+          <span>← Back</span>
+        </button>
+        <div class="review-applicant-badge">
+          <span class="user-avatar-dot"></span>
+          <span id="reviewApplicantName">Candidate</span>
+        </div>
+      </div>
+
+      <!-- Review Summary Stats -->
+      <div class="stats-card">
+        <div class="stat-item">
+          <span id="statTotalCount" class="stat-number">0</span>
+          <span class="stat-label">Detected</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <span id="statVerifiedCount" class="stat-number text-success">0</span>
+          <span class="stat-label">Verified Facts</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-item">
+          <span id="statReviewCount" class="stat-number text-warning">0</span>
+          <span class="stat-label">Needs Review</span>
+        </div>
+      </div>
+
+      <!-- Filter Tabs -->
+      <div class="filter-tabs">
+        <button class="filter-tab active" data-filter="all">All (<span id="tabCountAll">0</span>)</button>
+        <button class="filter-tab" data-filter="verified">Verified (<span id="tabCountVerified">0</span>)</button>
+        <button class="filter-tab" data-filter="review">Review (<span id="tabCountReview">0</span>)</button>
+        <button class="filter-tab" data-filter="docs">Docs (<span id="tabCountDocs">0</span>)</button>
+      </div>
+
+      <!-- Document Proposals Card (Integrated into Review) -->
+      <div id="docProposalsCard" class="card review-docs-card" style="display: none;">
+        <div class="card-header">
+          <div class="card-header-title">
+            <span class="card-icon">📎</span>
+            <label>Proposed Document Attachments</label>
+          </div>
+          <span class="safeguard-badge">Safety Protected</span>
+        </div>
+        <div id="docProposalsList" class="doc-proposals-list"></div>
+      </div>
+
+      <!-- Review Fields List -->
+      <div id="readyBanner" class="info-banner" role="status" style="display: none;"></div>
+      <div id="reviewList" class="review-list"></div>
+
+      <!-- Review Actions Bar (Sticky at bottom) -->
+      <div class="review-bottom-bar">
+        <div class="review-action-helpers">
+          <button id="approveReadyBtn" class="subtle-btn highlight" type="button">✓ Approve All Ready</button>
+          <button id="approveAllVerifiedBtn" class="subtle-btn" type="button">✓ Verified Only</button>
+          <button id="deselectAllBtn" class="subtle-btn" type="button">Clear</button>
+        </div>
+        <button id="fillApprovedBtn" class="btn primary-btn fill-btn" type="button">
+          <span class="btn-icon">⚡</span>
+          <span id="fillApprovedText">Fill Approved Fields (0)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- VIEW 3: DIAGNOSTICS VIEW (Failure Diagnostics & Retry) -->
+    <div id="diagnosticsView" class="view-panel" style="display: none;">
+      <div class="review-top-bar">
+        <button id="backFromDiagBtn" class="back-pill-btn" type="button">
+          <span>← Back to Review</span>
+        </button>
+        <span class="diag-header-title">Field Fill Diagnostics</span>
+      </div>
+
+      <div id="diagnosticsSummary" class="info-banner"></div>
+      <div id="diagnosticsList" class="diagnostics-list"></div>
+    </div>
+
+    <!-- VIEW 4: CORRECTION MEMORY MODAL / DRAWER -->
+    <div id="correctionsModal" class="modal-overlay" style="display: none;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div class="modal-title">
+            <span class="modal-icon">🧠</span>
+            <h3>Correction Memory</h3>
+          </div>
+          <button id="closeCorrectionsBtn" class="modal-close-btn" type="button">✕</button>
+        </div>
+        <p class="modal-subtitle">Saved answers applied automatically on future visits for this site and applicant.</p>
+
+        <div id="correctionsList" class="corrections-list">
+          <div class="empty-state">No saved corrections yet.</div>
+        </div>
+
+        <div class="modal-actions">
+          <button id="clearAllCorrectionsBtn" class="btn secondary-btn small-btn" type="button">Clear All for Site</button>
+          <button id="closeCorrectionsBtn2" class="btn primary-btn small-btn" type="button">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- VIEW 5: APPLICATIONS HISTORY MODAL -->
+    <div id="appsModal" class="modal-overlay" style="display: none;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <div class="modal-title">
+            <span class="modal-icon">📋</span>
+            <h3>Application History</h3>
+          </div>
+          <button id="closeAppsBtn" class="modal-close-btn" type="button">✕</button>
+        </div>
+        <p class="modal-subtitle">Log of job application forms you have filled with AI Job Autofill.</p>
+
+        <div id="appsList" class="corrections-list" style="max-height: 280px; overflow-y: auto;">
+          <div class="empty-state">No recorded applications yet.</div>
+        </div>
+
+        <div class="modal-actions">
+          <button id="exportAppsBtn" class="btn secondary-btn small-btn" type="button">Export CSV</button>
+          <button id="clearAppsBtn" class="btn secondary-btn small-btn" type="button">Clear Log</button>
+          <button id="closeAppsBtn2" class="btn primary-btn small-btn" type="button">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="matching.js"></script>
+  <script src="client.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

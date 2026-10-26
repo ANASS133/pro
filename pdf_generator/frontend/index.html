@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
     <meta charset="UTF-8">
@@ -22,113 +22,150 @@
             <p>Erstellen Sie professionelle Bewerbungs-PDFs aus Excel- oder CSV-Daten</p>
         </header>
 
-        <div class="main-content">
-            <section class="card" id="step1">
-                <h2>1. Daten-Datei hochladen</h2>
-                <div class="upload-area" id="dropZone">
-                    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
-                    <p>Datei hier ablegen oder klicken zum Auswählen</p>
-                    <small>Unterstützt: .xlsx, .xls, .csv (max. 50MB)</small>
+        <div class="studio-wrapper">
+            <!-- Compact Top Data Bar -->
+            <div class="top-data-bar">
+                <div class="upload-inline-group">
+                    <div class="upload-btn-drop" id="dropZone">
+                        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" hidden>
+                        <svg class="btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                        <span>Datei wählen oder ablegen (.xlsx, .csv)</span>
+                    </div>
+                    <div id="fileInfo" class="file-badge hidden">
+                        <span class="file-badge-name" id="fileName"></span>
+                        <span class="file-badge-count"><b id="rowCount">0</b> Kontakte</span>
+                    </div>
                 </div>
-                <div id="fileInfo" class="file-info hidden">
-                    <p>Datei: <span id="fileName"></span></p>
-                    <p>Zeilen: <span id="rowCount"></span></p>
-                </div>
-            </section>
 
-            <section class="card" id="step2">
-                <h2>2. Spalten aus Datei</h2>
-                <div id="columnList" class="column-list"></div>
-                <div id="dataPreview" class="data-preview hidden">
-                    <h3>Datenvorschau:</h3>
-                    <div id="previewTable" class="preview-table"></div>
-                </div>
-            </section>
-
-            <section class="card" id="step3">
-                <h2>3. Textvorlage bearbeiten</h2>
-                <div class="design-upload">
-                    <h3>Optional: Design-PDF als Hintergrund</h3>
-                    <div class="upload-area compact" id="designDropZone">
-                        <input type="file" id="designFileInput" accept=".pdf" hidden>
-                        <p>Design-PDF hier ablegen oder klicken</p>
-                        <small>Der Text wird auf Seite 1 des PDFs platziert</small>
-                    </div>
-                    <div id="designFileInfo" class="file-info hidden">
-                        <p>Design-Datei: <span id="designFileName"></span></p>
-                    </div>
-                </div>
-                <div class="template-editor">
-                    <div class="placeholder-help">
-                        <p>Verfügbare Platzhalter: <span id="placeholderTags"></span></p>
-                        <small>Platzhalter im Format: {{Spaltenname}}. Formatierung unterstützt z. B. <b>&lt;b&gt;fett&lt;/b&gt;</b>, <i>&lt;i&gt;kursiv&lt;/i&gt;</i> und <u>&lt;u&gt;unterstrichen&lt;/u&gt;</u>.</small>
-                    </div>
-                    <div class="template-variants">
-                        <div class="template-variant-header">
-                            <h3>Anschreiben-Varianten</h3>
-                            <small>Beim Generieren wird pro PDF zufällig eine gespeicherte Variante gewählt.</small>
-                        </div>
-                        <div id="templateList" class="template-list"></div>
-                        <div class="template-actions">
-                            <button id="addTemplateBtn" class="btn-secondary" type="button">Neue Variante</button>
-                            <button id="deleteTemplateBtn" class="btn-secondary" type="button">Aktive löschen</button>
+                <details class="data-drawer">
+                    <summary class="drawer-btn">
+                        <svg class="drawer-icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                        <span>Spalten & Vorschau</span>
+                    </summary>
+                    <div class="drawer-content">
+                        <div id="columnList" class="column-list"></div>
+                        <div id="dataPreview" class="data-preview hidden">
+                            <h4>Datenvorschau:</h4>
+                            <div id="previewTable" class="preview-table"></div>
                         </div>
                     </div>
-                    <div class="format-toolbar" id="formatToolbar">
-                        <button type="button" class="format-btn" data-prefix="<b>" data-suffix="</b>"><strong>Fett</strong></button>
-                        <button type="button" class="format-btn" data-prefix="<i>" data-suffix="</i>"><em>Kursiv</em></button>
-                        <button type="button" class="format-btn" data-prefix="<u>" data-suffix="</u>"><u>Unterstrichen</u></button>
-                        <button type="button" class="format-btn" data-prefix="<br><br>" data-suffix="">Absatz</button>
-                    </div>
-                    <textarea id="templateEditor" rows="15" placeholder="Text oder HTML/CSS-Vorlage hier eingeben..."></textarea>
-                                <p>HTML/CSS wird automatisch erkannt. Mit ?Vorschau? pr?fen Sie das PDF. Bei HTML bestimmt das CSS das Layout; PDF-Hintergrund und Textlayout-Einstellungen gelten nur f?r Textvorlagen.</p>
-                    <div class="template-actions">
-                        <button id="saveTemplateBtn" class="btn-primary">Vorlage speichern</button>
-                        <button id="resetTemplateBtn" class="btn-secondary">Aktive leeren</button>
-                    </div>
-                </div>
-                <div id="validationResult" class="validation-result hidden"></div>
-            </section>
+                </details>
+            </div>
 
-            <section class="card" id="step4">
-                <h2>4. PDFs generieren</h2>
-                <div class="filename-format">
-                    <label for="filenameFormat">Dateiname:</label>
-                    <input type="text" id="filenameFormat" value="Automatisch aus Firma" readonly>
-                    <small>Jede PDF wird automatisch nach Firma/Unternehmen benannt.</small>
+            <!-- 2-Column Main Workspace -->
+            <div class="studio-body">
+                <!-- Left: Editor & Tools -->
+                <div class="editor-pane">
+                    <!-- Micro Tools: Design PDF & Format Bar -->
+                    <div class="editor-micro-bar">
+                        <div class="design-upload-mini" id="designDropZone">
+                            <input type="file" id="designFileInput" accept=".pdf" hidden>
+                            <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                            <span>Hintergrund-PDF</span>
+                        </div>
+                        <div id="designFileInfo" class="design-file-tag hidden">
+                            <span id="designFileName"></span>
+                        </div>
+
+                        <div class="format-toolbar-mini" id="formatToolbar">
+                            <button type="button" class="micro-btn" data-prefix="<b>" data-suffix="</b>" title="Fett"><b>B</b></button>
+                            <button type="button" class="micro-btn" data-prefix="<i>" data-suffix="</i>" title="Kursiv"><i>I</i></button>
+                            <button type="button" class="micro-btn" data-prefix="<u>" data-suffix="</u>" title="Unterstrichen"><u>U</u></button>
+                            <button type="button" class="micro-btn" data-prefix="<br><br>" data-suffix="" title="Absatz">↵</button>
+                        </div>
+                        <button type="button" class="micro-btn ats-trigger-btn" id="atsTailorBtn" title="ATS Schlüsselbegriffe optimieren (GPT Luna)">
+                            <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                            <span>⚡ ATS Tailor</span>
+                        </button>
+                        <button type="button" class="micro-btn hook-trigger-btn" id="goldenHookBtn" title="Warum dieses Unternehmen? Golden Hook Einleitung generieren (GPT Luna)">
+                            <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+                            <span>✨ Golden Hook</span>
+                        </button>
+                    </div>
+
+                    <!-- Placeholder Pills Bar -->
+                    <div class="placeholder-bar">
+                        <span class="placeholder-bar-label">Platzhalter:</span>
+                        <div id="placeholderTags" class="placeholder-tags-inline"></div>
+                    </div>
+
+                    <!-- Variants Subbar -->
+                    <div class="variants-subbar">
+                        <span class="variants-subbar-label">Varianten:</span>
+                        <div id="templateList" class="template-list-inline"></div>
+                        <button id="addTemplateBtn" class="variant-action-btn" type="button" title="Neue Variante">+</button>
+                        <button id="deleteTemplateBtn" class="variant-action-btn" type="button" title="Aktive löschen">✕</button>
+                    </div>
+
+                    <!-- Editor Textarea -->
+                    <textarea id="templateEditor" rows="10" placeholder="Text oder HTML/CSS-Vorlage hier eingeben... Platzhalter wie {{Unternehmen}} oben anklicken."></textarea>
+
+                    <div class="editor-footer-mini">
+                        <div class="editor-footer-btns">
+                            <button id="saveTemplateBtn" class="btn-primary-sm">
+                                <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                                <span>Speichern</span>
+                            </button>
+                            <button id="resetTemplateBtn" class="btn-subtle-sm">Leeren</button>
+                        </div>
+                        <div id="validationResult" class="validation-result-mini hidden"></div>
+                    </div>
                 </div>
 
-                <div class="layout-controls">
-                    <h3>PDF Layout Steuerung</h3>
-                    <div class="layout-grid">
-                        <label>Schriftgröße (pt)<input type="number" id="fontSizeInput" min="6" max="48" step="1" value="11"></label>
-                        <label>Zeilenhöhe (mm)<input type="number" id="lineHeightInput" min="2" max="30" step="0.5" value="5"></label>
-                        <label>Margin oben (mm)<input type="number" id="marginTopInput" min="0" max="250" step="1" value="20"></label>
-                        <label>Margin links (mm)<input type="number" id="marginLeftInput" min="0" max="200" step="1" value="20"></label>
-                        <label>Margin rechts (mm)<input type="number" id="marginRightInput" min="0" max="200" step="1" value="20"></label>
-                        <label>Margin unten (mm)<input type="number" id="marginBottomInput" min="0" max="250" step="1" value="20"></label>
-                        <label>Textbreite (mm)<input type="number" id="textWidthInput" min="20" max="210" step="1" value="170"></label>
-                        <label>Texthöhe (mm)<input type="number" id="textHeightInput" min="20" max="297" step="1" value="257"></label>
-                    </div>
-                    <div class="template-actions">
-                        <button id="resetLayoutBtn" class="btn-secondary">Layout zurücksetzen</button>
-                    </div>
-                    <small>Bei Design-PDF steuern diese Werte die Textposition auf Seite 1.</small>
-                </div>
+                <!-- Right: Action & Layout Settings Sidebar -->
+                <div class="action-pane">
+                    <div class="action-card">
+                        <h3>
+                            <svg class="box-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                            <span>Erstellung & Vorschau</span>
+                        </h3>
+                        <div class="action-buttons-stack">
+                            <button id="generateBtn" class="btn-generate-main">
+                                <svg class="btn-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                                <span>Alle PDFs erstellen</span>
+                            </button>
+                            <button id="previewBtn" class="btn-preview-sub">
+                                <svg class="btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                <span>Vorschau (erste PDF)</span>
+                            </button>
+                            <button id="toEmailBtn" class="btn-email-next hidden">
+                                <svg class="btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                                <span>Weiter zu E-Mails</span>
+                            </button>
+                        </div>
 
-                <div class="action-buttons">
-                    <button id="previewBtn" class="btn-secondary">Vorschau (erste PDF)</button>
-                    <button id="generateBtn" class="btn-primary">Alle PDFs im Projektordner erstellen</button>
-                    <button id="toEmailBtn" class="btn-secondary hidden">To Email Sender</button>
-                </div>
-
-                <div id="progressArea" class="progress-area hidden">
-                    <div class="progress-bar">
-                        <div id="progressFill" class="progress-fill"></div>
+                        <div id="progressArea" class="progress-area-mini hidden">
+                            <div class="progress-bar-mini">
+                                <div id="progressFill" class="progress-fill-mini"></div>
+                            </div>
+                            <p id="progressText" class="progress-text-mini">Generiere PDFs...</p>
+                        </div>
                     </div>
-                    <p id="progressText">Generiere PDFs...</p>
+
+                    <div class="layout-card">
+                        <input type="hidden" id="filenameFormat" value="Automatisch aus Firma">
+                        <details class="layout-drawer">
+                            <summary class="layout-summary">
+                                <svg class="drawer-icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+                                <span>Layout-Einstellungen</span>
+                            </summary>
+                            <div class="layout-grid-compact">
+                                <label>Schrift (pt)<input type="number" id="fontSizeInput" min="6" max="48" step="1" value="11"></label>
+                                <label>Zeile (mm)<input type="number" id="lineHeightInput" min="2" max="30" step="0.5" value="5"></label>
+                                <label>Oben (mm)<input type="number" id="marginTopInput" min="0" max="250" step="1" value="20"></label>
+                                <label>Unten (mm)<input type="number" id="marginBottomInput" min="0" max="250" step="1" value="20"></label>
+                                <label>Links (mm)<input type="number" id="marginLeftInput" min="0" max="200" step="1" value="20"></label>
+                                <label>Rechts (mm)<input type="number" id="marginRightInput" min="0" max="200" step="1" value="20"></label>
+                                <label>Breite (mm)<input type="number" id="textWidthInput" min="20" max="210" step="1" value="170"></label>
+                                <label>Höhe (mm)<input type="number" id="textHeightInput" min="20" max="297" step="1" value="257"></label>
+                            </div>
+                            <div class="layout-reset-wrap">
+                                <button id="resetLayoutBtn" class="btn-subtle-sm">Standard</button>
+                            </div>
+                        </details>
+                    </div>
                 </div>
-            </section>
+            </div>
         </div>
 
         <div id="previewModal" class="modal hidden">
@@ -142,6 +179,108 @@
                 </div>
                 <div class="modal-footer">
                     <button id="closeFooterBtn" class="btn-secondary">Schließen</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="atsModal" class="modal hidden">
+            <div class="modal-content ats-modal-content">
+                <div class="modal-header">
+                    <div class="ats-header-title">
+                        <h2>⚡ ATS Keyword Tailor <span class="badge-luna">GPT-5.6 Luna</span></h2>
+                        <p class="ats-header-sub">Optimiert Profil-Erfahrungen mit den exakten Schlüsselbegriffen der Stelle für maximale ATS-Erkennungsrate bei minimalem Token-Verbrauch (~$0.00003).</p>
+                    </div>
+                    <button class="close-btn" id="closeAtsModalBtn">&times;</button>
+                </div>
+                <div class="modal-body ats-modal-body">
+                    <div class="ats-form-grid">
+                        <div class="ats-form-row">
+                            <label for="atsJobTitle">Ziel-Beruf / Stelle:</label>
+                            <input type="text" id="atsJobTitle" placeholder="z.B. Fachinformatiker für Anwendungsentwicklung" value="Fachinformatiker für Anwendungsentwicklung">
+                        </div>
+                        <div class="ats-form-row">
+                            <label for="atsCompanyName">Ziel-Unternehmen:</label>
+                            <input type="text" id="atsCompanyName" placeholder="z.B. Siemens AG oder {{Unternehmen}}" value="{{Unternehmen}}">
+                        </div>
+                    </div>
+                    <div class="ats-form-group">
+                        <label for="atsRequirements">Geforderte Keywords & Tech-Stack (aus Stellenanzeige):</label>
+                        <textarea id="atsRequirements" rows="2" placeholder="z.B. Python, REST-APIs, relationale Datenbanken, Docker, agile Teams"></textarea>
+                    </div>
+                    <div class="ats-form-group">
+                        <label for="atsCustomBullets">Ihre bisherigen Erfahrungen (oder leer lassen für Anass Sibbis Profil-Standard):</label>
+                        <textarea id="atsCustomBullets" rows="2" placeholder="Leer lassen für automatische Übernahme aus dem Kandidatenprofil"></textarea>
+                    </div>
+                    <div class="ats-action-bar">
+                        <button type="button" id="atsRunBtn" class="btn-primary-sm ats-run-btn">
+                            <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                            <span>Keywords optimieren (~$0.00003)</span>
+                        </button>
+                        <div id="atsCostBadge" class="ats-cost-badge hidden">
+                            <span id="atsCostText">⚡ 0.000028 USD</span>
+                        </div>
+                    </div>
+                    <div id="atsResultArea" class="ats-result-area hidden">
+                        <label class="ats-result-label">Optimierte ATS-Stichpunkte (fertig für Anschreiben & CV):</label>
+                        <div id="atsResultBullets" class="ats-result-bullets"></div>
+                        <div class="ats-result-actions">
+                            <button type="button" id="atsInsertBtn" class="btn-primary-sm">
+                                <span>In Anschreiben einfügen</span>
+                            </button>
+                            <button type="button" id="atsCopyBtn" class="btn-subtle-sm">
+                                <span>Kopieren</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="goldenHookModal" class="modal hidden">
+            <div class="modal-content ats-modal-content">
+                <div class="modal-header">
+                    <div class="ats-header-title">
+                        <h2>✨ "Warum wir?" Golden Hook <span class="badge-luna">GPT-5.6 Luna</span></h2>
+                        <p class="ats-header-sub">Generiert einen maßgeschneiderten, authentischen Eröffnungssatz, der Personaler in den ersten 3 Sekunden fesselt (~$0.000015).</p>
+                    </div>
+                    <button class="close-btn" id="closeGoldenHookModalBtn">&times;</button>
+                </div>
+                <div class="modal-body ats-modal-body">
+                    <div class="ats-form-grid">
+                        <div class="ats-form-row">
+                            <label for="hookCompanyName">Unternehmen:</label>
+                            <input type="text" id="hookCompanyName" placeholder="z.B. Siemens AG oder {{Unternehmen}}" value="{{Unternehmen}}">
+                        </div>
+                        <div class="ats-form-row">
+                            <label for="hookJobTitle">Ausbildungsberuf / Stelle:</label>
+                            <input type="text" id="hookJobTitle" placeholder="z.B. Fachinformatiker" value="Fachinformatiker für Anwendungsentwicklung">
+                        </div>
+                    </div>
+                    <div class="ats-form-group">
+                        <label for="hookContext">Schwerpunkt / Was begeistert dich an der Firma? (Optional):</label>
+                        <input type="text" id="hookContext" placeholder="z.B. Cloud-Architektur, IoT, offene Unternehmenskultur">
+                    </div>
+                    <div class="ats-action-bar">
+                        <button type="button" id="hookRunBtn" class="btn-primary-sm hook-run-btn">
+                            <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+                            <span>Golden Hook generieren (~$0.000015)</span>
+                        </button>
+                        <div id="hookCostBadge" class="ats-cost-badge hidden">
+                            <span id="hookCostText">⚡ 0.000015 USD</span>
+                        </div>
+                    </div>
+                    <div id="hookResultArea" class="ats-result-area hidden">
+                        <label class="ats-result-label">Generierter Eröffnungssatz:</label>
+                        <div id="hookResultText" class="ats-bullet-item hook-highlight"></div>
+                        <div class="ats-result-actions">
+                            <button type="button" id="hookInsertBtn" class="btn-primary-sm">
+                                <span>Als Einleitung einfügen</span>
+                            </button>
+                            <button type="button" id="hookCopyBtn" class="btn-subtle-sm">
+                                <span>Kopieren</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

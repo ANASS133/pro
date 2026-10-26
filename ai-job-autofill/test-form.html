@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Bewerbung - Testformular / Application Form</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 680px;
+      margin: 30px auto;
+      padding: 24px;
+      background: #f8fafc;
+      color: #1e293b;
+    }
+    .header-box {
+      margin-bottom: 24px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    .step-nav {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .step-btn {
+      padding: 8px 14px;
+      background: #e2e8f0;
+      border: none;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .step-btn.active {
+      background: #0ea5e9;
+      color: #fff;
+    }
+    .form-step {
+      display: none;
+    }
+    .form-step.active {
+      display: block;
+    }
+    .field {
+      margin-bottom: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .row {
+      display: flex;
+      gap: 12px;
+    }
+    .radio-group {
+      display: flex;
+      gap: 16px;
+    }
+    label {
+      font-weight: 600;
+      font-size: 13px;
+      color: #334155;
+    }
+    input, select, textarea {
+      padding: 9px 12px;
+      font-size: 14px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      background: #fff;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #0ea5e9;
+      box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
+    }
+    .btn-row {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid #e2e8f0;
+    }
+    .action-btn {
+      padding: 10px 18px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      border: none;
+    }
+    .primary-btn {
+      background: #0ea5e9;
+      color: white;
+    }
+    .secondary-btn {
+      background: #e2e8f0;
+      color: #334155;
+    }
+    .submit-btn {
+      background: #10b981;
+      color: white;
+    }
+    .hint {
+      font-size: 11px;
+      color: #64748b;
+    }
+    .section-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #0f172a;
+      margin: 12px 0 8px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="header-box">
+    <h2>Job Application Test Form (Trilingual DE / FR / EN)</h2>
+    <p class="hint">Use the AI Job Autofill Chrome extension to scan and review each step.</p>
+  </div>
+
+  <div class="step-nav">
+    <button type="button" class="step-btn active" onclick="showStep(1)">1. Personal & Contact</button>
+    <button type="button" class="step-btn" onclick="showStep(2)">2. Experience & Documents</button>
+    <button type="button" class="step-btn" onclick="showStep(3)">3. Open Questions & Consent</button>
+    <button type="button" class="step-btn" onclick="showStep(4)">4. Profil Français & Date Picker</button>
+  </div>
+
+  <form id="appForm" onsubmit="event.preventDefault(); alert('Application submitted manually!');">
+    <!-- STEP 1 -->
+    <div id="step1" class="form-step active">
+      <div class="section-title">Personal Details (Persönliche Daten / Informations personnelles)</div>
+
+      <div class="field">
+        <label>Geschlecht / Gender / Civilité</label>
+        <div class="radio-group">
+          <label><input type="radio" name="gender" value="männlich"> Männlich / Male / Homme</label>
+          <label><input type="radio" name="gender" value="weiblich"> Weiblich / Female / Femme</label>
+          <label><input type="radio" name="gender" value="divers"> Divers / Diverse</label>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field" style="flex: 1;">
+          <label for="vorname">Vorname / First name / Prénom</label>
+          <input type="text" id="vorname" name="first_name" required>
+        </div>
+        <div class="field" style="flex: 1;">
+          <label for="nachname">Nachname / Last name / Nom</label>
+          <input type="text" id="nachname" name="last_name" required>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field" style="flex: 1;">
+          <label for="email">E-Mail / Email / Courriel</label>
+          <input type="email" id="email" name="email" required>
+        </div>
+        <div class="field" style="flex: 1;">
+          <label for="telefon">Telefon / Phone / Téléphone</label>
+          <input type="tel" id="telefon" name="phone">
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field" style="flex: 2;">
+          <label for="strasse">Straße & Hausnr. / Street address / Rue</label>
+          <input type="text" id="strasse" name="street">
+        </div>
+        <div class="field" style="flex: 1;">
+          <label for="plz">PLZ / Postal code / Code postal</label>
+          <input type="text" id="plz" name="postal_code">
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field" style="flex: 1;">
+          <label for="stadt">Stadt / City / Ville</label>
+          <input type="text" id="stadt" name="city">
+        </div>
+        <div class="field" style="flex: 1;">
+          <label for="country">Country / Land / Pays</label>
+          <select id="country" name="country">
+            <option value="">Select country...</option>
+            <option value="MA">Morocco / Marokko / Maroc</option>
+            <option value="DE">Germany / Deutschland / Allemagne</option>
+            <option value="FR">France / Frankreich</option>
+            <option value="US">United States</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <div></div>
+        <button type="button" class="action-btn primary-btn" onclick="showStep(2)">Next: Documents ➔</button>
+      </div>
+    </div>
+
+    <!-- STEP 2 -->
+    <div id="step2" class="form-step">
+      <div class="section-title">Documents & Qualifications</div>
+
+      <!-- Ordinary CV document upload -->
+      <div class="field">
+        <label for="cvFile">CV / Lebenslauf / Resume (PDF)</label>
+        <input type="file" id="cvFile" name="cv" accept=".pdf">
+      </div>
+
+      <!-- Academic Transcript or Certificate -->
+      <div class="field">
+        <label for="certFile">Zeugnis / Academic Transcript / Relevé de notes</label>
+        <input type="file" id="certFile" name="certificates" accept=".pdf,.jpeg,.jpg,.png">
+      </div>
+
+      <!-- Sensitive ID Document: Safely requires manual upload -->
+      <div class="field">
+        <label for="idFile">National ID Card / Reisepass / CIN (Strict manual review required)</label>
+        <input type="file" id="idFile" name="id_card">
+        <span class="hint">⚠️ Sensitive identity documents are never auto-uploaded for applicant privacy.</span>
+      </div>
+
+      <!-- Dynamic field toggle -->
+      <div class="field" style="margin-top: 14px;">
+        <label>
+          <input type="checkbox" id="toggleExperience" onchange="toggleExpFields(this.checked)">
+          Do you have prior industrial or technical experience?
+        </label>
+      </div>
+
+      <div id="dynamicExpContainer" style="display: none; padding: 10px; background: #e0f2fe; border-radius: 6px;">
+        <div class="field">
+          <label for="expTitle">Current or Recent Job Title (Berufsbezeichnung / Poste actuel)</label>
+          <input type="text" id="expTitle" name="job_title" placeholder="e.g. Automatisierungstechniker">
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button type="button" class="action-btn secondary-btn" onclick="showStep(1)">← Back to Personal</button>
+        <button type="button" class="action-btn primary-btn" onclick="showStep(3)">Next: Questions ➔</button>
+      </div>
+    </div>
+
+    <!-- STEP 3 -->
+    <div id="step3" class="form-step">
+      <div class="section-title">Application Questions & Consent</div>
+
+      <!-- Open-ended motivation question -->
+      <div class="field">
+        <label for="motivation">Warum interessieren Sie sich für diese Position? / Why are you interested in this role?</label>
+        <textarea id="motivation" name="motivation_letter" rows="4" placeholder="Brief motivation statement"></textarea>
+      </div>
+
+      <!-- Sensitive Criminal / Work Authorization question -->
+      <div class="field">
+        <label for="workPermit">Arbeitserlaubnis / Work authorization status</label>
+        <input type="text" id="workPermit" name="work_permit" placeholder="Visa / EU Work Permit status">
+      </div>
+
+      <!-- Privacy Consent (Never auto-checked) -->
+      <div class="field">
+        <label>
+          <input type="checkbox" id="privacy" name="privacy_policy" required>
+          Ich akzeptiere die Datenschutzbestimmungen / I accept the Privacy Policy
+        </label>
+      </div>
+
+      <div class="btn-row">
+        <button type="button" class="action-btn secondary-btn" onclick="showStep(2)">← Back to Documents</button>
+        <!-- Submit Button (Never clicked automatically) -->
+        <button type="submit" id="submitBtn" class="action-btn submit-btn">Bewerbung absenden / Submit Application</button>
+      </div>
+    </div>
+
+    <!-- STEP 4: FRENCH PROFILE WITH CUSTOM DATE PICKER & REPEATED HEADINGS -->
+    <div id="step4" class="form-step">
+      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; margin-bottom: 16px;">
+        <h2 style="font-size: 15px; font-weight: 700; color: #0f172a; text-transform: uppercase; margin: 0 0 14px 0; border-bottom: 1px solid #f1f5f9; padding-bottom: 6px;">COMPLÉTEZ VOTRE PROFIL</h2>
+
+        <div class="row">
+          <div class="field" style="flex: 1;">
+            <span class="field-label" style="font-weight: 600; font-size: 13px; color: #334155;">Votre prénom</span>
+            <input type="text" id="fr_prenom" name="first_name" required>
+          </div>
+          <div class="field" style="flex: 1;">
+            <span class="field-label" style="font-weight: 600; font-size: 13px; color: #334155;">Votre nom</span>
+            <input type="text" id="fr_nom" name="last_name" required>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="field" style="flex: 1;">
+            <span class="field-label" style="font-weight: 600; font-size: 13px; color: #334155;">Votre ville</span>
+            <input type="text" id="fr_ville" name="city">
+          </div>
+          <div class="field" style="flex: 1;">
+            <span class="field-label" style="font-weight: 600; font-size: 13px; color: #334155;">Nationalité</span>
+            <select id="fr_nationalite" name="nationality">
+              <option value="">Sélectionner une nationalité...</option>
+              <option value="Moroccan">Marocaine</option>
+              <option value="French">Française</option>
+              <option value="German">Allemande</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; margin-bottom: 16px;">
+        <h2 style="font-size: 15px; font-weight: 700; color: #0f172a; text-transform: uppercase; margin: 0 0 14px 0; border-bottom: 1px solid #f1f5f9; padding-bottom: 6px;">COMPLÉTEZ VOTRE PROFIL</h2>
+
+        <div class="field" style="position: relative;">
+          <span class="field-label" style="font-weight: 600; font-size: 13px; color: #334155;">Date de naissance</span>
+          <input type="text" id="fr_dob" class="datepicker-input" readonly placeholder="Sélectionner une date" value="Sélectionner une date" style="cursor: pointer; background: #fff;" required>
+
+          <!-- Custom Calendar Popup (starts at September 2026) -->
+          <div id="fr_calendarPopup" style="display: none; position: absolute; top: 100%; left: 0; width: 280px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.12); z-index: 1000; padding: 12px; margin-top: 4px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px; gap: 6px;">
+              <select id="fr_calMonth" style="flex: 1; padding: 4px 6px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 4px;">
+                <option value="0">Janvier</option><option value="1">Février</option><option value="2">Mars</option><option value="3">Avril</option><option value="4">Mai</option><option value="5">Juin</option><option value="6">Juillet</option><option value="7">Août</option><option value="8" selected>Septembre</option><option value="9">Octobre</option><option value="10">Novembre</option><option value="11">Décembre</option>
+              </select>
+              <select id="fr_calYear" style="flex: 1; padding: 4px 6px; font-size: 12px; border: 1px solid #cbd5e1; border-radius: 4px;"></select>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 11px; font-weight: 600; color: #64748b; margin-bottom: 6px;">
+              <span>Lu</span><span>Ma</span><span>Me</span><span>Je</span><span>Ve</span><span>Sa</span><span>Di</span>
+            </div>
+            <div id="fr_calDays" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;"></div>
+          </div>
+        </div>
+
+        <!-- Field without proper label to test fallback Champ sans libellé -->
+        <div class="field">
+          <input type="text" id="ai_unlabeled_remarks" placeholder="Complément d'information / Remarques">
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button type="button" class="action-btn secondary-btn" onclick="showStep(3)">← Back to Questions</button>
+        <button type="submit" class="action-btn submit-btn">Valider la Candidature</button>
+      </div>
+    </div>
+  </form>
+
+  <script>
+    function showStep(stepNum) {
+      document.querySelectorAll('.form-step').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('.step-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('step' + stepNum).classList.add('active');
+      document.querySelectorAll('.step-btn')[stepNum - 1].classList.add('active');
+    }
+
+    function toggleExpFields(show) {
+      const container = document.getElementById('dynamicExpContainer');
+      container.style.display = show ? 'block' : 'none';
+    }
+
+    // Step 4 Calendar Logic
+    (() => {
+      let curYear = 2026;
+      let curMonth = 8; // Septembre
+      const dobInput = document.getElementById("fr_dob");
+      const calPopup = document.getElementById("fr_calendarPopup");
+      const calMonth = document.getElementById("fr_calMonth");
+      const calYear = document.getElementById("fr_calYear");
+      const calDays = document.getElementById("fr_calDays");
+
+      if (!dobInput || !calPopup) return;
+
+      for (let y = 1950; y <= 2030; y++) {
+        const opt = document.createElement("option");
+        opt.value = y;
+        opt.textContent = y;
+        if (y === 2026) opt.selected = true;
+        calYear.appendChild(opt);
+      }
+
+      function renderCal(year, month) {
+        calDays.innerHTML = "";
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const offset = (firstDay + 6) % 7;
+
+        for (let i = 0; i < offset; i++) {
+          const span = document.createElement("span");
+          span.style.padding = "6px 0";
+          calDays.appendChild(span);
+        }
+
+        for (let d = 1; d <= daysInMonth; d++) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.textContent = d;
+          btn.dataset.day = d;
+          btn.style.cssText = "padding: 6px 0; text-align: center; font-size: 12px; border: 1px solid #e2e8f0; border-radius: 4px; background: #fff; cursor: pointer;";
+          btn.addEventListener("click", () => {
+            const dd = String(d).padStart(2, "0");
+            const mm = String(month + 1).padStart(2, "0");
+            const formatted = `${dd}/${mm}/${year}`;
+            dobInput.value = formatted;
+            dobInput.setAttribute("value", formatted);
+            dobInput.dataset.acceptedDate = formatted;
+            calPopup.style.display = "none";
+            dobInput.dispatchEvent(new Event("input", { bubbles: true }));
+            dobInput.dispatchEvent(new Event("change", { bubbles: true }));
+          });
+          calDays.appendChild(btn);
+        }
+      }
+
+      dobInput.addEventListener("click", (e) => {
+        e.stopPropagation();
+        calPopup.style.display = calPopup.style.display === "block" ? "none" : "block";
+        renderCal(curYear, curMonth);
+      });
+
+      calYear.addEventListener("change", (e) => {
+        curYear = parseInt(e.target.value, 10);
+        renderCal(curYear, curMonth);
+      });
+
+      calMonth.addEventListener("change", (e) => {
+        curMonth = parseInt(e.target.value, 10);
+        renderCal(curYear, curMonth);
+      });
+
+      document.addEventListener("click", (e) => {
+        if (!calPopup.contains(e.target) && e.target !== dobInput) {
+          calPopup.style.display = "none";
+        }
+      });
+
+      renderCal(curYear, curMonth);
+    })();
+  </script>
+</body>
+</html>

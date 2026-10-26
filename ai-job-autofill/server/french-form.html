@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Formulaire de Recrutement - Candidature</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 680px;
+      margin: 30px auto;
+      padding: 24px;
+      background: #f8fafc;
+      color: #1e293b;
+    }
+    .header-box {
+      margin-bottom: 24px;
+      padding-bottom: 12px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    .section-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .section-heading {
+      font-size: 16px;
+      font-weight: 700;
+      color: #0f172a;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin: 0 0 16px 0;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #f1f5f9;
+    }
+    .field {
+      margin-bottom: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      position: relative;
+    }
+    .row {
+      display: flex;
+      gap: 12px;
+    }
+    .field-label {
+      font-weight: 600;
+      font-size: 13px;
+      color: #334155;
+    }
+    input, select, textarea {
+      padding: 9px 12px;
+      font-size: 14px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      background: #fff;
+      color: #1e293b;
+    }
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #0ea5e9;
+      box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15);
+    }
+    .datepicker-input {
+      cursor: pointer;
+      background: #f8fafc url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2364748b' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1z'/%3E%3C/svg%3E") no-repeat right 12px center;
+    }
+    /* Custom Calendar Popup */
+    .custom-calendar-popup {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      width: 280px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.12);
+      z-index: 1000;
+      padding: 12px;
+      margin-top: 4px;
+    }
+    .custom-calendar-popup.open {
+      display: block;
+    }
+    .calendar-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      gap: 6px;
+    }
+    .calendar-controls {
+      display: flex;
+      gap: 6px;
+      width: 100%;
+    }
+    .calendar-select {
+      flex: 1;
+      padding: 4px 6px;
+      font-size: 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+    }
+    .calendar-weekdays {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      text-align: center;
+      font-size: 11px;
+      font-weight: 600;
+      color: #64748b;
+      margin-bottom: 6px;
+    }
+    .calendar-days {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 2px;
+    }
+    .calendar-day {
+      padding: 6px 0;
+      text-align: center;
+      font-size: 12px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      cursor: pointer;
+      background: #fff;
+    }
+    .calendar-day:hover {
+      background: #e0f2fe;
+      color: #0369a1;
+    }
+    .calendar-day.selected {
+      background: #0ea5e9;
+      color: #fff;
+      font-weight: 600;
+    }
+    .calendar-day.other-month {
+      color: #cbd5e1;
+      cursor: default;
+    }
+    .calendar-day.other-month:hover {
+      background: transparent;
+    }
+    .btn-submit {
+      background: #10b981;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    .status-msg {
+      margin-top: 10px;
+      font-size: 13px;
+      padding: 8px 12px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header-box">
+    <h1>Candidature - Développeur Informatique</h1>
+    <p>Merci de remplir l'ensemble des informations de votre profil ci-dessous.</p>
+  </div>
+
+  <form id="recruitmentForm" onsubmit="event.preventDefault(); submitForm();">
+    <!-- Section 1 with generic heading -->
+    <div class="section-card">
+      <h2 class="section-heading">COMPLÉTEZ VOTRE PROFIL</h2>
+
+      <div class="row">
+        <div class="field" style="flex: 1;">
+          <span class="field-label">Votre prénom</span>
+          <input type="text" id="prenom" name="first_name" required>
+        </div>
+        <div class="field" style="flex: 1;">
+          <span class="field-label">Votre nom</span>
+          <input type="text" id="nom" name="last_name" required>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field" style="flex: 1;">
+          <span class="field-label">Votre ville</span>
+          <input type="text" id="ville" name="city">
+        </div>
+        <div class="field" style="flex: 1;">
+          <span class="field-label">Nationalité</span>
+          <select id="nationalite" name="nationality">
+            <option value="">Sélectionner une nationalité...</option>
+            <option value="Moroccan">Marocaine</option>
+            <option value="French">Française</option>
+            <option value="German">Allemande</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2 with repeated generic heading -->
+    <div class="section-card">
+      <h2 class="section-heading">COMPLÉTEZ VOTRE PROFIL</h2>
+
+      <!-- Date de naissance with Custom Calendar initialized to September 2026 -->
+      <div class="field">
+        <span class="field-label">Date de naissance</span>
+        <input type="text" id="dobInput" class="datepicker-input" readonly placeholder="Sélectionner une date" value="Sélectionner une date" required>
+        
+        <!-- Custom Calendar Popup -->
+        <div id="calendarPopup" class="custom-calendar-popup">
+          <div class="calendar-header">
+            <div class="calendar-controls">
+              <select id="calendarMonth" class="calendar-select">
+                <option value="0">Janvier</option>
+                <option value="1">Février</option>
+                <option value="2">Mars</option>
+                <option value="3">Avril</option>
+                <option value="4">Mai</option>
+                <option value="5">Juin</option>
+                <option value="6">Juillet</option>
+                <option value="7">Août</option>
+                <option value="8" selected>Septembre</option>
+                <option value="9">Octobre</option>
+                <option value="10">Novembre</option>
+                <option value="11">Décembre</option>
+              </select>
+              <select id="calendarYear" class="calendar-select">
+                <!-- 1960 to 2030 -->
+              </select>
+            </div>
+          </div>
+          <div class="calendar-weekdays">
+            <span>Lu</span><span>Ma</span><span>Me</span><span>Je</span><span>Ve</span><span>Sa</span><span>Di</span>
+          </div>
+          <div id="calendarDays" class="calendar-days">
+            <!-- Day buttons generated dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Field without a proper label (tests fallback Champ sans libellé instead of internal ID) -->
+      <div class="field">
+        <input type="text" id="ai_extra_remarks" placeholder="Complément d'information / Remarques">
+      </div>
+    </div>
+
+    <button type="submit" class="btn-submit">Valider et Envoyer ma Candidature</button>
+    <div id="resultMessage" style="display: none;" class="status-msg"></div>
+  </form>
+
+  <script>
+    // State of custom date picker
+    let currentYear = 2026; // Initialized to September 2026 as stated in problem
+    let currentMonth = 8;   // September (0-indexed 8)
+    let selectedDate = null; // Form accepts only valid selected date
+
+    const dobInput = document.getElementById("dobInput");
+    const calendarPopup = document.getElementById("calendarPopup");
+    const calendarYear = document.getElementById("calendarYear");
+    const calendarMonth = document.getElementById("calendarMonth");
+    const calendarDays = document.getElementById("calendarDays");
+
+    // Populate years (1950 to 2030)
+    for (let y = 1950; y <= 2030; y++) {
+      const opt = document.createElement("option");
+      opt.value = y;
+      opt.textContent = y;
+      if (y === 2026) opt.selected = true;
+      calendarYear.appendChild(opt);
+    }
+
+    function renderDays(year, month) {
+      calendarDays.innerHTML = "";
+      const firstDay = new Date(year, month, 1).getDay(); // 0 is Sun
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const offset = (firstDay + 6) % 7; // Monday = 0
+
+      // Leading padding
+      for (let i = 0; i < offset; i++) {
+        const span = document.createElement("span");
+        span.className = "calendar-day other-month";
+        span.textContent = "";
+        calendarDays.appendChild(span);
+      }
+
+      // Month days
+      for (let d = 1; d <= daysInMonth; d++) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "calendar-day";
+        btn.textContent = d;
+        btn.dataset.day = d;
+        if (selectedDate && selectedDate.year === year && selectedDate.month === month && selectedDate.day === d) {
+          btn.classList.add("selected");
+        }
+        btn.addEventListener("click", () => {
+          selectDate(year, month, d);
+        });
+        calendarDays.appendChild(btn);
+      }
+    }
+
+    function selectDate(year, month, day) {
+      selectedDate = { year, month, day };
+      const dd = String(day).padStart(2, "0");
+      const mm = String(month + 1).padStart(2, "0");
+      const formatted = `${dd}/${mm}/${year}`;
+      dobInput.value = formatted;
+      dobInput.setAttribute("value", formatted);
+      dobInput.dataset.acceptedDate = formatted;
+      calendarPopup.classList.remove("open");
+      dobInput.dispatchEvent(new Event("change", { bubbles: true }));
+      dobInput.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+    dobInput.addEventListener("click", (e) => {
+      e.stopPropagation();
+      calendarPopup.classList.toggle("open");
+      renderDays(currentYear, currentMonth);
+    });
+
+    calendarYear.addEventListener("change", (e) => {
+      currentYear = parseInt(e.target.value, 10);
+      renderDays(currentYear, currentMonth);
+    });
+
+    calendarMonth.addEventListener("change", (e) => {
+      currentMonth = parseInt(e.target.value, 10);
+      renderDays(currentYear, currentMonth);
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!calendarPopup.contains(e.target) && e.target !== dobInput) {
+        calendarPopup.classList.remove("open");
+      }
+    });
+
+    // Support framework or external update if valid date formatted string is directly supplied
+    dobInput.addEventListener("input", () => {
+      if (dobInput.value && dobInput.value !== "Sélectionner une date" && /^\d{2}[\/\.]\d{2}[\/\.]\d{4}$/.test(dobInput.value)) {
+        const parts = dobInput.value.split(/[\/\.]/);
+        selectedDate = { day: parseInt(parts[0], 10), month: parseInt(parts[1], 10) - 1, year: parseInt(parts[2], 10) };
+        dobInput.dataset.acceptedDate = dobInput.value;
+      }
+    });
+
+    // Form submission validation (ensures date was accepted)
+    function submitForm() {
+      const res = document.getElementById("resultMessage");
+      if (dobInput.value === "Sélectionner une date" || !dobInput.value || !dobInput.dataset.acceptedDate) {
+        res.style.display = "block";
+        res.style.background = "#fee2e2";
+        res.style.color = "#991b1b";
+        res.textContent = "Erreur: Veuillez sélectionner une date de naissance valide via le calendrier.";
+        return;
+      }
+      res.style.display = "block";
+      res.style.background = "#dcfce7";
+      res.style.color = "#166534";
+      res.textContent = `Succès: Formulaire validé avec date de naissance: ${dobInput.value}`;
+    }
+
+    // Initial render
+    renderDays(currentYear, currentMonth);
+  </script>
+</body>
+</html>

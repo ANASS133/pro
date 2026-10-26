@@ -272,6 +272,31 @@ class WorkingEmailExtractor:
         ) or None
         return (emails[0] if emails else None, phones[0] if phones else None, arbeitsgeber)
 
+    def extract_application_link(self, fallback_url: str = "") -> str:
+        try:
+            links = self.driver.find_elements(
+                By.XPATH,
+                "//a[@href and not(starts-with(@href, 'mailto:')) and not(starts-with(@href, 'tel:'))]",
+            )
+            for link in links:
+                try:
+                    href = (link.get_attribute("href") or "").strip()
+                    if not href or href.startswith("javascript:") or href == "#":
+                        continue
+                    text = (link.text or "").strip().lower()
+                    title_attr = (link.get_attribute("title") or "").strip().lower()
+                    aria_label = (link.get_attribute("aria-label") or "").strip().lower()
+                    haystack = f"{text} {title_attr} {aria_label} {href.lower()}"
+
+                    if any(kw in haystack for kw in ["bewerb", "apply", "online-bewerb", "formular"]):
+                        return href
+                except Exception:
+                    continue
+        except Exception as exc:
+            logger.debug("Could not extract application link: %s", exc)
+
+        return fallback_url or ""
+
     def open_job(self, job: Dict, delay_seconds: float = 3.0) -> None:
         self.driver.get(job.get("url", ""))
         if delay_seconds > 0:
@@ -293,12 +318,18 @@ class WorkingEmailExtractor:
                     return job
 
             email, phone, arbeitsgeber = self.extract_contact_info()
+            apply_url = self.extract_application_link(fallback_url=job.get("url", ""))
+
             normalized_email = self._normalize_email(email)
             if normalized_email and normalized_email in self.known_emails:
                 job["email"] = "DUPLICATE_EMAIL_SKIPPED"
                 job["phone"] = phone
                 job["arbeitsgeber"] = arbeitsgeber
                 job["email_extracted"] = False
+                job["apply_url"] = apply_url
+                job["form_link"] = apply_url
+                job["has_form"] = bool(apply_url)
+                job["application_method"] = "form"
                 self.stats["processed"] += 1
                 return job
 
@@ -306,6 +337,10 @@ class WorkingEmailExtractor:
             job["phone"] = phone
             job["arbeitsgeber"] = arbeitsgeber
             job["email_extracted"] = bool(normalized_email)
+            job["apply_url"] = apply_url
+            job["form_link"] = apply_url
+            job["has_form"] = bool(apply_url)
+            job["application_method"] = "email" if normalized_email else "form"
 
             self.stats["processed"] += 1
             if normalized_email:
@@ -318,6 +353,10 @@ class WorkingEmailExtractor:
             job["phone"] = None
             job["arbeitsgeber"] = None
             job["email_extracted"] = False
+            job["apply_url"] = job.get("url", "")
+            job["form_link"] = job.get("url", "")
+            job["has_form"] = bool(job.get("url"))
+            job["application_method"] = "form"
             self.stats["failed"] += 1
 
         return job

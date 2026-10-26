@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "AI Job Autofill",
+  "version": "1.0.0",
+  "description": "Autofill job application forms with GPT-5.6 Luna",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "sidePanel"
+  ],
+  "side_panel": {
+    "default_path": "popup.html"
+  },
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "minimum_chrome_version": "106",
+  "background": { "service_worker": "background.js" },
+  "web_accessible_resources": [{ "resources": ["popup.html"], "matches": ["http://*/*", "https://*/*"] }],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "AI Job Autofill"
+  },
+  "commands": {
+    "autofill_quick": {
+      "suggested_key": {
+        "default": "Alt+Shift+F",
+        "mac": "Alt+Shift+F"
+      },
+      "description": "Quick autofill verified fields"
+    }
+  }
+}

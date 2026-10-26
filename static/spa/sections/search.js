@@ -20,9 +20,11 @@
                 keyword: document.getElementById("keyword").value,
                 location: document.getElementById("location").value,
                 published_since: document.getElementById("published_since").value,
+                search_source_1: document.getElementById("search_source_1") ? document.getElementById("search_source_1").value : "all",
                 keyword_2: document.getElementById("keyword_2").value,
                 location_2: document.getElementById("location_2").value,
                 published_since_2: document.getElementById("published_since_2").value,
+                search_source_2: document.getElementById("search_source_2") ? document.getElementById("search_source_2").value : "all",
             };
             localStorage.setItem(INDEX_STATE_KEY, JSON.stringify(state));
         }
@@ -54,9 +56,11 @@
                 "keyword",
                 "location",
                 "published_since",
+                "search_source_1",
                 "keyword_2",
                 "location_2",
                 "published_since_2",
+                "search_source_2",
             ].forEach((id) => {
                 const element = document.getElementById(id);
                 if (!element) {
@@ -106,16 +110,66 @@
                 const company = escapeHtml(job.company || "k. A.");
                 const location = escapeHtml(job.location || "k. A.");
                 const scrapedAt = escapeHtml(job.scraped_at || "k. A.");
-                const url = escapeHtml(job.url || "");
-                const linkHtml = url
-                    ? `<a class="job-link" href="${url}" target="_blank" rel="noopener noreferrer">Stelle ansehen</a>`
-                    : "";
+                const source = escapeHtml(job.source || "Arbeitsagentur");
+                const rawUrl = String(job.apply_url || job.form_link || job.url || "").trim();
+                const url = escapeHtml(rawUrl);
+                const sourceLower = source.toLowerCase();
+                let sourceClass = "source-arbeitsagentur";
+                if (sourceLower.includes("azubiyo")) {
+                    sourceClass = "source-azubiyo";
+                } else if (sourceLower.includes("aubi")) {
+                    sourceClass = "source-aubi-plus";
+                } else if (sourceLower.includes("ihk")) {
+                    sourceClass = "source-ihk";
+                } else if (sourceLower.includes("ausbildung")) {
+                    sourceClass = "source-ausbildung-de";
+                }
+                const sourceBadge = `<span class="job-source-pill ${sourceClass}">${source}</span>`;
+
+                const email = String(job.email || "").trim();
+                const hasValidEmail = email && email.includes("@") && !email.toLowerCase().includes("failed") && !email.toLowerCase().includes("error") && !email.toLowerCase().includes("duplicate");
+
+                let contactBadge = "";
+                let linkHtml = "";
+
+                const aiButtonsHtml = `
+                    <button type="button" class="job-link job-vibe-btn" data-company="${company}" data-title="${title}" title="Unternehmenskultur, Vibe & Du/Sie Formel prüfen (~$0.00001)">🧭 Vibe</button>
+                    <button type="button" class="job-link job-heatmap-btn" data-company="${company}" data-title="${title}" title="Visual ATS Match & Skill Heatmap anzeigen (~$0.00002)">📊 Heatmap</button>
+                `;
+
+                if (hasValidEmail) {
+                    contactBadge = `<span class="job-contact-pill has-email" title="E-Mail vorhanden">✉️ ${escapeHtml(email)}</span>`;
+                    linkHtml = `
+                        <div class="job-actions-row">
+                            ${url ? `<a class="job-link" href="${url}" target="_blank" rel="noopener noreferrer">Stelle ansehen ↗</a>` : ""}
+                            <a class="job-link job-mail-btn" href="mailto:${escapeHtml(email)}?subject=Bewerbung%20als%20${encodeURIComponent(job.title || '')}" title="E-Mail senden">✉️ E-Mail senden</a>
+                            ${url ? `<button type="button" class="job-link job-autofill-btn" data-job-url="${url}" data-job-title="${title}" data-job-company="${company}" title="Stelle öffnen & mit Chrome Extension ausfüllen">⚡ Open & Autofill</button>` : ""}
+                            ${aiButtonsHtml}
+                        </div>
+                    `;
+                } else {
+                    contactBadge = `<span class="job-contact-pill has-form" title="Bewerbung über Online-Formular">📝 Online-Bewerbungsformular</span>`;
+                    linkHtml = `
+                        <div class="job-actions-row">
+                            ${url ? `<a class="job-link job-form-apply-btn" href="${url}" target="_blank" rel="noopener noreferrer" title="Bewerbungsformular öffnen">📝 Zum Bewerbungsformular ↗</a>` : `<span class="job-no-link">Kein Bewerbungslink hinterlegt</span>`}
+                            ${url ? `<button type="button" class="job-link job-autofill-btn" data-job-url="${url}" data-job-title="${title}" data-job-company="${company}" title="Bewerbungsformular öffnen & mit Chrome Extension ausfüllen">⚡ Mit Formular bewerben (Autofill)</button>` : ""}
+                            ${aiButtonsHtml}
+                        </div>
+                    `;
+                }
 
                 return `
                     <article class="job-item">
-                        <h4 class="job-title">${title}</h4>
+                        <div class="job-item-header">
+                            <h4 class="job-title">${title}</h4>
+                            <div class="job-badges-wrap">
+                                ${sourceBadge}
+                                ${contactBadge}
+                            </div>
+                        </div>
                         <div class="job-meta">Unternehmen: ${company}<br>Ort: ${location}<br>Erfasst: ${scrapedAt}</div>
                         ${linkHtml}
+                        <div class="job-ai-panel hidden"></div>
                     </article>
                 `;
             }).join("");
@@ -299,6 +353,7 @@
             const keyword = ui.keywordEl.value.trim();
             const location = ui.locationEl.value.trim();
             const publishedSince = ui.publishedSinceEl.value;
+            const source = ui.sourceEl ? ui.sourceEl.value : "all";
 
             if (!keyword) {
                 showError(ui, "Bitte ein Stichwort eingeben.");
@@ -313,6 +368,7 @@
                     keyword,
                     location,
                     published_since: publishedSince,
+                    source,
                 });
                 const response = await fetch(`/api/search?${params.toString()}`);
                 const data = await response.json();
@@ -334,6 +390,7 @@
             keywordEl: document.getElementById("keyword"),
             locationEl: document.getElementById("location"),
             publishedSinceEl: document.getElementById("published_since"),
+            sourceEl: document.getElementById("search_source_1"),
             searchBtn: document.getElementById("search_btn_1"),
             loadingEl: document.getElementById("loading_1"),
             resultsBox: document.getElementById("results_1"),
@@ -363,6 +420,7 @@
             keywordEl: document.getElementById("keyword_2"),
             locationEl: document.getElementById("location_2"),
             publishedSinceEl: document.getElementById("published_since_2"),
+            sourceEl: document.getElementById("search_source_2"),
             searchBtn: document.getElementById("search_btn_2"),
             loadingEl: document.getElementById("loading_2"),
             resultsBox: document.getElementById("results_2"),
@@ -461,6 +519,151 @@
                 }
             });
         });
+
+        function bindAutofillHandler(ui) {
+            ui.listEl.addEventListener("click", (e) => {
+                const btn = e.target.closest(".job-autofill-btn");
+                if (!btn) return;
+                const jobUrl = btn.dataset.jobUrl;
+                const jobTitle = btn.dataset.jobTitle || "Job Application";
+                const jobCompany = btn.dataset.jobCompany || "";
+                if (!jobUrl) return;
+
+                window.open(jobUrl, "_blank", "noopener,noreferrer");
+
+                let domain = "";
+                try { domain = new URL(jobUrl).hostname; } catch {}
+
+                fetch("/api/autofill/log-application", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        title: jobTitle,
+                        company: jobCompany,
+                        domain: domain,
+                        url: jobUrl,
+                        date: new Date().toLocaleDateString("de-DE"),
+                        status: "Gestartet (Extension)",
+                        fieldsFilled: 0
+                    })
+                }).catch(() => {});
+
+                btn.textContent = "✓ Geöffnet";
+                btn.style.background = "#10b981";
+                btn.style.color = "#ffffff";
+                setTimeout(() => {
+                    btn.textContent = "⚡ Open & Autofill";
+                    btn.style.background = "";
+                    btn.style.color = "";
+                }, 3000);
+            });
+
+            // Vibe Radar Handler (Culture & Du vs. Sie)
+            ui.listEl.addEventListener("click", async (e) => {
+                const btn = e.target.closest(".job-vibe-btn");
+                if (!btn) return;
+                const card = btn.closest(".job-item");
+                if (!card) return;
+                const panel = card.querySelector(".job-ai-panel");
+                if (!panel) return;
+
+                if (!panel.classList.contains("hidden") && panel.dataset.currentType === "vibe") {
+                    panel.classList.add("hidden");
+                    return;
+                }
+
+                panel.classList.remove("hidden");
+                panel.dataset.currentType = "vibe";
+                panel.innerHTML = '<span style="color:#64748b;">🧭 Analysiere Unternehmenskultur mit Luna...</span>';
+
+                try {
+                    const company = btn.dataset.company || "";
+                    const title = btn.dataset.title || "";
+                    const resp = await fetch("/api/pdf/culture-vibe", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ company_name: company, job_title: title })
+                    });
+                    const data = await resp.json();
+                    if (!resp.ok || !data.success) throw new Error(data.error || "Fehler beim Vibe-Check");
+
+                    const costLabel = data.from_cache ? "⚡ Aus Cache ($0.00)" : `⚡ ${data.usage?.total_tokens || 30} Tokens ($${(data.usage?.estimated_cost_usd || 0.00001).toFixed(6)})`;
+
+                    panel.innerHTML = `
+                        <div class="vibe-card-inner">
+                            <div class="vibe-tag-row">
+                                <span class="vibe-pill vibe-pill-tag">${data.icon || '🏢'} ${escapeHtml(data.vibe)}</span>
+                                <span class="vibe-pill vibe-pill-formality">Anrede: ${escapeHtml(data.formality)}</span>
+                            </div>
+                            <div class="vibe-tip-text">💡 <strong>Empfehlung:</strong> ${escapeHtml(data.tone_tip)}</div>
+                            <div class="ai-cost-tag">${costLabel}</div>
+                        </div>
+                    `;
+                } catch (err) {
+                    panel.innerHTML = `<span style="color:#ef4444;">${escapeHtml(err.message)}</span>`;
+                }
+            });
+
+            // ATS Heatmap Handler (Match & Skill Radar)
+            ui.listEl.addEventListener("click", async (e) => {
+                const btn = e.target.closest(".job-heatmap-btn");
+                if (!btn) return;
+                const card = btn.closest(".job-item");
+                if (!card) return;
+                const panel = card.querySelector(".job-ai-panel");
+                if (!panel) return;
+
+                if (!panel.classList.contains("hidden") && panel.dataset.currentType === "heatmap") {
+                    panel.classList.add("hidden");
+                    return;
+                }
+
+                panel.classList.remove("hidden");
+                panel.dataset.currentType = "heatmap";
+                panel.innerHTML = '<span style="color:#64748b;">📊 Berechne ATS Heatmap mit Luna...</span>';
+
+                try {
+                    const company = btn.dataset.company || "";
+                    const title = btn.dataset.title || "";
+                    const resp = await fetch("/api/pdf/ats-heatmap", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ company_name: company, job_title: title, requirements: title })
+                    });
+                    const data = await resp.json();
+                    if (!resp.ok || !data.success) throw new Error(data.error || "Fehler beim Heatmap-Berechnen");
+
+                    const costLabel = data.from_cache ? "⚡ Aus Cache ($0.00)" : `⚡ ${data.usage?.total_tokens || 60} Tokens ($${(data.usage?.estimated_cost_usd || 0.00002).toFixed(6)})`;
+
+                    const matchedPills = (data.matched || []).map(m => `<span class="heatmap-pill heatmap-pill-match">✓ ${escapeHtml(m)}</span>`).join("");
+                    const transferPills = (data.transferable || []).map(t => `<span class="heatmap-pill heatmap-pill-transfer">≈ ${escapeHtml(t)}</span>`).join("");
+                    const gapPills = (data.gaps || []).map(g => `<span class="heatmap-pill heatmap-pill-gap">○ ${escapeHtml(g)}</span>`).join("");
+
+                    panel.innerHTML = `
+                        <div class="heatmap-card-inner">
+                            <div class="heatmap-score-bar">
+                                <span>🎯 ATS Eignungs-Score</span>
+                                <span class="heatmap-score-pill">${data.match_percent}% Match</span>
+                            </div>
+                            <div class="heatmap-pills-wrap">
+                                ${matchedPills}
+                                ${transferPills}
+                                ${gapPills}
+                            </div>
+                            <div class="heatmap-tip-box">
+                                💡 <strong>Bridge-Tipp:</strong> ${escapeHtml(data.bridge_tip)}
+                            </div>
+                            <div class="ai-cost-tag">${costLabel}</div>
+                        </div>
+                    `;
+                } catch (err) {
+                    panel.innerHTML = `<span style="color:#ef4444;">${escapeHtml(err.message)}</span>`;
+                }
+            });
+        }
+
+        bindAutofillHandler(searchUi1);
+        bindAutofillHandler(searchUi2);
 
         restoreIndexState();
         bindIndexStatePersistence();

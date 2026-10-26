@@ -8,7 +8,18 @@ from .html_template import is_html_template
 class TemplateService:
     def __init__(self):
         self.placeholder_pattern = re.compile(r"{{\s*([^{}]+?)\s*}}")
-        self.builtin_placeholders = {"heutigenDatum", "heutigeDatum", "heutigentag", "todayDate"}
+        self.builtin_placeholders = {
+            "heutigenDatum",
+            "heutigeDatum",
+            "heutigentag",
+            "todayDate",
+            "custom_hook",
+            "salutation",
+            "ansprechpartner",
+            "geschaeftsfuehrer",
+            "detected_tech",
+            "primary_tech",
+        }
         self.windows_reserved_filenames = {
             "CON",
             "PRN",
@@ -34,14 +45,24 @@ class TemplateService:
             "LPT9",
         }
 
-    def _builtin_values(self):
+    def _builtin_values(self, row_data=None):
         today_str = date.today().strftime("%d.%m.%Y")
-        return {
+        values = {
             "heutigenDatum": today_str,
             "heutigeDatum": today_str,
             "heutigentag": today_str,
             "todayDate": today_str,
         }
+        if row_data:
+            try:
+                from scraper.hook_generator import DynamicHookGenerator
+                enrichment = DynamicHookGenerator.generate_enrichment(row_data)
+                for k, v in enrichment.items():
+                    if v:
+                        values[k] = v
+            except Exception:
+                pass
+        return values
 
     def _normalize_key(self, value):
         return re.sub(r"[^a-z0-9]+", "", str(value or "").strip().lower())
@@ -88,7 +109,7 @@ class TemplateService:
         if not template:
             return ""
 
-        builtin_values = self._builtin_values()
+        builtin_values = self._builtin_values(row_data=row_data)
         escape_values = is_html_template(template)
         exact_lookup, lower_lookup, normalized_lookup = self._build_row_lookup(
             row_data or {}, columns or []

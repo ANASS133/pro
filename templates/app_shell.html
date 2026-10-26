@@ -3,28 +3,97 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arbeitsagentur Scraper</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='spa/app.css') }}?v=2.0">
+    <title>JobScout – AI Job Application Studio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='spa/app.css') }}?v=7.4">
 </head>
 <body>
     <div class="spa-shell" data-initial-section="{{ initial_section }}">
-        <header class="shell-topbar">
-            <div class="shell-brand">
-                <span class="brand-kicker">Arbeitsagentur Scraper</span>
-                <h1>Workbench</h1>
-                <p>Suche, Anschreiben, Versand und Operations laufen jetzt in einer gemeinsamen Shell.</p>
+        <aside class="shell-sidebar" id="shell-sidebar" aria-label="Hauptnavigation">
+            <div class="sidebar-header">
+                <div class="brand-badge" id="sidebar-brand-badge" title="JobScout">
+                    <svg class="brand-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                </div>
+                <div class="brand-meta">
+                    <span class="brand-title">JobScout</span>
+                    <span class="brand-sub" id="system-status-indicator">
+                        <span class="status-dot"></span>
+                        <span class="status-label">Online</span>
+                    </span>
+                </div>
+                <button type="button" class="sidebar-toggle" id="sidebar-collapse-btn" title="Seitenleiste minimieren" aria-label="Seitenleiste minimieren">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                </button>
             </div>
-            <nav class="shell-nav" aria-label="Hauptnavigation">
-                <a href="{{ url_for('index') }}" data-section-link="search">E-Mails finden</a>
-                <a href="{{ url_for('supabase_page') }}" data-section-link="supabase">Supabase</a>
-                <a href="{{ url_for('money') }}" data-section-link="money">Money</a>
-                <a href="{{ url_for('create_anschreibens') }}" data-section-link="create-anschreibens">Anschreiben</a>
-                <a href="{{ url_for('send_emails') }}" data-section-link="send-emails">E-Mails senden</a>
-                <a href="{{ url_for('dashboard') }}" data-section-link="dashboard">Dashboard</a>
-                <a href="{{ url_for('ausbildungen') }}" data-section-link="ausbildungen">Ausbildungen</a>
-                <a href="{{ url_for('google_maps_page') }}" data-section-link="google-maps">Google Maps</a>
+
+            <nav class="sidebar-nav">
+                <div class="nav-group">
+                    <span class="nav-group-label">Entdeckung</span>
+                    <a href="{{ url_for('index') }}" data-section-link="search" title="E-Mails finden">
+                        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <span class="nav-text">E-Mails finden</span>
+                    </a>
+                    <a href="{{ url_for('ausbildungen') }}" data-section-link="ausbildungen" title="Ausbildungen">
+                        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
+                        <span class="nav-text">Ausbildungen</span>
+                    </a>
+                    <a href="{{ url_for('google_maps_page') }}" data-section-link="google-maps" title="Google Maps">
+                        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                        <span class="nav-text">Google Maps</span>
+                    </a>
+                </div>
+
+                <div class="nav-group">
+                    <span class="nav-group-label">Outreach</span>
+                    <a href="{{ url_for('create_anschreibens') }}" data-section-link="create-anschreibens" title="Anschreiben (PDF)">
+                        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                        <span class="nav-text">Anschreiben</span>
+                    </a>
+                    <a href="{{ url_for('send_emails') }}" data-section-link="send-emails" title="E-Mails senden">
+                        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                        <span class="nav-text">E-Mails senden</span>
+                    </a>
+                </div>
+
+                <div class="nav-group">
+                    <span class="nav-group-label">Verwaltung</span>
+                    <a href="{{ url_for('dashboard') }}" data-section-link="dashboard" title="Dashboard">
+                        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+                        <span class="nav-text">Dashboard</span>
+                    </a>
+                    <a href="{{ url_for('supabase_page') }}" data-section-link="supabase" title="Supabase">
+                        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
+                        <span class="nav-text">Supabase</span>
+                    </a>
+                    <a href="{{ url_for('money') }}" data-section-link="money" title="Money">
+                        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                        <span class="nav-text">Money</span>
+                    </a>
+                    <a href="{{ url_for('autofill_hub_page') }}" data-section-link="autofill" title="Autofill Hub">
+                        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                        <span class="nav-text">Autofill Hub</span>
+                    </a>
+                    <a href="#" id="sidebar-profile-btn" class="nav-profile-link" title="Kandidatenprofil & KI-Gedächtnis">
+                        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                        <span class="nav-text">Profil & Skills</span>
+                    </a>
+                </div>
             </nav>
-        </header>
+
+            <div class="sidebar-live-widget" id="sidebar-live-job" hidden>
+                <div class="live-widget-top">
+                    <span class="live-widget-indicator"></span>
+                    <span class="live-widget-title" id="sidebar-job-title">Job läuft</span>
+                    <span class="live-widget-percent" id="sidebar-job-percent">0%</span>
+                </div>
+                <div class="live-widget-progress">
+                    <div class="live-widget-bar" id="sidebar-job-fill" style="width: 0%"></div>
+                </div>
+                <div class="live-widget-meta" id="sidebar-job-meta">Verarbeite...</div>
+            </div>
+        </aside>
 
         <main class="shell-main">
             <div class="shell-content">
@@ -79,6 +148,18 @@
                                         <option value="1week">1 Woche</option>
                                         <option value="2weeks">2 Wochen</option>
                                         <option value="4weeks">4 Wochen</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="search_source_1">Suchquelle</label>
+                                    <select id="search_source_1" name="source">
+                                        <option value="all" selected>Alle Quellen (Arbeitsagentur + Ausbildung.de + Azubiyo + AUBI-plus + IHK)</option>
+                                        <option value="arbeitsagentur">Arbeitsagentur (Jobbörse)</option>
+                                        <option value="ausbildung_de">Ausbildung.de</option>
+                                        <option value="azubiyo">Azubiyo (azubiyo.de)</option>
+                                        <option value="aubi_plus">AUBI-plus (aubi-plus.de)</option>
+                                        <option value="ihk">IHK Lehrstellenbörse (ihk.de)</option>
                                     </select>
                                 </div>
 
@@ -156,6 +237,18 @@
                                     </select>
                                 </div>
 
+                                <div class="form-group">
+                                    <label for="search_source_2">Suchquelle</label>
+                                    <select id="search_source_2" name="source">
+                                        <option value="all" selected>Alle Quellen (Arbeitsagentur + Ausbildung.de + Azubiyo + AUBI-plus + IHK)</option>
+                                        <option value="arbeitsagentur">Arbeitsagentur (Jobbörse)</option>
+                                        <option value="ausbildung_de">Ausbildung.de</option>
+                                        <option value="azubiyo">Azubiyo (azubiyo.de)</option>
+                                        <option value="aubi_plus">AUBI-plus (aubi-plus.de)</option>
+                                        <option value="ihk">IHK Lehrstellenbörse (ihk.de)</option>
+                                    </select>
+                                </div>
+
                                 <button id="search_btn_2" type="submit">Suchen</button>
                             </form>
 
@@ -217,6 +310,33 @@
                     <div id="dashboard-status" class="section-status" hidden></div>
                     <div id="dashboard-empty" class="empty-state" hidden>Noch keine gespeicherten Vorlagen vorhanden.</div>
                     <div id="dashboard-cards" class="cards-grid"></div>
+
+                    <div class="dashboard-autofill-panel" id="dashboard-autofill-panel">
+                        <div class="dashboard-panel-head">
+                            <div>
+                                <h3>⚡ AI Job Autofill Aktivitäten</h3>
+                                <p class="panel-sub">Zuletzt mit der Chrome-Extension oder "Open & Autofill" eingereichte Stellenbewerbungen.</p>
+                            </div>
+                            <a href="{{ url_for('autofill_hub_page') }}" data-section-link="autofill" class="panel-link">Zum Autofill Hub &rarr;</a>
+                        </div>
+                        <div class="autofill-stats-row" id="dashboard-autofill-stats">
+                            <div class="af-stat-pill">
+                                <span class="af-stat-num" id="dash-af-total">0</span>
+                                <span class="af-stat-lbl">Bewerbungen</span>
+                            </div>
+                            <div class="af-stat-pill">
+                                <span class="af-stat-num" id="dash-af-domains">0</span>
+                                <span class="af-stat-lbl">Portale / Firmen</span>
+                            </div>
+                            <div class="af-stat-pill">
+                                <span class="af-stat-num" id="dash-af-fields">0</span>
+                                <span class="af-stat-lbl">Felder ausgefüllt</span>
+                            </div>
+                        </div>
+                        <div class="dashboard-autofill-list" id="dashboard-autofill-list">
+                            <div class="empty-state">Noch keine Autofill-Bewerbungen erfasst.</div>
+                        </div>
+                    </div>
                 </section>
 
                 <section
@@ -443,15 +563,101 @@
                 >
                     <div class="section-hero">
                         <div>
-                            <span class="section-kicker">Ausbildungen</span>
-                            <h2>Exportdateien und Updates</h2>
-                            <p>Update-Jobs laufen weiter über dieselben APIs, jetzt ohne Seitenwechsel.</p>
+                            <span class="section-kicker">Ausbildungen • Ausbildung.de, Azubiyo, AUBI-plus &amp; IHK</span>
+                            <h2>Ausbildungsplätze &amp; Lehrstellen</h2>
+                            <p>Durchsuche freie Ausbildungsstellen von Ausbildung.de, Azubiyo.de, AUBI-plus, IHK Lehrstellenbörse und der Arbeitsagentur.</p>
+                        </div>
+                        <div class="hero-actions">
+                            <span class="hub-pill pill-success" style="font-size: 11px;">✓ 4 Ausbildungsportale Aktiv</span>
                         </div>
                     </div>
 
-                    <div id="ausbildungen-status" class="section-status" hidden></div>
-                    <div id="ausbildungen-empty" class="empty-state" hidden>Keine exportierten Ausbildungsdateien gefunden.</div>
-                    <div id="ausbildungen-files" class="files-grid"></div>
+                    <!-- Mode Switcher Tabs -->
+                    <div class="ausbildung-nav-tabs">
+                        <button type="button" class="ausbildung-tab-btn is-active" id="tab-btn-ausbildung-de">Live-Suche (Alle 4 Portale)</button>
+                        <button type="button" class="ausbildung-tab-btn" id="tab-btn-ausbildung-files">Exportdateien &amp; Updates</button>
+                    </div>
+
+                    <!-- Panel 1: Live Search & Explorer -->
+                    <div id="panel-ausbildung-de-search" class="ausbildung-panel is-active">
+                        <div class="search-card" style="margin-bottom: 20px;">
+                            <form id="ausbildung_de_search_form" onsubmit="return false;">
+                                <div class="form-grid-3">
+                                    <div class="form-group">
+                                        <label for="adb_keyword">Ausbildungsberuf / Stichwort</label>
+                                        <input
+                                            type="text"
+                                            id="adb_keyword"
+                                            name="keyword"
+                                            placeholder="z. B. Fachinformatiker, Mechatroniker, Kaufmann"
+                                            required
+                                        >
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="adb_location">Ort / Stadt (optional)</label>
+                                        <input
+                                            type="text"
+                                            id="adb_location"
+                                            name="location"
+                                            placeholder="z. B. Berlin, Köln, Hamburg, München"
+                                        >
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="adb_portal">Suchportal</label>
+                                        <select id="adb_portal" name="portal">
+                                            <option value="all" selected>Alle Portale (Ausbildung.de + Azubiyo + AUBI-plus + IHK)</option>
+                                            <option value="ausbildung_de">Ausbildung.de</option>
+                                            <option value="azubiyo">Azubiyo (azubiyo.de)</option>
+                                            <option value="aubi_plus">AUBI-plus (aubi-plus.de)</option>
+                                            <option value="ihk">IHK Lehrstellenbörse (ihk.de)</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="search-actions-bar" style="margin-top: 14px; display: flex; align-items: center; justify-content: space-between;">
+                                    <button id="adb_search_btn" type="button" class="hub-btn-primary">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                        Ausbildungsplätze live suchen
+                                    </button>
+                                    <div class="form-group" style="margin: 0; min-width: 140px;">
+                                        <select id="adb_max_jobs" name="max_jobs" style="padding: 6px 10px; font-size: 12.5px;">
+                                            <option value="20" selected>20 Stellen</option>
+                                            <option value="40">40 Stellen</option>
+                                            <option value="60">60 Stellen</option>
+                                            <option value="100">100 Stellen</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </form>
+
+                            <div class="loading" id="adb_loading" style="display:none; margin-top: 14px;">
+                                <div class="spinner"></div>
+                                <p>Durchsuche Ausbildung.de...</p>
+                            </div>
+                        </div>
+
+                        <!-- Results Container -->
+                        <div id="adb_results_container" class="results" style="display:none;">
+                            <div class="results-meta-row" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                                <span id="adb_results_meta" class="results-meta"></span>
+                                <div class="adb-export-actions">
+                                    <button type="button" id="adb_export_csv" class="hub-btn-secondary">Export CSV</button>
+                                    <button type="button" id="adb_export_json" class="hub-btn-secondary">Export JSON</button>
+                                </div>
+                            </div>
+                            <div id="adb_results_list" class="results-list"></div>
+                        </div>
+                        <div id="adb_error" class="results-error" style="display:none;"></div>
+                    </div>
+
+                    <!-- Panel 2: Existing Export Files Grid -->
+                    <div id="panel-ausbildung-files" class="ausbildung-panel" style="display:none;">
+                        <div id="ausbildungen-status" class="section-status" hidden></div>
+                        <div id="ausbildungen-empty" class="empty-state" hidden>Keine exportierten Ausbildungsdateien gefunden.</div>
+                        <div id="ausbildungen-files" class="files-grid"></div>
+                    </div>
                 </section>
 
                 <section
@@ -459,211 +665,245 @@
                     class="app-section"
                     data-section="create-anschreibens"
                     {% if initial_section != "create-anschreibens" %}hidden{% endif %}
-                >
-                    <div class="section-hero">
-                        <div>
-                            <span class="section-kicker">Anschreiben</span>
-                            <h2>PDF Generator</h2>
-                            <p>Export-Domain waehlen, Varianten verwalten und PDFs direkt aus den gespeicherten Auto-Exporten erzeugen.</p>
+                    <!-- Compact Hero Header -->
+                    <div class="anschreiben-compact-hero">
+                        <div class="hero-left">
+                            <span class="badge-mini">PDF STUDIO</span>
+                            <h2 class="hero-title-compact">Anschreiben Generator</h2>
+                            <p class="hero-subtitle-compact">Export-Domain wählen, Vorlage anpassen und PDFs im Projektordner erstellen.</p>
                         </div>
-                        <div class="hero-actions">
-                            <a href="{{ url_for('send_emails') }}" data-section-link="send-emails">Weiter zu E-Mails</a>
-                            <a href="{{ url_for('dashboard') }}" data-section-link="dashboard">Zum Dashboard</a>
+                        <div class="hero-right">
+                            <a href="{{ url_for('send_emails') }}" data-section-link="send-emails" class="anschreiben-link-btn">
+                                <svg class="btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                                <span>Zu E-Mails</span>
+                            </a>
+                            <a href="{{ url_for('dashboard') }}" data-section-link="dashboard" class="anschreiben-link-btn">
+                                <svg class="btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+                                <span>Dashboard</span>
+                            </a>
                         </div>
                     </div>
 
                     <div id="create-anschreibens-error" class="section-status is-error" hidden></div>
 
-                    <div class="anschreiben-workspace">
-                        <article class="anschreiben-card">
-                            <div class="anschreiben-card-head">
-                                <div>
-                                    <h3>1. Export-Domain auswaehlen</h3>
-                                    <p>Verfügbare Datendateien aus <code>data/auto_extraction_exports</code> direkt als PDF-Quelle laden.</p>
+                    <!-- Main Compact Studio Workspace -->
+                    <div class="anschreiben-studio-grid">
+                        <!-- TOP CONTROL BAR: Source Selector + Info Badges + Collapsible Data Drawers -->
+                        <div class="anschreiben-top-bar">
+                            <div class="anschreiben-source-inline">
+                                <svg class="source-icon-svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                                <label for="create-anschreibens-exportSelect" class="source-label">Quelle:</label>
+                                <select id="create-anschreibens-exportSelect" class="source-select">
+                                    <option value="">Bitte Domain wählen...</option>
+                                </select>
+                                <button id="create-anschreibens-loadExportBtn" class="anschreiben-btn-primary-sm" type="button">Laden</button>
+                                <div id="create-anschreibens-fileInfo" class="source-badge" hidden>
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                                    <span id="create-anschreibens-fileName" class="source-filename"></span>
+                                    <span class="badge-pill"><b id="create-anschreibens-rowCount">0</b> Kontakte</span>
                                 </div>
                             </div>
-                            <div class="anschreiben-inline-form">
-                                <label class="anschreiben-field" for="create-anschreibens-exportSelect">
-                                    <span>Verfügbare Domains</span>
-                                    <select id="create-anschreibens-exportSelect">
-                                        <option value="">Bitte Domain waehlen</option>
-                                    </select>
-                                </label>
-                                <button id="create-anschreibens-loadExportBtn" class="anschreiben-btn-primary" type="button">Daten laden</button>
-                            </div>
-                            <small class="anschreiben-source-help">Quelle: zuletzt exportierte Dateien aus dem Auto-Extraction-Ordner.</small>
-                            <div id="create-anschreibens-fileInfo" class="anschreiben-file-info" hidden>
-                                <p>Quelle: <span id="create-anschreibens-fileName"></span></p>
-                                <p>Zeilen: <span id="create-anschreibens-rowCount"></span></p>
-                            </div>
-                        </article>
 
-                        <article class="anschreiben-card">
-                            <div class="anschreiben-card-head">
-                                <div>
-                                    <h3>2. Spalten aus Datei</h3>
-                                    <p>Verfügbare Felder werden direkt für Platzhalter und Vorschau vorbereitet.</p>
-                                </div>
-                            </div>
-                            <div id="create-anschreibens-columnList" class="anschreiben-column-list"></div>
-                            <div id="create-anschreibens-dataPreview" class="anschreiben-data-preview" hidden>
-                                <h4>Datenvorschau</h4>
-                                <div id="create-anschreibens-previewTable" class="anschreiben-preview-table"></div>
-                            </div>
-                        </article>
-
-                        <article class="anschreiben-card">
-                            <div class="anschreiben-card-head">
-                                <div>
-                                    <h3>3. Dokumentenansicht</h3>
-                                    <p>Das hochgeladene PDF-Dokument des Kunden wird hier angezeigt.</p>
-                                </div>
-                            </div>
-                            <div id="create-anschreibens-sourcePrompt" class="empty-state">
-                                Noch kein Quelldokument ausgewaehlt.
-                            </div>
-                            <div id="create-anschreibens-pdfContainer" style="width: 100%; border: 1px solid #ddd; border-radius: 4px; overflow: hidden; display: flex; flex-direction: column;" hidden>
-                                <div class="anschreiben-document-viewer-head" style="padding: 10px; background: #f8faff; border-bottom: 1px solid #ddd; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
-                                    <div id="create-anschreibens-documentList" class="anschreiben-document-list" style="display: flex; gap: 8px; flex-wrap: wrap;"></div>
-                                    <div style="display: flex; align-items: center; gap: 10px;">
-                                        <span id="create-anschreibens-documentViewerTitle" style="font-weight: bold; font-size: 14px;"></span>
-                                        <a id="create-anschreibens-documentOpenLink" href="#" target="_blank" class="anschreiben-btn-secondary" style="padding: 4px 8px; font-size: 12px; text-decoration: none;">In neuem Tab öffnen</a>
+                            <!-- Drawer Toggles (Collapsible Columns & Preview) -->
+                            <div class="anschreiben-drawer-toggles">
+                                <details class="anschreiben-mini-drawer">
+                                    <summary class="drawer-summary-btn">
+                                        <svg class="drawer-icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+                                        <span>Spalten & Vorschau</span>
+                                    </summary>
+                                    <div class="drawer-dropdown-content">
+                                        <div id="create-anschreibens-columnList" class="anschreiben-column-list-compact"></div>
+                                        <div id="create-anschreibens-dataPreview" class="anschreiben-data-preview-compact" hidden>
+                                            <div id="create-anschreibens-previewTable" class="anschreiben-preview-table-compact"></div>
+                                        </div>
                                     </div>
-                                </div>
-                                <div class="anschreiben-document-viewer" style="height: 600px; width: 100%;">
-                                    <iframe id="create-anschreibens-pdfIframe" style="width: 100%; height: 100%; border: none;"></iframe>
-                                </div>
-                            </div>
-                        </article>
+                                </details>
 
-                        <article class="anschreiben-card">
-                            <div class="anschreiben-card-head">
-                                <div>
-                                    <h3>4. Textvorlage bearbeiten</h3>
-                                    <p>Mehrere Varianten speichern, Text aus dem PDF extrahieren und optional ein Design-PDF als Hintergrund hinterlegen.</p>
-                                </div>
-                            </div>
-
-                            <div class="anschreiben-design-upload">
-                                <h4>Optional: Design-PDF als Hintergrund</h4>
-                                <div class="anschreiben-upload-area anschreiben-upload-area-compact" id="create-anschreibens-designDropZone">
-                                    <input type="file" id="create-anschreibens-designFileInput" accept=".pdf" hidden>
-                                    <p>Design-PDF hier ablegen oder klicken</p>
-                                    <small>Der Text wird auf Seite 1 des PDFs platziert.</small>
-                                </div>
-                                <div id="create-anschreibens-designFileInfo" class="anschreiben-file-info" hidden>
-                                    <p>Design-Datei: <span id="create-anschreibens-designFileName"></span></p>
-                                </div>
-                            </div>
-
-                            <div class="anschreiben-template-editor">
-                                <div class="anschreiben-placeholder-help">
-                                    <p>Verfügbare Platzhalter: <span id="create-anschreibens-placeholderTags"></span></p>
-                                    <small>Formatierung unterstuetzt z. B. <b>&lt;b&gt;fett&lt;/b&gt;</b>, <i>&lt;i&gt;kursiv&lt;/i&gt;</i> und <u>&lt;u&gt;unterstrichen&lt;/u&gt;</u>.</small>
-                                </div>
-
-                                <div class="anschreiben-extract-area" style="background: var(--surface); padding: 16px; border-radius: 6px; border: 1px solid var(--border); margin-bottom: 20px;">
-                                    <h4 style="margin-top: 0; margin-bottom: 12px; font-size: 0.95rem; color: var(--text-primary);">Text aus PDF extrahieren</h4>
-                                    <div style="display: flex; gap: 10px; align-items: center;">
-                                        <label for="create-anschreibens-extractPageInput" style="font-size: 0.9rem;">Seitenzahl (Anschreiben):</label>
-                                        <input type="number" id="create-anschreibens-extractPageInput" min="1" value="1" style="width: 80px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 4px;">
-                                        <button id="create-anschreibens-extractBtn" type="button" class="anschreiben-btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">Text extrahieren & einfügen</button>
-                                        <span id="create-anschreibens-extractStatus" style="font-size: 0.85rem; color: var(--text-secondary);" hidden>Extrahiere...</span>
+                                <details class="anschreiben-mini-drawer" id="create-anschreibens-viewerPanel">
+                                    <summary class="drawer-summary-btn">
+                                        <svg class="drawer-icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                                        <span>Vorlagen-PDF</span>
+                                        <span id="create-anschreibens-documentViewerTitle" class="drawer-active-doc"></span>
+                                    </summary>
+                                    <div class="drawer-dropdown-content">
+                                        <div id="create-anschreibens-sourcePrompt" class="drawer-empty-text">Noch kein Quelldokument ausgewählt.</div>
+                                        <div id="create-anschreibens-pdfContainer" class="anschreiben-viewer-compact" hidden>
+                                            <div class="anschreiben-viewer-subbar">
+                                                <div id="create-anschreibens-documentList" class="anschreiben-document-list-compact"></div>
+                                                <a id="create-anschreibens-documentOpenLink" href="#" target="_blank" class="anschreiben-mini-link">
+                                                    <span>In neuem Tab</span>
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                                                </a>
+                                            </div>
+                                            <iframe id="create-anschreibens-pdfIframe" class="compact-doc-iframe" title="PDF Vorschau"></iframe>
+                                        </div>
                                     </div>
-                                    <small style="display: block; margin-top: 8px; color: var(--text-secondary);">Achtung: Ueberschreibt den aktuellen Text im Editor.</small>
-                                </div>
+                                </details>
+                            </div>
+                        </div>
 
-                                <div class="anschreiben-extract-area" style="background: var(--surface); padding: 16px; border-radius: 6px; border: 1px solid var(--border); margin-bottom: 20px;">
-                                    <h4 style="margin-top: 0; margin-bottom: 12px; font-size: 0.95rem; color: var(--text-primary);">KI-Vorlage erstellen</h4>
-                                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                                        <button id="create-anschreibens-aiTemplatizeBtn" type="button" class="anschreiben-btn-primary" style="padding: 6px 12px; font-size: 0.9rem;">Platzhalter per KI einfügen</button>
-                                        <span id="create-anschreibens-aiTemplatizeStatus" style="font-size: 0.85rem; color: var(--text-secondary);" hidden>KI verarbeitet den Text...</span>
-                                    </div>
-                                    <small style="display: block; margin-top: 8px; color: var(--text-secondary);">Nach der Textextraktion analysiert die KI den Text und fuegt automatisch die verfuegbaren Platzhalter ein. Der Vorgang wird nach der Extraktion automatisch gestartet oder kann manuell ausgeloest werden.</small>
-                                </div>
+                        <!-- 2-COLUMN MAIN WORKSPACE -->
+                        <div class="anschreiben-workspace-body">
+                            <!-- LEFT COLUMN: Editor & Tools -->
+                            <div class="anschreiben-editor-column">
+                                <!-- Smart Micro-Toolbar (AI + Text Extract + Design Dropzone) -->
+                                <div class="anschreiben-micro-toolbar">
+                                    <button id="create-anschreibens-aiTemplatizeBtn" type="button" class="tool-btn-accent" title="Erkennt Text und fügt automatisch {% raw %}{{company}}, {{salutation}}{% endraw %} etc. ein">
+                                        <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"/></svg>
+                                        <span>KI-Platzhalter</span>
+                                    </button>
+                                    <button id="create-anschreibens-atsTailorBtn" type="button" class="tool-btn-accent tool-btn-luna" title="ATS Schlüsselbegriffe optimieren mit GPT Luna (~$0.00003)">
+                                        <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                                        <span>⚡ ATS Tailor</span>
+                                    </button>
+                                    <button id="create-anschreibens-goldenHookBtn" type="button" class="tool-btn-accent tool-btn-golden" title="Warum dieses Unternehmen? Golden Hook Einleitung (~$0.000015)">
+                                        <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+                                        <span>✨ Golden Hook</span>
+                                    </button>
+                                    <span id="create-anschreibens-aiTemplatizeStatus" class="tool-status-inline" hidden>KI läuft...</span>
 
-                                <div class="anschreiben-template-variants">
-                                    <div class="anschreiben-template-variant-header">
-                                        <h4>Anschreiben-Varianten</h4>
-                                        <small>Beim Generieren wird pro PDF zufaellig eine gespeicherte Variante verwendet.</small>
+                                    <div class="tool-separator"></div>
+
+                                    <div class="tool-group-inline">
+                                        <span class="tool-text-label">Aus PDF S.:</span>
+                                        <input type="number" id="create-anschreibens-extractPageInput" min="1" value="1" class="tool-num-input">
+                                        <button id="create-anschreibens-extractBtn" type="button" class="tool-btn-subtle">
+                                            Extrahieren
+                                        </button>
+                                        <span id="create-anschreibens-extractStatus" class="tool-status-inline" hidden>...</span>
                                     </div>
-                                    <div id="create-anschreibens-templateList" class="anschreiben-template-list"></div>
-                                    <div class="anschreiben-template-actions">
-                                        <button id="create-anschreibens-addTemplateBtn" class="anschreiben-btn-secondary" type="button">Neue Variante</button>
-                                        <button id="create-anschreibens-deleteTemplateBtn" class="anschreiben-btn-secondary" type="button">Aktive löschen</button>
+
+                                    <div class="tool-separator"></div>
+
+                                    <div class="tool-group-inline">
+                                        <div id="create-anschreibens-designDropZone" class="tool-drop-compact">
+                                            <input type="file" id="create-anschreibens-designFileInput" accept=".pdf" hidden>
+                                            <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+                                            <span>Hintergrund-PDF</span>
+                                        </div>
+                                        <div id="create-anschreibens-designFileInfo" class="tool-file-pill" hidden>
+                                            <span id="create-anschreibens-designFileName"></span>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div class="anschreiben-format-toolbar" id="create-anschreibens-formatToolbar">
-                                    <button type="button" class="anschreiben-format-btn" data-prefix="<b>" data-suffix="</b>"><strong>Fett</strong></button>
-                                    <button type="button" class="anschreiben-format-btn" data-prefix="<i>" data-suffix="</i>"><em>Kursiv</em></button>
-                                    <button type="button" class="anschreiben-format-btn" data-prefix="<u>" data-suffix="</u>"><u>Unterstrichen</u></button>
-                                    <button type="button" class="anschreiben-format-btn" data-prefix="<br><br>" data-suffix="">Absatz</button>
+                                <!-- Interactive Click-to-Insert Placeholders (Horizontal Micro Bar) -->
+                                <div class="anschreiben-token-bar">
+                                    <div class="token-bar-label">
+                                        <span>Platzhalter einfügen:</span>
+                                    </div>
+                                    <div id="create-anschreibens-placeholderTags" class="anschreiben-token-list"></div>
                                 </div>
 
+                                <!-- Editor Subbar: Variants + Text formatting -->
+                                <div class="anschreiben-subbar-clean">
+                                    <div class="anschreiben-variants-bar">
+                                        <span class="subbar-label">Varianten:</span>
+                                        <div id="create-anschreibens-templateList" class="anschreiben-template-pills"></div>
+                                        <button id="create-anschreibens-addTemplateBtn" class="variant-btn-add" type="button" title="Neue Variante">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                        </button>
+                                        <button id="create-anschreibens-deleteTemplateBtn" class="variant-btn-del" type="button" title="Aktive löschen">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                        </button>
+                                    </div>
+
+                                    <div class="anschreiben-format-buttons" id="create-anschreibens-formatToolbar">
+                                        <button type="button" class="format-micro-btn" data-prefix="<b>" data-suffix="</b>" title="Fett"><b>B</b></button>
+                                        <button type="button" class="format-micro-btn" data-prefix="<i>" data-suffix="</i>" title="Kursiv"><i>I</i></button>
+                                        <button type="button" class="format-micro-btn" data-prefix="<u>" data-suffix="</u>" title="Unterstrichen"><u>U</u></button>
+                                        <button type="button" class="format-micro-btn" data-prefix="<br><br>" data-suffix="" title="Absatz">↵</button>
+                                    </div>
+                                </div>
+
+                                <!-- The Editor Textarea -->
                                 <textarea
                                     id="create-anschreibens-templateEditor"
-                                    class="anschreiben-textarea"
-                                    rows="15"
-                                    placeholder="Text oder HTML/CSS-Vorlage hier eingeben..."
+                                    class="anschreiben-textarea-modern"
+                                    rows="10"
+                                    placeholder="Schreiben Sie hier Ihr Anschreiben. Klicken Sie oben auf Platzhalter wie {% raw %}{{Firma}}{% endraw %} oder {% raw %}{{Anrede}}{% endraw %}..."
                                 ></textarea>
-                                <p>HTML/CSS wird automatisch erkannt. Mit ?Vorschau? pr?fen Sie das PDF. Bei HTML bestimmt das CSS das Layout; PDF-Hintergrund und Textlayout-Einstellungen gelten nur f?r Textvorlagen.</p>
 
-                                <div class="anschreiben-template-actions">
-                                    <button id="create-anschreibens-saveTemplateBtn" class="anschreiben-btn-primary" type="button">Vorlage speichern</button>
-                                    <button id="create-anschreibens-resetTemplateBtn" class="anschreiben-btn-secondary" type="button">Aktive leeren</button>
+                                <!-- Footer with Save & Reset -->
+                                <div class="anschreiben-editor-bottom">
+                                    <div class="editor-bottom-actions">
+                                        <button id="create-anschreibens-saveTemplateBtn" class="anschreiben-btn-primary-sm" type="button">
+                                            <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                                            <span>Vorlage speichern</span>
+                                        </button>
+                                        <button id="create-anschreibens-resetTemplateBtn" class="anschreiben-btn-subtle-sm" type="button">Leeren</button>
+                                    </div>
+                                    <div id="create-anschreibens-validationResult" class="anschreiben-validation-compact" hidden></div>
                                 </div>
                             </div>
 
-                            <div id="create-anschreibens-validationResult" class="anschreiben-validation-result" hidden></div>
-                        </article>
+                            <!-- RIGHT COLUMN: Action & Layout Settings Sidebar -->
+                            <div class="anschreiben-sidebar-column">
+                                <!-- Action Card -->
+                                <div class="anschreiben-action-box">
+                                    <h4 class="box-title">
+                                        <svg class="box-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                                        <span>Erstellung & Vorschau</span>
+                                    </h4>
 
-                        <article class="anschreiben-card">
-                            <div class="anschreiben-card-head">
-                                <div>
-                                    <h3>5. PDFs generieren</h3>
-                                    <p>Layout feinjustieren, Vorschau prüfen und die fertigen PDFs direkt in den Versand übergeben.</p>
+                                    <div class="box-actions">
+                                        <button id="create-anschreibens-generateBtn" class="btn-generate-main" type="button">
+                                            <svg class="btn-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                                            <span>Alle PDFs erstellen</span>
+                                        </button>
+                                        <button id="create-anschreibens-previewBtn" class="btn-preview-sub" type="button">
+                                            <svg class="btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                            <span>Vorschau (erste PDF)</span>
+                                        </button>
+                                        <button id="create-anschreibens-toEmailBtn" class="btn-email-next" type="button" hidden>
+                                            <svg class="btn-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                                            <span>Weiter zu E-Mails</span>
+                                        </button>
+                                    </div>
+
+                                    <div id="create-anschreibens-progressArea" class="anschreiben-progress-compact" hidden>
+                                        <div class="progress-bar-mini">
+                                            <div id="create-anschreibens-progressFill" class="progress-fill-mini"></div>
+                                        </div>
+                                        <p id="create-anschreibens-progressText" class="progress-text-mini">Generiere PDFs...</p>
+                                    </div>
+                                </div>
+
+                                <!-- Collapsible Layout Settings -->
+                                <div class="anschreiben-layout-box">
+                                    <input type="hidden" id="create-anschreibens-filenameFormat" value="Automatisch aus Firma">
+                                    <details class="anschreiben-layout-drawer">
+                                        <summary class="layout-drawer-summary">
+                                            <svg class="drawer-icon-svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+                                            <span>Layout-Einstellungen</span>
+                                        </summary>
+                                        <div class="layout-inputs-compact">
+                                            <div class="layout-field-row">
+                                                <label>Schrift (pt)<input type="number" id="create-anschreibens-fontSizeInput" min="6" max="48" step="1" value="11"></label>
+                                                <label>Zeile (mm)<input type="number" id="create-anschreibens-lineHeightInput" min="2" max="30" step="0.5" value="5"></label>
+                                            </div>
+                                            <div class="layout-field-row">
+                                                <label>Oben (mm)<input type="number" id="create-anschreibens-marginTopInput" min="0" max="250" step="1" value="20"></label>
+                                                <label>Unten (mm)<input type="number" id="create-anschreibens-marginBottomInput" min="0" max="250" step="1" value="20"></label>
+                                            </div>
+                                            <div class="layout-field-row">
+                                                <label>Links (mm)<input type="number" id="create-anschreibens-marginLeftInput" min="0" max="200" step="1" value="20"></label>
+                                                <label>Rechts (mm)<input type="number" id="create-anschreibens-marginRightInput" min="0" max="200" step="1" value="20"></label>
+                                            </div>
+                                            <div class="layout-field-row">
+                                                <label>Breite (mm)<input type="number" id="create-anschreibens-textWidthInput" min="20" max="210" step="1" value="170"></label>
+                                                <label>Höhe (mm)<input type="number" id="create-anschreibens-textHeightInput" min="20" max="297" step="1" value="257"></label>
+                                            </div>
+                                            <div class="layout-field-reset">
+                                                <button id="create-anschreibens-resetLayoutBtn" class="anschreiben-btn-subtle-sm" type="button">Reset Standard</button>
+                                            </div>
+                                        </div>
+                                    </details>
                                 </div>
                             </div>
+                        </div>
 
-                            <div class="anschreiben-filename-format">
-                                <label for="create-anschreibens-filenameFormat">Dateiname</label>
-                                <input type="text" id="create-anschreibens-filenameFormat" value="Automatisch aus Firma" readonly>
-                                <small>Jede PDF wird automatisch nach Firma oder Unternehmen benannt.</small>
-                            </div>
-
-                            <div class="anschreiben-layout-controls">
-                                <h4>PDF Layout Steuerung</h4>
-                                <div class="anschreiben-layout-grid">
-                                    <label>Schriftgroesse (pt)<input type="number" id="create-anschreibens-fontSizeInput" min="6" max="48" step="1" value="11"></label>
-                                    <label>Zeilenhoehe (mm)<input type="number" id="create-anschreibens-lineHeightInput" min="2" max="30" step="0.5" value="5"></label>
-                                    <label>Margin oben (mm)<input type="number" id="create-anschreibens-marginTopInput" min="0" max="250" step="1" value="20"></label>
-                                    <label>Margin links (mm)<input type="number" id="create-anschreibens-marginLeftInput" min="0" max="200" step="1" value="20"></label>
-                                    <label>Margin rechts (mm)<input type="number" id="create-anschreibens-marginRightInput" min="0" max="200" step="1" value="20"></label>
-                                    <label>Margin unten (mm)<input type="number" id="create-anschreibens-marginBottomInput" min="0" max="250" step="1" value="20"></label>
-                                    <label>Textbreite (mm)<input type="number" id="create-anschreibens-textWidthInput" min="20" max="210" step="1" value="170"></label>
-                                    <label>Texthoehe (mm)<input type="number" id="create-anschreibens-textHeightInput" min="20" max="297" step="1" value="257"></label>
-                                </div>
-                                <div class="anschreiben-template-actions">
-                                    <button id="create-anschreibens-resetLayoutBtn" class="anschreiben-btn-secondary" type="button">Layout zuruecksetzen</button>
-                                </div>
-                                <small>Bei Design-PDF steuern diese Werte die Textposition auf Seite 1.</small>
-                            </div>
-
-                            <div class="anschreiben-action-buttons">
-                                <button id="create-anschreibens-previewBtn" class="anschreiben-btn-secondary" type="button">Vorschau (erste PDF)</button>
-                                <button id="create-anschreibens-generateBtn" class="anschreiben-btn-primary" type="button">Alle PDFs im Projektordner erstellen</button>
-                                <button id="create-anschreibens-toEmailBtn" class="anschreiben-btn-secondary" type="button" hidden>To Email Sender</button>
-                            </div>
-
-                            <div id="create-anschreibens-progressArea" class="anschreiben-progress-area" hidden>
-                                <div class="anschreiben-progress-bar">
-                                    <div id="create-anschreibens-progressFill" class="anschreiben-progress-fill"></div>
-                                </div>
-                                <p id="create-anschreibens-progressText">Generiere PDFs...</p>
-                            </div>
-                        </article>
-
+                        <!-- Preview Modal -->
                         <div id="create-anschreibens-previewModal" class="anschreiben-modal" hidden>
                             <div class="anschreiben-modal-content">
                                 <div class="anschreiben-modal-header">
@@ -674,7 +914,103 @@
                                     <iframe id="create-anschreibens-pdfPreview" title="PDF Vorschau"></iframe>
                                 </div>
                                 <div class="anschreiben-modal-footer">
-                                    <button id="create-anschreibens-closeFooterBtn" class="anschreiben-btn-secondary" type="button">Schliessen</button>
+                                    <button id="create-anschreibens-closeFooterBtn" class="anschreiben-btn-subtle-sm" type="button">Schließen</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ATS Tailor Modal -->
+                        <div id="create-anschreibens-atsModal" class="anschreiben-modal" hidden>
+                            <div class="anschreiben-modal-content ats-modal-content">
+                                <div class="anschreiben-modal-header">
+                                    <div class="ats-header-title">
+                                        <h3>⚡ ATS Keyword Tailor <span class="badge-luna">GPT-5.6 Luna</span></h3>
+                                        <p class="ats-header-sub">Optimiert Profil-Erfahrungen mit den Schlüsselbegriffen der Stelle (~$0.00003).</p>
+                                    </div>
+                                    <button class="anschreiben-close-btn" id="create-anschreibens-closeAtsModalBtn" type="button">&times;</button>
+                                </div>
+                                <div class="anschreiben-modal-body ats-modal-body">
+                                    <div class="ats-form-grid">
+                                        <div class="ats-form-row">
+                                            <label for="create-anschreibens-atsJobTitle">Ziel-Beruf / Stelle:</label>
+                                            <input type="text" id="create-anschreibens-atsJobTitle" value="Fachinformatiker für Anwendungsentwicklung">
+                                        </div>
+                                        <div class="ats-form-row">
+                                            <label for="create-anschreibens-atsCompanyName">Ziel-Unternehmen:</label>
+                                            <input type="text" id="create-anschreibens-atsCompanyName" value="{{Unternehmen}}">
+                                        </div>
+                                    </div>
+                                    <div class="ats-form-group">
+                                        <label for="create-anschreibens-atsRequirements">Geforderte Keywords & Tech-Stack:</label>
+                                        <textarea id="create-anschreibens-atsRequirements" rows="2" placeholder="z.B. Python, REST-APIs, relationale Datenbanken, Docker, agile Teams"></textarea>
+                                    </div>
+                                    <div class="ats-form-group">
+                                        <label for="create-anschreibens-atsCustomBullets">Ihre bisherigen Erfahrungen (oder leer lassen für Profil-Standard):</label>
+                                        <textarea id="create-anschreibens-atsCustomBullets" rows="2" placeholder="Leer lassen für automatische Übernahme aus Anass Sibbis Profil"></textarea>
+                                    </div>
+                                    <div class="ats-action-bar">
+                                        <button type="button" id="create-anschreibens-atsRunBtn" class="btn-primary-sm ats-run-btn">
+                                            <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                                            <span>Keywords optimieren (~$0.00003)</span>
+                                        </button>
+                                        <div id="create-anschreibens-atsCostBadge" class="ats-cost-badge" hidden>
+                                            <span id="create-anschreibens-atsCostText">⚡ 0.000028 USD</span>
+                                        </div>
+                                    </div>
+                                    <div id="create-anschreibens-atsResultArea" class="ats-result-area" hidden>
+                                        <label class="ats-result-label">Optimierte ATS-Stichpunkte:</label>
+                                        <div id="create-anschreibens-atsResultBullets" class="ats-result-bullets"></div>
+                                        <div class="ats-result-actions">
+                                            <button type="button" id="create-anschreibens-atsInsertBtn" class="anschreiben-btn-primary-sm">In Anschreiben einfügen</button>
+                                            <button type="button" id="create-anschreibens-atsCopyBtn" class="anschreiben-btn-subtle-sm">Kopieren</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Golden Hook Modal -->
+                        <div id="create-anschreibens-goldenHookModal" class="anschreiben-modal" hidden>
+                            <div class="anschreiben-modal-content ats-modal-content">
+                                <div class="anschreiben-modal-header">
+                                    <div class="ats-header-title">
+                                        <h3>✨ "Warum wir?" Golden Hook <span class="badge-luna">GPT-5.6 Luna</span></h3>
+                                        <p class="ats-header-sub">Generiert einen maßgeschneiderten, authentischen Eröffnungssatz (~$0.000015).</p>
+                                    </div>
+                                    <button class="anschreiben-close-btn" id="create-anschreibens-closeGoldenHookModalBtn" type="button">&times;</button>
+                                </div>
+                                <div class="anschreiben-modal-body ats-modal-body">
+                                    <div class="ats-form-grid">
+                                        <div class="ats-form-row">
+                                            <label for="create-anschreibens-hookCompanyName">Unternehmen:</label>
+                                            <input type="text" id="create-anschreibens-hookCompanyName" value="{{Unternehmen}}">
+                                        </div>
+                                        <div class="ats-form-row">
+                                            <label for="create-anschreibens-hookJobTitle">Ausbildungsberuf / Stelle:</label>
+                                            <input type="text" id="create-anschreibens-hookJobTitle" value="Fachinformatiker für Anwendungsentwicklung">
+                                        </div>
+                                    </div>
+                                    <div class="ats-form-group">
+                                        <label for="create-anschreibens-hookContext">Schwerpunkt / Begeisterung (Optional):</label>
+                                        <input type="text" id="create-anschreibens-hookContext" placeholder="z.B. Cloud-Architektur, IoT, moderne Web-Lösungen">
+                                    </div>
+                                    <div class="ats-action-bar">
+                                        <button type="button" id="create-anschreibens-hookRunBtn" class="btn-primary-sm hook-run-btn">
+                                            <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+                                            <span>Golden Hook generieren (~$0.000015)</span>
+                                        </button>
+                                        <div id="create-anschreibens-hookCostBadge" class="ats-cost-badge" hidden>
+                                            <span id="create-anschreibens-hookCostText">⚡ 0.000015 USD</span>
+                                        </div>
+                                    </div>
+                                    <div id="create-anschreibens-hookResultArea" class="ats-result-area" hidden>
+                                        <label class="ats-result-label">Generierter Eröffnungssatz:</label>
+                                        <div id="create-anschreibens-hookResultText" class="ats-bullet-item hook-highlight"></div>
+                                        <div class="ats-result-actions">
+                                            <button type="button" id="create-anschreibens-hookInsertBtn" class="anschreiben-btn-primary-sm">Als Einleitung einfügen</button>
+                                            <button type="button" id="create-anschreibens-hookCopyBtn" class="anschreiben-btn-subtle-sm">Kopieren</button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1030,31 +1366,333 @@
                     </div>
                 </section>
 
+                <section
+                    id="autofill-section"
+                    class="app-section"
+                    data-section="autofill"
+                    {% if initial_section != "autofill" %}hidden{% endif %}
+                >
+                    <div class="section-hero autofill-hero">
+                        <div>
+                            <span class="section-kicker">AI Autofill &amp; Extension Hub</span>
+                            <h2>Bewerberprofile &amp; Formular-Sandbox</h2>
+                            <p>Verwalte Kandidatenprofile, lade Bewerbungsunterlagen hoch und teste das automatische Ausfüllen direkt in der interaktiven Formular-Sandbox.</p>
+                        </div>
+                        <div class="hero-actions">
+                            <span class="hub-status-badge" id="autofill-backend-badge">
+                                <span class="status-dot"></span> Port 5000 Verbunden
+                            </span>
+                            <a href="/test-form" target="_blank" rel="noopener noreferrer" class="hero-ghost-btn">
+                                ↗ Deutsches Formular
+                            </a>
+                            <a href="/french-form" target="_blank" rel="noopener noreferrer" class="hero-ghost-btn">
+                                ↗ Französisches Formular
+                            </a>
+                        </div>
+                    </div>
+
+                    <div id="autofill-status-bar" class="section-status" hidden></div>
+
+                    <div class="autofill-hub-layout">
+                        <!-- Left Column: Profile Management & Document Vault -->
+                        <div class="autofill-col-editor">
+                            <div class="hub-card">
+                                <div class="hub-card-header">
+                                    <div class="profile-select-row">
+                                        <label for="autofill-profile-selector" class="sr-only">Profil auswählen</label>
+                                        <select id="autofill-profile-selector" class="hub-select">
+                                            <option value="">Lade Profile...</option>
+                                        </select>
+                                        <button type="button" id="autofill-btn-new-profile" class="hub-btn-secondary" title="Neues Profil erstellen">+ Neu</button>
+                                    </div>
+                                    <div class="hub-actions-right">
+                                        <button type="button" id="autofill-btn-save-profile" class="hub-btn-primary">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                                            Profil speichern
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Candidate Quick Badge -->
+                                <div class="candidate-summary-bar" id="candidate-summary-bar">
+                                    <div class="candidate-avatar" id="candidate-avatar">AS</div>
+                                    <div class="candidate-summary-info">
+                                        <h4 id="candidate-display-name">Anass Sibbi</h4>
+                                        <p id="candidate-display-meta">Softwareentwickler &bull; Casablanca &bull; Deutsch (de)</p>
+                                    </div>
+                                    <span class="hub-pill" id="candidate-doc-count">0 Dokumente</span>
+                                </div>
+
+                                <!-- Tabs for Profile Editing -->
+                                <div class="hub-tabs">
+                                    <button type="button" class="hub-tab-btn is-active" data-hub-tab="personal">Persönlich</button>
+                                    <button type="button" class="hub-tab-btn" data-hub-tab="contact">Kontakt &amp; Adresse</button>
+                                    <button type="button" class="hub-tab-btn" data-hub-tab="professional">Beruf &amp; Skills</button>
+                                    <button type="button" class="hub-tab-btn" data-hub-tab="documents">Dokumente &amp; CV</button>
+                                    <button type="button" class="hub-tab-btn" data-hub-tab="corrections">Korrekturen</button>
+                                    <button type="button" class="hub-tab-btn" data-hub-tab="rawjson">JSON</button>
+                                </div>
+
+                                <!-- Tab 1: Personal -->
+                                <div class="hub-tab-pane is-active" data-hub-pane="personal">
+                                    <div class="hub-form-grid">
+                                        <div class="hub-form-group">
+                                            <label>Profil-ID (Dateiname)</label>
+                                            <input type="text" id="af-profile-id" placeholder="z. B. anass_sibbi" required>
+                                        </div>
+                                        <div class="hub-form-group">
+                                            <label>Profil-Sprache</label>
+                                            <select id="af-profile-language">
+                                                <option value="de">Deutsch (de)</option>
+                                                <option value="fr">Französisch (fr)</option>
+                                                <option value="en">Englisch (en)</option>
+                                            </select>
+                                        </div>
+                                        <div class="hub-form-group">
+                                            <label>Vorname</label>
+                                            <input type="text" id="af-first-name" placeholder="Vorname">
+                                        </div>
+                                        <div class="hub-form-group">
+                                            <label>Nachname</label>
+                                            <input type="text" id="af-last-name" placeholder="Nachname">
+                                        </div>
+                                        <div class="hub-form-group full-width">
+                                            <label>Vollständiger Name</label>
+                                            <input type="text" id="af-full-name" placeholder="Vollständiger Name">
+                                        </div>
+                                        <div class="hub-form-group">
+                                            <label>Geburtsdatum</label>
+                                            <input type="date" id="af-dob">
+                                        </div>
+                                        <div class="hub-form-group">
+                                            <label>Geburtsort</label>
+                                            <input type="text" id="af-pob" placeholder="Geburtsort">
+                                        </div>
+                                        <div class="hub-form-group">
+                                            <label>Nationalität</label>
+                                            <input type="text" id="af-nationality" placeholder="z. B. Marokkanisch">
+                                        </div>
+                                        <div class="hub-form-group">
+                                            <label>Geschlecht</label>
+                                            <select id="af-gender">
+                                                <option value="male">Männlich</option>
+                                                <option value="female">Weiblich</option>
+                                                <option value="other">Divers / keine Angabe</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Tab 2: Contact -->
+                                <div class="hub-tab-pane" data-hub-pane="contact">
+                                    <div class="hub-form-grid">
+                                        <div class="hub-form-group">
+                                            <label>E-Mail</label>
+                                            <input type="email" id="af-email" placeholder="name@domain.com">
+                                        </div>
+                                        <div class="hub-form-group">
+                                            <label>Telefon / Mobil</label>
+                                            <input type="tel" id="af-phone" placeholder="+49 ... / +212 ...">
+                                        </div>
+                                        <div class="hub-form-group">
+                                            <label>Straße</label>
+                                            <input type="text" id="af-street" placeholder="Straße">
+                                        </div>
+                                        <div class="hub-form-group">
+                                            <label>Hausnummer</label>
+                                            <input type="text" id="af-house-no" placeholder="Nr.">
+                                        </div>
+                                        <div class="hub-form-group">
+                                            <label>Postleitzahl</label>
+                                            <input type="text" id="af-postal" placeholder="PLZ">
+                                        </div>
+                                        <div class="hub-form-group">
+                                            <label>Stadt</label>
+                                            <input type="text" id="af-city" placeholder="Stadt">
+                                        </div>
+                                        <div class="hub-form-group">
+                                            <label>Land</label>
+                                            <input type="text" id="af-country" placeholder="Deutschland / Marokko">
+                                        </div>
+                                        <div class="hub-form-group">
+                                            <label>Ländercode</label>
+                                            <input type="text" id="af-country-code" placeholder="DE / MA">
+                                        </div>
+                                        <div class="hub-form-group full-width">
+                                            <label>LinkedIn URL</label>
+                                            <input type="url" id="af-linkedin" placeholder="https://linkedin.com/in/...">
+                                        </div>
+                                        <div class="hub-form-group full-width">
+                                            <label>Portfolio / Website</label>
+                                            <input type="url" id="af-portfolio" placeholder="https://...">
+                                        </div>
+                                        <div class="hub-form-group full-width">
+                                            <label>GitHub URL</label>
+                                            <input type="url" id="af-github" placeholder="https://github.com/...">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Tab 3: Professional -->
+                                <div class="hub-tab-pane" data-hub-pane="professional">
+                                    <div class="hub-form-grid">
+                                        <div class="hub-form-group full-width">
+                                            <label>Aktueller Stellentitel</label>
+                                            <input type="text" id="af-current-title" placeholder="z. B. Softwareentwickler">
+                                        </div>
+                                        <div class="hub-form-group full-width">
+                                            <label>Alternative Bezeichnung / Headline</label>
+                                            <input type="text" id="af-headline" placeholder="Headline für Bewerbungen">
+                                        </div>
+                                        <div class="hub-form-group full-width">
+                                            <label>Profil-Zusammenfassung (Summary)</label>
+                                            <textarea id="af-summary" rows="4" placeholder="Kurze Beschreibung des Profils, Schwerpunkte und Erfahrungen..."></textarea>
+                                        </div>
+                                        <div class="hub-form-group full-width">
+                                            <label>Schwerpunkte / Fachgebiete (kommagetrennt)</label>
+                                            <input type="text" id="af-primary-fields" placeholder="z. B. Softwareentwicklung, Full-Stack, React">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Tab 4: Documents -->
+                                <div class="hub-tab-pane" data-hub-pane="documents">
+                                    <div class="hub-doc-upload-box">
+                                        <label for="af-file-upload-input" class="doc-dropzone">
+                                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                            <span>Dokument hochladen (PDF, JPG, PNG)</span>
+                                            <small>Wird im Ordner des Profils gespeichert</small>
+                                            <input type="file" id="af-file-upload-input" accept=".pdf,.jpg,.jpeg,.png" style="display:none;">
+                                        </label>
+                                    </div>
+                                    <div class="hub-doc-list" id="af-document-list">
+                                        <div class="doc-empty-state">Keine Dokumente geladen.</div>
+                                    </div>
+                                </div>
+
+                                <!-- Tab 5: Corrections Memory -->
+                                <div class="hub-tab-pane" data-hub-pane="corrections">
+                                    <div class="corrections-header">
+                                        <div>
+                                            <h4>Gelehrte Feld-Zuordnungen</h4>
+                                            <p>Automatisch aus deinen Korrekturen in der Chrome-Extension erlernt.</p>
+                                        </div>
+                                        <button type="button" id="af-btn-clear-corrections" class="hub-btn-danger">Alle löschen</button>
+                                    </div>
+                                    <div class="corrections-list" id="af-corrections-list">
+                                        <div class="doc-empty-state">Keine Korrekturen gespeichert.</div>
+                                    </div>
+                                </div>
+
+                                <!-- Tab 6: Raw JSON -->
+                                <div class="hub-tab-pane" data-hub-pane="rawjson">
+                                    <div class="raw-json-wrap">
+                                        <textarea id="af-raw-json" rows="16" spellcheck="false"></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Column: Live Test Form & Extension Sandbox -->
+                        <div class="autofill-col-sandbox">
+                            <div class="hub-card sandbox-card">
+                                <div class="sandbox-toolbar">
+                                    <div class="sandbox-controls">
+                                        <label>Formular:</label>
+                                        <div class="segmented-control">
+                                            <button type="button" class="seg-btn is-active" id="btn-load-de-form">Deutsch (/test-form)</button>
+                                            <button type="button" class="seg-btn" id="btn-load-fr-form">Français (/french-form)</button>
+                                        </div>
+                                    </div>
+                                    <div class="sandbox-actions">
+                                        <button type="button" id="btn-refresh-sandbox" class="hub-icon-btn" title="Formular neu laden">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                                        </button>
+                                        <a href="/test-form" id="link-open-sandbox-tab" target="_blank" rel="noopener noreferrer" class="hub-icon-btn" title="In neuem Tab öffnen">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                                        </a>
+                                    </div>
+                                </div>
+                                <div class="sandbox-helper-banner">
+                                    <span class="lightning-icon">⚡</span>
+                                    <span><strong>Live Extension Test:</strong> Öffne die Extension oder drücke <code>Alt+Shift+F</code>, um die Felder dieses Test-Formulars automatisch auszufüllen!</span>
+                                </div>
+                                <div class="sandbox-frame-wrap">
+                                    <iframe id="autofill-sandbox-iframe" src="/test-form" title="Autofill Test Form"></iframe>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Bottom Section: Application Tracking Log -->
+                    <div class="autofill-history-section">
+                        <div class="section-subhead">
+                            <div>
+                                <h3>Erfasste Bewerbungen &amp; Verlauf</h3>
+                                <p>Hier werden alle Bewerbungen aufgeführt, die über die Autofill-Extension oder den "Open &amp; Autofill" Workflow gestartet wurden.</p>
+                            </div>
+                            <button type="button" id="autofill-refresh-history" class="hub-btn-secondary">Aktualisieren</button>
+                        </div>
+                        <div class="history-table-wrap">
+                            <table class="history-table">
+                                <thead>
+                                    <tr>
+                                        <th>Stellentitel / Rolle</th>
+                                        <th>Unternehmen / Portal</th>
+                                        <th>Profil</th>
+                                        <th>Felder</th>
+                                        <th>Datum / Status</th>
+                                        <th>Aktion</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="autofill-history-body">
+                                    <tr><td colspan="6" class="history-empty">Lade Bewerbungsverlauf...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
 
             </div>
-        </main>
-    </div>
+    <!-- Profile Hub Modal -->
+    <div id="profileHubModal" class="anschreiben-modal" hidden>
+        <div class="anschreiben-modal-content profile-modal-content">
+            <div class="anschreiben-modal-header">
+                <div class="profile-header-meta">
+                    <div class="profile-avatar">AS</div>
+                    <div>
+                        <h3 id="profileName">Anass Sibbi</h3>
+                        <p class="profile-role" id="profileRole">Softwareentwickler | Full-Stack-Entwickler</p>
+                    </div>
+                </div>
+                <button class="anschreiben-close-btn" id="closeProfileModalBtn" type="button">&times;</button>
+            </div>
+            <div class="anschreiben-modal-body profile-modal-body">
+                <div class="profile-badges-row">
+                    <span class="profile-tag-pill">📍 Casablanca, MA</span>
+                    <span class="profile-tag-pill">✉️ sibbianass@gmail.com</span>
+                    <span class="profile-tag-pill">📞 +212 699 771 759</span>
+                    <a href="https://anass133.github.io/portf/" target="_blank" class="profile-tag-pill profile-link-pill">🌐 Portfolio ↗</a>
+                </div>
 
-    <script>
-        window.APP_INITIAL_SECTION = {{ initial_section|tojson }};
-        window.SUPABASE_CONFIG = {
-            url: {{ supabase_url|tojson }},
-            anonKey: {{ supabase_anon_key|tojson }}
-        };
-        window.SUPABASE_URL = window.SUPABASE_CONFIG.url;
-        window.SUPABASE_ANON_KEY = window.SUPABASE_CONFIG.anonKey;
-    </script>
-    <script src="{{ url_for('static', filename='spa/utils.js') }}?v=2.0"></script>
-    <script src="{{ url_for('static', filename='spa/supabase-client.js') }}?v=2.0"></script>
-    <script src="{{ url_for('static', filename='spa/sections/search.js') }}?v=2.0"></script>
-    <script src="{{ url_for('static', filename='spa/sections/dashboard.js') }}?v=2.0"></script>
-    <script src="{{ url_for('static', filename='spa/sections/supabase.js') }}?v=2.0"></script>
-    <script src="{{ url_for('static', filename='spa/sections/money.js') }}?v=2.0"></script>
-    <script src="{{ url_for('static', filename='spa/sections/ausbildungen.js') }}?v=2.0"></script>
-    <script src="{{ url_for('static', filename='spa/sections/create-anschreibens.js') }}?v=2.0"></script>
-    <script src="{{ url_for('static', filename='spa/sections/send-emails.js') }}?v=2.0"></script>
-    <script src="{{ url_for('static', filename='spa/sections/google-maps.js') }}?v=2.0"></script>
-    <script src="{{ url_for('static', filename='spa/app.js') }}?v=2.0"></script>
-    <script src="{{ url_for('static', filename='auto_continue.js') }}" defer></script>
+                <div class="profile-section-card">
+                    <label class="profile-card-title">Verifizierte Skills (für ATS & Luna-Matching):</label>
+                    <div id="profileSkillsCloud" class="profile-skills-cloud"></div>
+                </div>
+
+                <div class="profile-section-card">
+                    <label for="profileSummaryInput" class="profile-card-title">Profil-Zusammenfassung (Deutsch):</label>
+                    <textarea id="profileSummaryInput" rows="3" class="profile-textarea" placeholder="Ihre berufliche Zusammenfassung..."></textarea>
+                </div>
+
+                <div class="profile-footer-actions">
+                    <button type="button" id="saveProfileBtn" class="btn-primary-sm profile-save-btn">
+                        <span>Änderungen speichern</span>
+                    </button>
+                    <span id="profileSaveStatus" class="profile-save-status" hidden>✓ Gespeichert!</span>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

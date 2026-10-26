@@ -3,10 +3,13 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Virtual environments
+# Virtual environments & embedded runtimes
 venv/
 .venv/
 env/
+Python/
+node_modules/
+.deepseek/
 
 # Environment / secrets
 .env
@@ -43,7 +46,6 @@ extraction_results.xlsx
 
 # Keep dependency and source files tracked
 !requirements.txt
-!requirements-dev.txt
 !templates/
 !static/
 !scraper/

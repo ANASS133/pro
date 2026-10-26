@@ -1,63 +1,182 @@
-.shared-navbar,
-nav.navbar.shared-navbar,
-nav.top-nav.shared-navbar {
+/* Modern Left Sidebar for Standalone Pages */
+.shared-sidebar {
     position: fixed !important;
-    top: 16px !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
+    top: 0 !important;
+    left: 0 !important;
+    bottom: 0 !important;
+    width: 250px !important;
+    height: 100vh !important;
     z-index: 1000 !important;
-    width: min(1100px, calc(100% - 40px)) !important;
     box-sizing: border-box !important;
     margin: 0 !important;
-    background: #fff !important;
-    border-radius: 10px !important;
+    background: #0f172a !important;
+    color: #e2e8f0 !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12) !important;
     display: flex !important;
-    flex-wrap: wrap !important;
-    gap: 10px !important;
-    padding: 10px 14px !important;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1) !important;
+    flex-direction: column !important;
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    overflow: hidden !important;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
 }
 
-body.has-shared-navbar {
-    padding-top: 100px !important;
+body.has-shared-sidebar {
+    padding-left: 250px !important;
+    padding-top: 0 !important;
+    transition: padding-left 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
-.shared-navbar .shared-nav-link {
-    display: inline-flex !important;
+body.has-shared-sidebar.sidebar-collapsed {
+    padding-left: 68px !important;
+}
+
+.shared-sidebar-header {
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    padding: 20px 16px 18px !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07) !important;
+}
+
+.shared-brand-badge {
+    width: 36px !important;
+    height: 36px !important;
+    border-radius: 9px !important;
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%) !important;
+    color: #fff !important;
+    display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    color: #2f3a56 !important;
-    text-decoration: none !important;
-    font-weight: 700 !important;
-    padding: 8px 12px !important;
-    border-radius: 6px !important;
-    line-height: 1.2 !important;
-    transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease !important;
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4) !important;
+    flex-shrink: 0 !important;
 }
 
-.shared-navbar .shared-nav-link:hover {
-    background: #eef2ff !important;
-    color: #2f3a56 !important;
-    transform: translateY(-1px) !important;
+.shared-brand-meta {
+    flex: 1 !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
 }
 
-.shared-navbar .shared-nav-link.active,
-.shared-navbar .shared-nav-link[aria-current="page"] {
-    background: #667eea !important;
+.shared-brand-title {
+    font-size: 15px !important;
+    font-weight: 800 !important;
+    color: #fff !important;
+    letter-spacing: -0.02em !important;
+}
+
+.shared-sidebar-toggle {
+    width: 28px !important;
+    height: 28px !important;
+    border-radius: 7px !important;
+    background: rgba(255, 255, 255, 0.06) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #94a3b8 !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: background 0.15s, color 0.15s !important;
+    flex-shrink: 0 !important;
+}
+
+.shared-sidebar-toggle:hover {
+    background: rgba(255, 255, 255, 0.12) !important;
     color: #fff !important;
 }
 
-@media (max-width: 640px) {
-    .shared-navbar,
-    nav.navbar.shared-navbar,
-    nav.top-nav.shared-navbar {
-        width: calc(100% - 24px) !important;
-        top: 12px !important;
-        gap: 8px !important;
-        padding: 10px !important;
-    }
+.shared-sidebar-nav {
+    flex: 1 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding: 16px 10px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+}
 
-    body.has-shared-navbar {
-        padding-top: 116px !important;
+.shared-nav-link {
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    min-height: 38px !important;
+    padding: 0 12px !important;
+    border-radius: 8px !important;
+    color: #94a3b8 !important;
+    text-decoration: none !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    white-space: nowrap !important;
+    transition: background 0.15s, color 0.15s, transform 0.15s !important;
+}
+
+.shared-nav-link:hover {
+    background: rgba(255, 255, 255, 0.06) !important;
+    color: #f1f5f9 !important;
+    transform: translateX(2px) !important;
+}
+
+.shared-nav-link.is-active,
+.shared-nav-link[aria-current="page"] {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.25) 0%, rgba(99, 102, 241, 0.12) 100%) !important;
+    color: #fff !important;
+    border-left: 3px solid #6366f1 !important;
+    font-weight: 700 !important;
+}
+
+.shared-nav-icon {
+    flex-shrink: 0 !important;
+}
+
+.shared-nav-text {
+    flex: 1 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+
+/* Collapsed state */
+.shared-sidebar.is-collapsed {
+    width: 68px !important;
+}
+
+.shared-sidebar.is-collapsed .shared-brand-meta,
+.shared-sidebar.is-collapsed .shared-nav-text {
+    display: none !important;
+}
+
+.shared-sidebar.is-collapsed .shared-sidebar-header {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px !important;
+    padding: 14px 4px 12px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+.shared-sidebar.is-collapsed .shared-brand-badge {
+    margin: 0 auto !important;
+    cursor: pointer !important;
+}
+
+.shared-sidebar.is-collapsed .shared-sidebar-toggle {
+    margin: 0 auto !important;
+}
+
+.shared-sidebar.is-collapsed .shared-sidebar-toggle svg {
+    transform: rotate(180deg) !important;
+}
+
+.shared-sidebar.is-collapsed .shared-nav-link {
+    justify-content: center !important;
+    padding: 0 !important;
+}
+
+@media (max-width: 768px) {
+    .shared-sidebar {
+        display: none !important;
+    }
+    body.has-shared-sidebar {
+        padding-left: 0 !important;
     }
 }

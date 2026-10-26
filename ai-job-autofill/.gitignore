@@ -1,0 +1,15 @@
+node_modules/
+.env
+.env.*
+!.env.example
+server/profile.json
+server/profiles/*.json
+!server/profiles/template.json
+server/profiles/*/*
+profils/
+*.log
+server/corrections.json
+server/answers_cache.json
+answers_cache.json
+.DS_Store
+Thumbs.db

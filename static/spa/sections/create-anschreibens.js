@@ -127,6 +127,33 @@
             documentList: byId("documentList"),
             documentViewerTitle: byId("documentViewerTitle"),
             documentOpenLink: byId("documentOpenLink"),
+            atsTailorBtn: byId("atsTailorBtn"),
+            atsModal: byId("atsModal"),
+            closeAtsModalBtn: byId("closeAtsModalBtn"),
+            atsJobTitle: byId("atsJobTitle"),
+            atsCompanyName: byId("atsCompanyName"),
+            atsRequirements: byId("atsRequirements"),
+            atsCustomBullets: byId("atsCustomBullets"),
+            atsRunBtn: byId("atsRunBtn"),
+            atsCostBadge: byId("atsCostBadge"),
+            atsCostText: byId("atsCostText"),
+            atsResultArea: byId("atsResultArea"),
+            atsResultBullets: byId("atsResultBullets"),
+            atsInsertBtn: byId("atsInsertBtn"),
+            atsCopyBtn: byId("atsCopyBtn"),
+            goldenHookBtn: byId("goldenHookBtn"),
+            goldenHookModal: byId("goldenHookModal"),
+            closeGoldenHookModalBtn: byId("closeGoldenHookModalBtn"),
+            hookCompanyName: byId("hookCompanyName"),
+            hookJobTitle: byId("hookJobTitle"),
+            hookContext: byId("hookContext"),
+            hookRunBtn: byId("hookRunBtn"),
+            hookCostBadge: byId("hookCostBadge"),
+            hookCostText: byId("hookCostText"),
+            hookResultArea: byId("hookResultArea"),
+            hookResultText: byId("hookResultText"),
+            hookInsertBtn: byId("hookInsertBtn"),
+            hookCopyBtn: byId("hookCopyBtn"),
         };
 
         const requiredKeys = [
@@ -368,18 +395,100 @@
             loadActiveTemplateIntoEditor();
         }
 
+        function insertPlaceholder(placeholderName) {
+            const token = `{{${placeholderName}}}`;
+            wrapSelection(token, "");
+            persistActiveTemplateValue();
+            renderTemplateList();
+            showToast(`Eingefügt: ${token}`, 1200);
+        }
+
+        function createPlaceholderPill(name, category, label) {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = `placeholder-pill placeholder-pill--${category}`;
+            btn.title = label ? `${label} - Klicken zum Einfügen: {{${name}}}` : `Klicken zum Einfügen: {{${name}}}`;
+
+            let iconSvg = "";
+            if (category === "smart") {
+                iconSvg = `<svg class="pill-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"/></svg>`;
+            } else if (category === "data") {
+                iconSvg = `<svg class="pill-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>`;
+            } else if (category === "system") {
+                iconSvg = `<svg class="pill-svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`;
+            }
+
+            btn.innerHTML = `<span class="pill-icon">${iconSvg}</span><span class="pill-text">{{${escapeHtml(name)}}}</span>`;
+            btn.addEventListener("click", (e) => {
+                e.preventDefault();
+                insertPlaceholder(name);
+                btn.classList.add("is-popping");
+                window.setTimeout(() => btn.classList.remove("is-popping"), 250);
+            });
+            return btn;
+        }
+
+        function renderPlaceholders(columns = []) {
+            if (!els.placeholderTags) return;
+            els.placeholderTags.innerHTML = "";
+
+            const smartTokens = [
+                { name: "custom_hook", label: "Dynamische Einleitung" },
+                { name: "salutation", label: "Anrede (Sehr geehrte/r...)" },
+                { name: "ansprechpartner", label: "Kontaktperson" },
+                { name: "geschaeftsfuehrer", label: "Geschäftsführer" },
+            ];
+
+            const systemTokens = [
+                { name: "heutigenDatum", label: "Heutiges Datum" },
+            ];
+
+            const container = document.createElement("div");
+            container.className = "placeholder-pills-flow";
+
+            // 1. KI / Smart Badge + Pills
+            const smartBadge = document.createElement("span");
+            smartBadge.className = "placeholder-flow-badge badge-smart";
+            smartBadge.textContent = "KI";
+            container.appendChild(smartBadge);
+            smartTokens.forEach(t => container.appendChild(createPlaceholderPill(t.name, "smart", t.label)));
+
+            // 2. Data Columns from loaded file
+            const dataCols = (columns || []).filter(c => !["custom_hook", "salutation", "ansprechpartner", "geschaeftsfuehrer", "heutigenDatum"].includes(c));
+            if (dataCols.length > 0) {
+                const dataBadge = document.createElement("span");
+                dataBadge.className = "placeholder-flow-badge badge-data";
+                dataBadge.textContent = "Datei";
+                container.appendChild(dataBadge);
+                dataCols.forEach(c => container.appendChild(createPlaceholderPill(c, "data")));
+            }
+
+            // 3. System Tokens
+            const sysBadge = document.createElement("span");
+            sysBadge.className = "placeholder-flow-badge badge-sys";
+            sysBadge.textContent = "System";
+            container.appendChild(sysBadge);
+            systemTokens.forEach(t => container.appendChild(createPlaceholderPill(t.name, "system", t.label)));
+
+            els.placeholderTags.appendChild(container);
+        }
+
         function renderColumns(columns) {
             els.columnList.innerHTML = "";
-            columns.forEach((column) => {
-                const tag = document.createElement("span");
-                tag.className = "anschreiben-column-tag";
-                tag.textContent = column;
-                els.columnList.appendChild(tag);
+            (columns || []).forEach((column) => {
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "anschreiben-column-tag";
+                btn.title = `Klicken, um {{${column}}} in die Vorlage einzufügen`;
+                btn.textContent = `+ {{${column}}}`;
+                btn.addEventListener("click", (e) => {
+                    e.preventDefault();
+                    insertPlaceholder(column);
+                });
+                els.columnList.appendChild(btn);
             });
 
-            const dynamicPlaceholders = columns.map((column) => `{{${column}}}`);
-            const builtinPlaceholders = ["{{heutigenDatum}}"];
-            els.placeholderTags.textContent = [...dynamicPlaceholders, ...builtinPlaceholders].join(" ");
+            renderPlaceholders(columns);
         }
 
         function renderPreview(rows) {
@@ -920,6 +1029,220 @@
                     els.aiTemplatizeStatus.hidden = true;
                 }
             }
+        }
+
+        let currentTailoredBullets = [];
+
+        function openAtsModal() {
+            if (!els.atsModal) return;
+            if (state.previewRows && state.previewRows.length > 0) {
+                const firstRow = state.previewRows[0];
+                const possibleCompany = firstRow["Unternehmen"] || firstRow["Firma"] || firstRow["Company"];
+                if (possibleCompany && els.atsCompanyName) {
+                    els.atsCompanyName.value = possibleCompany;
+                }
+                const possibleRole = firstRow["Beruf"] || firstRow["Stelle"] || firstRow["Job"] || firstRow["Position"];
+                if (possibleRole && els.atsJobTitle) {
+                    els.atsJobTitle.value = possibleRole;
+                }
+            }
+            els.atsModal.hidden = false;
+        }
+
+        function closeAtsModal() {
+            if (els.atsModal) els.atsModal.hidden = true;
+        }
+
+        async function runAtsTailoring() {
+            if (!els.atsRunBtn) return;
+            const jobTitle = (els.atsJobTitle?.value || "").trim();
+            const companyName = (els.atsCompanyName?.value || "").trim();
+            const jobRequirements = (els.atsRequirements?.value || "").trim();
+            const currentBullets = (els.atsCustomBullets?.value || "").trim();
+
+            els.atsRunBtn.disabled = true;
+            els.atsRunBtn.innerHTML = "<span>⚡ Optimiere mit Luna...</span>";
+            if (els.atsCostBadge) els.atsCostBadge.hidden = true;
+            if (els.atsResultArea) els.atsResultArea.hidden = true;
+
+            try {
+                const data = await fetchJson("/api/pdf/ats-tailor", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        job_title: jobTitle,
+                        company_name: companyName,
+                        job_requirements: jobRequirements,
+                        current_bullets: currentBullets,
+                        profile_id: "anass_sibbi"
+                    })
+                });
+
+                if (!data.success) {
+                    throw new Error(data.error || "ATS-Optimierung fehlgeschlagen");
+                }
+
+                currentTailoredBullets = data.tailored_bullets || [];
+
+                if (els.atsResultBullets) {
+                    els.atsResultBullets.innerHTML = currentTailoredBullets
+                        .map(b => `<div class="ats-bullet-item">• ${escapeHtml(b)}</div>`)
+                        .join("");
+                }
+
+                if (els.atsCostBadge && els.atsCostText) {
+                    els.atsCostBadge.hidden = false;
+                    if (data.from_cache) {
+                        els.atsCostBadge.className = "ats-cost-badge cached";
+                        els.atsCostText.textContent = "⚡ 0 Tokens (Aus Cache - $0.00)";
+                    } else {
+                        const cost = data.usage?.estimated_cost_usd || 0.00003;
+                        const tokens = data.usage?.total_tokens || 0;
+                        els.atsCostBadge.className = "ats-cost-badge";
+                        els.atsCostText.textContent = `⚡ ${tokens} Tokens | $${cost.toFixed(6)} USD`;
+                    }
+                }
+
+                if (els.atsResultArea) els.atsResultArea.hidden = false;
+                showToast("ATS-Keywords erfolgreich optimiert!");
+            } catch (err) {
+                showToast(err.message || "Fehler beim Anpassen");
+            } finally {
+                els.atsRunBtn.disabled = false;
+                els.atsRunBtn.innerHTML = '<svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg><span>Keywords optimieren (~$0.00003)</span>';
+            }
+        }
+
+        function insertTailoredBullets() {
+            if (!currentTailoredBullets || !currentTailoredBullets.length) return;
+            const formattedText = "\n" + currentTailoredBullets.map(b => `• ${b}`).join("\n") + "\n";
+            const editor = els.templateEditor;
+            if (!editor) return;
+
+            const start = editor.selectionStart ?? editor.value.length;
+            const end = editor.selectionEnd ?? editor.value.length;
+            const before = editor.value.substring(0, start);
+            const after = editor.value.substring(end);
+            editor.value = before + formattedText + after;
+
+            persistActiveTemplateValue();
+            renderTemplateList();
+            closeAtsModal();
+            showToast("Stichpunkte ins Anschreiben eingefügt");
+        }
+
+        function copyTailoredBullets() {
+            if (!currentTailoredBullets || !currentTailoredBullets.length) return;
+            const formattedText = currentTailoredBullets.map(b => `• ${b}`).join("\n");
+            navigator.clipboard.writeText(formattedText).then(() => {
+                showToast("In Zwischenablage kopiert!");
+            }).catch(() => {
+                showToast("Kopieren fehlgeschlagen");
+            });
+        }
+
+        let currentGoldenHook = "";
+
+        function openGoldenHookModal() {
+            if (!els.goldenHookModal) return;
+            if (state.previewRows && state.previewRows.length > 0) {
+                const firstRow = state.previewRows[0];
+                const possibleCompany = firstRow["Unternehmen"] || firstRow["Firma"] || firstRow["Company"];
+                if (possibleCompany && els.hookCompanyName) {
+                    els.hookCompanyName.value = possibleCompany;
+                }
+                const possibleRole = firstRow["Beruf"] || firstRow["Stelle"] || firstRow["Job"] || firstRow["Position"];
+                if (possibleRole && els.hookJobTitle) {
+                    els.hookJobTitle.value = possibleRole;
+                }
+            }
+            els.goldenHookModal.hidden = false;
+        }
+
+        function closeGoldenHookModal() {
+            if (els.goldenHookModal) els.goldenHookModal.hidden = true;
+        }
+
+        async function runGoldenHook() {
+            if (!els.hookRunBtn) return;
+            const company = (els.hookCompanyName?.value || "").trim();
+            const jobTitle = (els.hookJobTitle?.value || "").trim();
+            const context = (els.hookContext?.value || "").trim();
+
+            els.hookRunBtn.disabled = true;
+            els.hookRunBtn.innerHTML = "<span>✨ Generiere Hook mit Luna...</span>";
+            if (els.hookCostBadge) els.hookCostBadge.hidden = true;
+            if (els.hookResultArea) els.hookResultArea.hidden = true;
+
+            try {
+                const data = await fetchJson("/api/pdf/golden-hook", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        company_name: company,
+                        job_title: jobTitle,
+                        job_requirements: context,
+                        profile_id: "anass_sibbi"
+                    })
+                });
+
+                if (!data.success) {
+                    throw new Error(data.error || "Golden Hook Erstellung fehlgeschlagen");
+                }
+
+                currentGoldenHook = data.hook || "";
+                if (els.hookResultText) {
+                    els.hookResultText.textContent = `"${currentGoldenHook}"`;
+                }
+
+                if (els.hookCostBadge && els.hookCostText) {
+                    els.hookCostBadge.hidden = false;
+                    if (data.from_cache) {
+                        els.hookCostBadge.className = "ats-cost-badge cached";
+                        els.hookCostText.textContent = "⚡ 0 Tokens (Aus Cache - $0.00)";
+                    } else {
+                        const cost = data.usage?.estimated_cost_usd || 0.000015;
+                        const tokens = data.usage?.total_tokens || 0;
+                        els.hookCostBadge.className = "ats-cost-badge";
+                        els.hookCostText.textContent = `⚡ ${tokens} Tokens | $${cost.toFixed(6)} USD`;
+                    }
+                }
+
+                if (els.hookResultArea) els.hookResultArea.hidden = false;
+                showToast("Golden Hook erfolgreich generiert!");
+            } catch (err) {
+                showToast(err.message || "Fehler beim Generieren");
+            } finally {
+                els.hookRunBtn.disabled = false;
+                els.hookRunBtn.innerHTML = '<svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg><span>Golden Hook generieren (~$0.000015)</span>';
+            }
+        }
+
+        function insertGoldenHook() {
+            if (!currentGoldenHook) return;
+            const editor = els.templateEditor;
+            if (!editor) return;
+
+            const formattedText = currentGoldenHook + "\n\n";
+            const start = editor.selectionStart ?? 0;
+            const end = editor.selectionEnd ?? 0;
+            const before = editor.value.substring(0, start);
+            const after = editor.value.substring(end);
+            editor.value = before + formattedText + after;
+
+            persistActiveTemplateValue();
+            renderTemplateList();
+            closeGoldenHookModal();
+            showToast("Golden Hook eingefügt");
+        }
+
+        function copyGoldenHook() {
+            if (!currentGoldenHook) return;
+            navigator.clipboard.writeText(currentGoldenHook).then(() => {
+                showToast("In Zwischenablage kopiert!");
+            }).catch(() => {
+                showToast("Kopieren fehlgeschlagen");
+            });
         }
 
         function wrapSelection(prefixValue, suffixValue) {
@@ -1489,8 +1812,20 @@
             els.closeModalBtn.addEventListener("click", closePreview);
             els.closeFooterBtn.addEventListener("click", closePreview);
 
+            if (els.atsTailorBtn) els.atsTailorBtn.addEventListener("click", openAtsModal);
+            if (els.closeAtsModalBtn) els.closeAtsModalBtn.addEventListener("click", closeAtsModal);
+            if (els.atsRunBtn) els.atsRunBtn.addEventListener("click", runAtsTailoring);
+            if (els.atsInsertBtn) els.atsInsertBtn.addEventListener("click", insertTailoredBullets);
+            if (els.atsCopyBtn) els.atsCopyBtn.addEventListener("click", copyTailoredBullets);
+
+            if (els.goldenHookBtn) els.goldenHookBtn.addEventListener("click", openGoldenHookModal);
+            if (els.closeGoldenHookModalBtn) els.closeGoldenHookModalBtn.addEventListener("click", closeGoldenHookModal);
+            if (els.hookRunBtn) els.hookRunBtn.addEventListener("click", runGoldenHook);
+            if (els.hookInsertBtn) els.hookInsertBtn.addEventListener("click", insertGoldenHook);
+            if (els.hookCopyBtn) els.hookCopyBtn.addEventListener("click", copyGoldenHook);
+
             els.formatToolbar.addEventListener("click", (event) => {
-                const button = event.target.closest(".anschreiben-format-btn");
+                const button = event.target.closest(".anschreiben-format-btn, .format-micro-btn");
                 if (!button) {
                     return;
                 }
@@ -1507,6 +1842,8 @@
             window.addEventListener("keydown", (event) => {
                 if (event.key === "Escape") {
                     closePreview();
+                    closeAtsModal();
+                    closeGoldenHookModal();
                 }
             });
 
@@ -1525,6 +1862,7 @@
             setLayoutInputs(defaultLayout);
             syncFilenameFormatDisplay("{{Unternehmen}}");
             loadActiveTemplateIntoEditor();
+            renderPlaceholders(state.columns || []);
             if (els.toEmailBtn && !transferEnabled) {
                 els.toEmailBtn.hidden = true;
             }
@@ -1554,6 +1892,8 @@
             },
             hide() {
                 closePreview();
+                closeAtsModal();
+                closeGoldenHookModal();
             },
         };
     }

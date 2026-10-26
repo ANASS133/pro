@@ -1,0 +1,239 @@
+{
+  "profile_version": "1.0",
+  "profile_language": "de",
+  "applicant": {
+    "personal": {
+      "first_name": "Firstname",
+      "last_name": "Lastname",
+      "full_name": "Firstname Lastname",
+      "date_of_birth": "2000-01-01",
+      "date_of_birth_display": "01.01.2000",
+      "place_of_birth": "City",
+      "country_of_birth": "Country",
+      "nationality": "Nationality",
+      "gender": "male",
+      "salutation": "Herr",
+      "marital_status": null
+    },
+    "contact": {
+      "email": "candidate@example.com",
+      "phone": "+491500000000",
+      "phone_display": "+49 150 000 0000",
+      "address": {
+        "street": "Musterstraße",
+        "house_number": "10",
+        "postal_code": "10115",
+        "city": "Berlin",
+        "region": null,
+        "country": "Germany",
+        "country_code": "DE"
+      },
+      "linkedin": {
+        "display_name": "Firstname Lastname",
+        "url": "https://linkedin.com/in/username"
+      },
+      "portfolio": {
+        "url": "https://portfolio-website.com"
+      },
+      "github": {
+        "url": "https://github.com/username",
+        "username": "username"
+      }
+    },
+    "identity": {
+      "gender": "male",
+      "gender_labels": {
+        "de": {
+          "male": ["männlich", "Herr", "Mann"],
+          "female": ["weiblich", "Frau", "Dame"],
+          "diverse": ["divers", "nicht-binär"]
+        },
+        "en": {
+          "male": ["male", "Mr", "Man"],
+          "female": ["female", "Ms", "Mrs", "Woman"],
+          "diverse": ["diverse", "non-binary"]
+        },
+        "fr": {
+          "male": ["homme", "masculin", "Monsieur"],
+          "female": ["femme", "féminin", "Madame"],
+          "diverse": ["divers", "non-binaire"]
+        }
+      },
+      "salutation": "Herr",
+      "nationality": "German",
+      "nationality_labels": {
+        "de": "deutsch",
+        "en": "German",
+        "fr": "allemande"
+      },
+      "country_of_birth": "Germany",
+      "country_of_residence": "Germany",
+      "country_labels": {
+        "de": "Deutschland",
+        "en": "Germany",
+        "fr": "Allemagne"
+      },
+      "country_code": "DE"
+    },
+    "professional_profile": {
+      "current_title": "Softwareentwickler",
+      "alternative_title": "Full-Stack-Entwickler",
+      "headline": "Softwareentwickler | Full-Stack-Entwickler",
+      "summary_de": "Motivierter Softwareentwickler mit Erfahrung in modernen Web- und Backend-Technologien.",
+      "years_of_experience": 2,
+      "primary_fields": [
+        "Softwareentwicklung",
+        "Full-Stack-Entwicklung",
+        "Webentwicklung"
+      ]
+    },
+    "work_experience": [
+      {
+        "id": "exp_current",
+        "current": true,
+        "job_title": "Junior Softwareentwickler",
+        "employer": "Tech Firma GmbH",
+        "city": "Berlin",
+        "country": "Germany",
+        "start_date": "2024-01",
+        "end_date": null,
+        "description": [
+          "Entwicklung von Webanwendungen und APIs.",
+          "Zusammenarbeit im agilen Team (Scrum)."
+        ],
+        "technologies": [
+          "JavaScript",
+          "React",
+          "Node.js",
+          "REST APIs"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "id": "edu_primary",
+        "current": false,
+        "degree": "Bachelor of Science",
+        "original_degree": "Bachelor of Science Informatik",
+        "field_of_study": "Informatik",
+        "institution": "Universität Berlin",
+        "city": "Berlin",
+        "country": "Germany",
+        "start_date": "2020-10",
+        "end_date": "2023-09",
+        "result": "Bestanden"
+      }
+    ],
+    "education_mapping": {
+      "highest_completed_qualification": {
+        "original_title": "Bachelor of Science Informatik",
+        "institution": "Universität Berlin",
+        "german_qualification_label": "Hochschulabschluss (Bachelor)",
+        "german_educational_level": "Hochschulabschluss",
+        "german_dropdown_categories": [
+          "Hochschulabschluss (Bachelor/Master/Diplom)",
+          "Bachelor",
+          "Universität / Fachhochschule"
+        ]
+      }
+    },
+    "skills": {
+      "programming_languages": [
+        "JavaScript",
+        "Python",
+        "Java",
+        "SQL"
+      ],
+      "frontend": [
+        "React",
+        "HTML",
+        "CSS",
+        "TypeScript"
+      ],
+      "backend": [
+        "Node.js",
+        "Express",
+        "REST APIs"
+      ],
+      "tools": [
+        "Git",
+        "GitHub",
+        "Docker"
+      ],
+      "technologies_from_cv": [
+        "React",
+        "JavaScript",
+        "Node.js",
+        "Express",
+        "Git",
+        "REST APIs",
+        "SQL"
+      ]
+    },
+    "languages": [
+      {
+        "language": "German",
+        "language_de": "Deutsch",
+        "level": "Native",
+        "level_de": "Muttersprache",
+        "certificate": null
+      },
+      {
+        "language": "English",
+        "language_de": "Englisch",
+        "level": "C1",
+        "level_de": "Verhandlungssicher",
+        "certificate": null
+      }
+    ],
+    "certificates": [],
+    "job_application": {
+      "availability": {
+        "earliest_start_date": "asap",
+        "available_immediately": true,
+        "notice_period": "1 Monat zum Monatsende"
+      },
+      "visa": {
+        "requires_visa_for_germany": false,
+        "requires_work_permit": false,
+        "status": "Arbeitsberechtigung vorhanden"
+      },
+      "relocation": {
+        "willing_to_relocate": true,
+        "target_country": "Germany",
+        "target_country_de": "Deutschland",
+        "target_cities": [
+          "Berlin",
+          "München",
+          "Frankfurt",
+          "Köln",
+          "bundesweit"
+        ]
+      },
+      "work_model": {
+        "remote": true,
+        "hybrid": true,
+        "onsite": true
+      },
+      "salary_expectation": "50000"
+    },
+    "documents": {
+      "cv": {
+        "file_name": "CV_Candidate_DE.pdf",
+        "language": "de",
+        "description": "Lebenslauf auf Deutsch",
+        "available": true
+      },
+      "cover_letter": {
+        "file_name": "Anschreiben_Candidate_DE.pdf",
+        "language": "de",
+        "available": true,
+        "text_content": "Sehr geehrte Damen und Herren,\n\nmit großem Interesse bewerbe ich mich auf die ausgeschriebene Position. Mit meinen praktischen Erfahrungen und hoher Lernbereitschaft möchte ich mein Können motiviert in Ihr Team einbringen.\n\nMit freundlichen Grüßen,\n[Name]"
+      },
+      "certificates": []
+    },
+    "legal_and_sensitive": {
+      "instructions": "Never automatically answer, infer, or check legal, consent, health, disability, criminal-record, political, religious, or similarly sensitive fields. Always require explicit user review."
+    }
+  }
+}

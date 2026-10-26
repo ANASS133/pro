@@ -40,6 +40,10 @@ from werkzeug.utils import secure_filename
 
 from email_sender import EmailSender
 from scraper.enhanced_api_scraper import EnhancedJobScraper
+from scraper.ausbildung_de_scraper import AusbildungDeScraper
+from scraper.azubiyo_scraper import AzubiyoScraper
+from scraper.aubi_plus_scraper import AubiPlusScraper
+from scraper.ihk_scraper import IhkScraper
 from scraper.google_maps_scraper import GoogleMapsBusinessScraper
 from scraper.working_email_extractor import WorkingEmailExtractor
 
@@ -51,6 +55,23 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "change-me-local")
 
+from routes import autofill_bp, enhancements_bp, health_bp, jobs_bp, pdf_bp
+from services.job_store import job_store
+
+app.register_blueprint(health_bp)
+app.register_blueprint(jobs_bp)
+app.register_blueprint(pdf_bp)
+app.register_blueprint(enhancements_bp)
+app.register_blueprint(autofill_bp)
+
+# Reset any uncompleted jobs from previous server run
+try:
+    interrupted_count = job_store.reset_stale_jobs()
+    if interrupted_count > 0:
+        logger.info(f"Reset {interrupted_count} stale running jobs on startup.")
+except Exception as _exc:
+    logger.warning(f"Could not reset stale jobs: {_exc}")
+
 CAPTCHA_USERID = os.getenv("TRUECAPTCHA_USERID", "").strip()
 CAPTCHA_APIKEY = os.getenv("TRUECAPTCHA_APIKEY", "").strip()
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
@@ -58,13 +79,13 @@ SUPABASE_URL = os.getenv("VITE_SUPABASE_URL", os.getenv("SUPABASE_URL", ""))
 SUPABASE_ANON_KEY = os.getenv("VITE_SUPABASE_ANON_KEY", os.getenv("SUPABASE_ANON_KEY", ""))
 
 if not CAPTCHA_USERID:
-    raise RuntimeError("TRUECAPTCHA_USERID is not set")
+    logger.warning("TRUECAPTCHA_USERID is not set; auto-captcha solving will be disabled.")
 
 if not CAPTCHA_APIKEY:
-    raise RuntimeError("TRUECAPTCHA_APIKEY is not set")
+    logger.warning("TRUECAPTCHA_APIKEY is not set; auto-captcha solving will be disabled.")
 
 if not OPENROUTER_API_KEY:
-    raise RuntimeError("OPENROUTER_API_KEY is not set")
+    logger.warning("OPENROUTER_API_KEY is not set; AI-assisted features will be disabled.")
 
 status_lock = threading.Lock()
 search_cache = {
@@ -135,12 +156,12 @@ GOOGLE_MAPS_EXPORT_DIR = Path("data") / "google_maps_exports"
 
 # Firebase configuration
 FIREBASE_CONFIG = {
-    "apiKey": "AIzaSyD3xQalpdCJZK2GNCYRP8noiY5ei6oOtFw",
-    "authDomain": "clients-9d7fe.firebaseapp.com",
-    "projectId": "clients-9d7fe",
-    "storageBucket": "clients-9d7fe.firebasestorage.app",
-    "messagingSenderId": "489647859812",
-    "appId": "1:489647859812:web:6f0f06a20beef2ea6a9771",
+    "apiKey": os.getenv("FIREBASE_API_KEY", "AIzaSyD3xQalpdCJZK2GNCYRP8noiY5ei6oOtFw"),
+    "authDomain": os.getenv("FIREBASE_AUTH_DOMAIN", "clients-9d7fe.firebaseapp.com"),
+    "projectId": os.getenv("FIREBASE_PROJECT_ID", "clients-9d7fe"),
+    "storageBucket": os.getenv("FIREBASE_STORAGE_BUCKET", "clients-9d7fe.firebasestorage.app"),
+    "messagingSenderId": os.getenv("FIREBASE_MESSAGING_SENDER_ID", "489647859812"),
+    "appId": os.getenv("FIREBASE_APP_ID", "1:489647859812:web:6f0f06a20beef2ea6a9771"),
 }
 
 _firebase_db = None
@@ -567,8 +588,17 @@ AUTO_EXTRACTION_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 EMAIL_CAMPAIGN_ASSET_DIR.mkdir(parents=True, exist_ok=True)
 GOOGLE_MAPS_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
+def _resolve_data_file(filename: str) -> Path:
+    data_path = DATA_DIR / filename
+    root_path = Path(filename)
+    if data_path.exists():
+        return data_path
+    if root_path.exists():
+        return root_path
+    return data_path
+
 DEFAULT_MAX_JOBS = 8000
-SEARCH_CACHE_FILE = Path("search_cache.json")
+SEARCH_CACHE_FILE = _resolve_data_file("search_cache.json")
 PUBLISHED_SINCE_MAP = {
     "all": None,
     "today": 1,
@@ -623,7 +653,7 @@ EXCLUDED_DOWNLOAD_FIELDS = {
     "reference",
 }
 EMAIL_TEMPLATE_VAR_PATTERN = PLACEHOLDER_PATTERN
-EMAIL_CAMPAIGN_STORE_FILE = Path("email_campaigns.json")
+EMAIL_CAMPAIGN_STORE_FILE = _resolve_data_file("email_campaigns.json")
 EMAIL_CAMPAIGN_STORE_VERSION = 1
 _email_campaign_store_lock = threading.Lock()
 ONE_DOCUMENT_ACTIONS = {"replace", "add"}
@@ -1565,21 +1595,34 @@ def _build_anrede(arbeitsgeber: str) -> str:
     return "Sehr geehrte Damen und Herren"
 
 
-def _prepare_download_jobs(jobs: Iterable[Dict]) -> List[Dict]:
+def _prepare_download_jobs(jobs: Iterable[Dict], emails_only: bool = False) -> List[Dict]:
     filtered: List[Dict] = []
-    seen_emails: Set[str] = set()
+    seen_identifiers: Set[str] = set()
 
     for job in jobs:
-        raw_email = (job or {}).get("email")
-        normalized_email = _normalize_email(raw_email)
-        if not _is_valid_email(normalized_email):
-            continue
-        if normalized_email in seen_emails:
-            continue
-        seen_emails.add(normalized_email)
-
         row = dict(job or {})
-        row["email"] = normalized_email
+        raw_email = row.get("email")
+        normalized_email = _normalize_email(raw_email)
+        has_valid_email = _is_valid_email(normalized_email)
+
+        apply_url = str(row.get("apply_url") or row.get("form_link") or row.get("url") or "").strip()
+
+        if emails_only and not has_valid_email:
+            continue
+
+        if not has_valid_email and not apply_url:
+            continue
+
+        dedupe_key = normalized_email if has_valid_email else apply_url
+        if dedupe_key in seen_identifiers:
+            continue
+        seen_identifiers.add(dedupe_key)
+
+        row["email"] = normalized_email if has_valid_email else ""
+        row["apply_url"] = apply_url
+        row["form_link"] = apply_url
+        row["bewerbung_art"] = "E-Mail" if has_valid_email else "Online-Formular"
+        row["bewerbung_link"] = apply_url if not has_valid_email else (apply_url or normalized_email)
 
         arbeitsgeber = str(row.get("arbeitsgeber") or "").strip()
         if not arbeitsgeber:
@@ -3355,6 +3398,59 @@ def supabase_page():
     return _render_app_shell("supabase")
 
 
+@app.route("/autofill", methods=["GET"])
+@app.route("/autofill-hub", methods=["GET"])
+def autofill_hub_page():
+    return _render_app_shell("autofill")
+
+
+@app.route("/api/profile/<profile_id>", methods=["GET"])
+def get_candidate_profile(profile_id: str):
+    base_dir = Path(__file__).resolve().parent
+    safe_id = re.sub(r"[^a-zA-Z0-9_-]", "", profile_id or "anass_sibbi")
+    profile_path = base_dir / "ai-job-autofill" / "server" / "profiles" / f"{safe_id}.json"
+    if not profile_path.exists():
+        profile_path = base_dir / "ai-job-autofill" / "server" / "profiles" / "anass_sibbi.json"
+    if not profile_path.exists():
+        return jsonify({"success": False, "message": "Profile not found"}), 404
+    try:
+        with open(profile_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return jsonify({"success": True, "profile": data})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
+@app.route("/api/profile/<profile_id>", methods=["POST"])
+def update_candidate_profile(profile_id: str):
+    base_dir = Path(__file__).resolve().parent
+    safe_id = re.sub(r"[^a-zA-Z0-9_-]", "", profile_id or "anass_sibbi")
+    profile_path = base_dir / "ai-job-autofill" / "server" / "profiles" / f"{safe_id}.json"
+    if not profile_path.exists():
+        return jsonify({"success": False, "message": "Profile not found"}), 404
+    try:
+        body = request.get_json(silent=True) or {}
+        with open(profile_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        applicant = data.setdefault("applicant", {})
+        prof = applicant.setdefault("professional_profile", {})
+
+        if "summary_de" in body:
+            prof["summary_de"] = str(body["summary_de"]).strip()
+        if "headline" in body:
+            prof["headline"] = str(body["headline"]).strip()
+        if "skills" in body and isinstance(body["skills"], list):
+            prof["skills"] = [str(s).strip() for s in body["skills"] if str(s).strip()]
+
+        with open(profile_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+
+        return jsonify({"success": True, "message": "Profil erfolgreich aktualisiert", "profile": data})
+    except Exception as e:
+        return jsonify({"success": False, "message": str(e)}), 500
+
+
 @app.route("/api/firebase/applications", methods=["GET"])
 def firebase_applications_api():
     firebase_applications = _get_firebase_applications()
@@ -3561,6 +3657,7 @@ def _render_app_shell(initial_section: str = "search"):
         "create-anschreibens",
         "send-emails",
         "google-maps",
+        "autofill",
     }:
         section = "search"
     return render_template(
@@ -5177,17 +5274,130 @@ def parallel_use_for_anschreiben(job_id: str, task_id: str):
     return jsonify({"success": True, "redirect_url": "/create-anschreibens"})
 
 
+def _fetch_combined_jobs(
+    keyword: str,
+    location: str,
+    source: str = "all",
+    max_jobs: int = DEFAULT_MAX_JOBS,
+    published_since_days: Optional[int] = None,
+) -> List[Dict]:
+    """Fetches jobs from Arbeitsagentur, Ausbildung.de, or both depending on source."""
+    source_clean = str(source or "all").lower().strip()
+    jobs: List[Dict] = []
+    seen_refs = set()
+
+    # 1. Arbeitsagentur
+    if source_clean in {"all", "arbeitsagentur", "arbeitsagentur.de"}:
+        try:
+            aa_scraper = EnhancedJobScraper()
+            aa_limit = max_jobs if source_clean != "all" else max(15, max_jobs // 2)
+            aa_jobs = aa_scraper.fetch_all_jobs(
+                keyword,
+                location,
+                max_jobs=aa_limit,
+                published_since_days=published_since_days,
+            )
+            for j in aa_jobs:
+                j.setdefault("source", "Arbeitsagentur")
+                ref = j.get("reference") or j.get("url")
+                if ref and ref not in seen_refs:
+                    seen_refs.add(ref)
+                    jobs.append(j)
+        except Exception as exc:
+            logger.warning("Arbeitsagentur search failed: %s", exc)
+
+    # 2. Ausbildung.de
+    if source_clean in {"all", "ausbildung_de", "ausbildung.de"}:
+        try:
+            adb_scraper = AusbildungDeScraper()
+            adb_limit = max_jobs if source_clean != "all" else max(15, max_jobs // 3)
+            adb_jobs = adb_scraper.fetch_jobs(
+                keyword=keyword,
+                location=location,
+                max_jobs=adb_limit,
+                published_since_days=published_since_days,
+            )
+            for j in adb_jobs:
+                j.setdefault("source", "ausbildung.de")
+                ref = j.get("reference") or j.get("url")
+                if ref and ref not in seen_refs:
+                    seen_refs.add(ref)
+                    jobs.append(j)
+        except Exception as exc:
+            logger.warning("Ausbildung.de search failed: %s", exc)
+
+    # 3. Azubiyo.de
+    if source_clean in {"all", "azubiyo", "azubiyo.de"}:
+        try:
+            azubiyo_scraper = AzubiyoScraper()
+            az_limit = max_jobs if source_clean != "all" else max(12, max_jobs // 4)
+            az_jobs = azubiyo_scraper.fetch_jobs(
+                keyword=keyword,
+                location=location,
+                max_jobs=az_limit,
+            )
+            for j in az_jobs:
+                j.setdefault("source", "azubiyo.de")
+                ref = j.get("reference") or j.get("url")
+                if ref and ref not in seen_refs:
+                    seen_refs.add(ref)
+                    jobs.append(j)
+        except Exception as exc:
+            logger.warning("Azubiyo search failed: %s", exc)
+
+    # 4. AUBI-plus
+    if source_clean in {"all", "aubi_plus", "aubi-plus", "aubi_plus.de"}:
+        try:
+            aubi_scraper = AubiPlusScraper()
+            aubi_limit = max_jobs if source_clean != "all" else max(12, max_jobs // 4)
+            aubi_jobs = aubi_scraper.fetch_jobs(
+                keyword=keyword,
+                location=location,
+                max_jobs=aubi_limit,
+            )
+            for j in aubi_jobs:
+                j.setdefault("source", "aubi-plus.de")
+                ref = j.get("reference") or j.get("url")
+                if ref and ref not in seen_refs:
+                    seen_refs.add(ref)
+                    jobs.append(j)
+        except Exception as exc:
+            logger.warning("AUBI-plus search failed: %s", exc)
+
+    # 5. IHK Lehrstellenbörse
+    if source_clean in {"all", "ihk", "ihk.de", "ihk_lehrstellenboerse"}:
+        try:
+            ihk_scraper = IhkScraper()
+            ihk_limit = max_jobs if source_clean != "all" else max(12, max_jobs // 4)
+            ihk_jobs = ihk_scraper.fetch_jobs(
+                keyword=keyword,
+                location=location,
+                max_jobs=ihk_limit,
+            )
+            for j in ihk_jobs:
+                j.setdefault("source", "ihk.de")
+                ref = j.get("reference") or j.get("url")
+                if ref and ref not in seen_refs:
+                    seen_refs.add(ref)
+                    jobs.append(j)
+        except Exception as exc:
+            logger.warning("IHK search failed: %s", exc)
+
+    return jobs
+
+
 @app.route("/search", methods=["POST"])
 def search():
     keyword = request.form.get("keyword", "").strip()
     location = request.form.get("location", "").strip()
+    source = request.form.get("source", "all").strip().lower()
     published_since = _normalize_published_since(request.form.get("published_since", "all"))
 
     try:
-        scraper = EnhancedJobScraper()
-        jobs = scraper.fetch_all_jobs(
+        jobs = _fetch_combined_jobs(
             keyword,
             location,
+            source=source,
             max_jobs=DEFAULT_MAX_JOBS,
             published_since_days=_published_since_to_days(published_since),
         )
@@ -5195,11 +5405,13 @@ def search():
         search_cache["jobs"] = jobs
         search_cache["keyword"] = keyword
         search_cache["location"] = location
+        search_cache["source"] = source
         search_cache["published_since"] = published_since
         _save_search_cache_to_disk(jobs, keyword, location, published_since)
         session["last_search_meta"] = {
             "keyword": keyword,
             "location": location,
+            "source": source,
             "published_since": published_since,
             "total": len(jobs),
         }
@@ -5209,6 +5421,7 @@ def search():
             jobs=jobs,
             keyword=keyword,
             location=location,
+            source=source,
             published_since=published_since,
             total=len(jobs),
         )
@@ -5220,13 +5433,14 @@ def search():
 def api_search():
     keyword = request.args.get("keyword", "").strip()
     location = request.args.get("location", "").strip()
+    source = request.args.get("source", "all").strip().lower()
     published_since = _normalize_published_since(request.args.get("published_since", "all"))
     max_jobs = int(request.args.get("max_jobs", DEFAULT_MAX_JOBS))
 
-    scraper = EnhancedJobScraper()
-    jobs = scraper.fetch_all_jobs(
+    jobs = _fetch_combined_jobs(
         keyword,
         location,
+        source=source,
         max_jobs=max_jobs,
         published_since_days=_published_since_to_days(published_since),
     )
@@ -5234,6 +5448,7 @@ def api_search():
     search_cache["jobs"] = jobs
     search_cache["keyword"] = keyword
     search_cache["location"] = location
+    search_cache["source"] = source
     search_cache["published_since"] = published_since
     _save_search_cache_to_disk(jobs, keyword, location, published_since)
 
@@ -5241,7 +5456,80 @@ def api_search():
         {
             "status": "success",
             "total": len(jobs),
+            "source": source,
             "published_since": published_since,
+            "jobs": jobs,
+        }
+    )
+
+
+@app.route("/api/ausbildung-de/search", methods=["GET"])
+def api_ausbildung_de_search():
+    keyword = request.args.get("keyword", "").strip()
+    location = request.args.get("location", "").strip()
+    max_jobs = int(request.args.get("max_jobs", 50))
+    scraper = AusbildungDeScraper()
+    jobs = scraper.fetch_jobs(keyword=keyword, location=location, max_jobs=max_jobs)
+    return jsonify(
+        {
+            "success": True,
+            "status": "success",
+            "source": "ausbildung.de",
+            "total": len(jobs),
+            "jobs": jobs,
+        }
+    )
+
+
+@app.route("/api/azubiyo/search", methods=["GET"])
+def api_azubiyo_search():
+    keyword = request.args.get("keyword", "").strip()
+    location = request.args.get("location", "").strip()
+    max_jobs = int(request.args.get("max_jobs", 50))
+    scraper = AzubiyoScraper()
+    jobs = scraper.fetch_jobs(keyword=keyword, location=location, max_jobs=max_jobs)
+    return jsonify(
+        {
+            "success": True,
+            "status": "success",
+            "source": "azubiyo.de",
+            "total": len(jobs),
+            "jobs": jobs,
+        }
+    )
+
+
+@app.route("/api/aubi-plus/search", methods=["GET"])
+def api_aubi_plus_search():
+    keyword = request.args.get("keyword", "").strip()
+    location = request.args.get("location", "").strip()
+    max_jobs = int(request.args.get("max_jobs", 40))
+    scraper = AubiPlusScraper()
+    jobs = scraper.fetch_jobs(keyword=keyword, location=location, max_jobs=max_jobs)
+    return jsonify(
+        {
+            "success": True,
+            "status": "success",
+            "source": "aubi-plus.de",
+            "total": len(jobs),
+            "jobs": jobs,
+        }
+    )
+
+
+@app.route("/api/ihk/search", methods=["GET"])
+def api_ihk_search():
+    keyword = request.args.get("keyword", "").strip()
+    location = request.args.get("location", "").strip()
+    max_jobs = int(request.args.get("max_jobs", 40))
+    scraper = IhkScraper()
+    jobs = scraper.fetch_jobs(keyword=keyword, location=location, max_jobs=max_jobs)
+    return jsonify(
+        {
+            "success": True,
+            "status": "success",
+            "source": "ihk.de",
+            "total": len(jobs),
             "jobs": jobs,
         }
     )
@@ -5354,7 +5642,7 @@ def api_inline_download_auto_job(job_id: str):
 
     prepared_jobs = _prepare_download_jobs(jobs)
     if not prepared_jobs:
-        return jsonify({"success": False, "message": "Keine Stellen mit gültiger E-Mail verfügbar"}), 400
+        return jsonify({"success": False, "message": "Keine Stellen mit E-Mail oder Bewerbungsformular verfügbar"}), 400
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     slug = _sanitize_export_slug(keyword, fallback=f"auto_{job_id[:8]}")
@@ -5373,7 +5661,7 @@ def api_inline_use_auto_job_for_anschreiben(job_id: str):
 
     prepared_jobs = _prepare_download_jobs(jobs)
     if not prepared_jobs:
-        return jsonify({"success": False, "message": "Keine gesammelten Stellen mit gültiger E-Mail gefunden"}), 400
+        return jsonify({"success": False, "message": "Keine gesammelten Stellen mit E-Mail oder Bewerbungsformular gefunden"}), 400
 
     with status_lock:
         auto_extraction_status["jobs"] = prepared_jobs
@@ -6910,4 +7198,9 @@ def api_google_maps_export(job_id: str, fmt: str):
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.getenv("PORT", 5000))
+    try:
+        app.run(host="127.0.0.1", port=port, debug=True)
+    except OSError:
+        logger.warning(f"Port {port} is occupied, falling back to port {port + 1}")
+        app.run(host="127.0.0.1", port=port + 1, debug=True)

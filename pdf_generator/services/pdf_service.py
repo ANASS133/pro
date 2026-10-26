@@ -24,14 +24,14 @@ class PDF(FPDF):
     def header(self):
         self.set_font('helvetica', 'B', 11)
         self.cell(80)
-        self.cell(30, 10, 'Bewerbung', 0, 0, 'C')
+        self.cell(30, 10, 'Bewerbung', border=0, align='C')
         self.ln(15)
 
     def footer(self):
         self.set_y(-15)
         self.set_font('helvetica', 'I', 8)
-        self.cell(0, 10, f'Seite {self.page_no()}', 0, 0, 'C')
-        self.cell(0, 10, datetime.now().strftime('%d.%m.%Y'), 0, 0, 'R')
+        self.cell(0, 10, f'Seite {self.page_no()}', border=0, align='C')
+        self.cell(0, 10, datetime.now().strftime('%d.%m.%Y'), border=0, align='R')
 
 
 class PDFService:
@@ -79,7 +79,17 @@ class PDFService:
         target_width = 0 if width is None else width
         pdf.multi_cell(target_width, line_height, content)
 
-    def create_pdf(self, content, output_path, metadata=None, design_pdf_path=None, layout_options=None):
+    def create_pdf_stream(self, content, metadata=None, design_pdf_path=None, layout_options=None):
+        """Generate PDF in-memory and return a BytesIO stream without writing to disk."""
+        return self.create_pdf(
+            content=content,
+            output_path=None,
+            metadata=metadata,
+            design_pdf_path=design_pdf_path,
+            layout_options=layout_options,
+        )
+
+    def create_pdf(self, content, output_path=None, metadata=None, design_pdf_path=None, layout_options=None):
         try:
             if is_html_template(content):
                 # HTML supplies its own page layout, including @page print rules.
@@ -113,10 +123,16 @@ class PDFService:
             pdf.add_page()
             pdf.set_font(self.font, '', self.font_size)
             self._write_content(pdf, content, line_height=5)
-            pdf.output(output_path)
-            return output_path
+            if output_path:
+                pdf.output(output_path)
+                return output_path
+            stream = io.BytesIO()
+            pdf.output(stream)
+            stream.seek(0)
+            return stream
+
         except Exception as exc:
-            raise Exception(f"Error creating PDF: {exc}")
+            raise RuntimeError(f"Error creating PDF: {exc}") from exc
 
     def _to_float(self, value, default):
         try:
@@ -192,8 +208,14 @@ class PDFService:
                 max_height=opts['text_height'],
             )
             self._write_content(pdf, clipped_text, width=opts['text_width'], line_height=opts['line_height'])
-        pdf.output(output_path)
-        return output_path
+        if output_path:
+            pdf.output(output_path)
+            return output_path
+        stream = io.BytesIO()
+        pdf.output(stream)
+        stream.seek(0)
+        return stream
+
 
     def _create_pdf_with_design(self, content, output_path, metadata, design_pdf_path, layout_options):
         if not os.path.exists(design_pdf_path):
@@ -333,9 +355,15 @@ class PDFService:
                     '/Author': metadata.get('author', 'PDF Generator'),
                     '/Subject': metadata.get('subject', ''),
                 })
-            with open(output_path, 'wb') as output:
-                writer.write(output)
-            return output_path
+            if output_path:
+                with open(output_path, 'wb') as output:
+                    writer.write(output)
+                return output_path
+            stream = io.BytesIO()
+            writer.write(stream)
+            stream.seek(0)
+            return stream
+
         finally:
             driver.quit()
 

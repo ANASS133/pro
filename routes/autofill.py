@@ -111,7 +111,23 @@ def get_profiles():
                     })
                 except Exception:
                     profiles.append({"id": pid, "name": pid})
-    return jsonify({"profiles": profiles})
+    from services.client_manager import client_manager
+    active_id = client_manager.get_active_client_id()
+    for p in profiles:
+        p["is_active"] = (p["id"] == active_id)
+    return jsonify({"profiles": profiles, "active_profile_id": active_id})
+
+
+@autofill_bp.route("/api/autofill/ingest-cv", methods=["POST"])
+def autofill_ingest_cv():
+    from services.client_manager import client_manager
+    file = request.files.get("cv_file") or request.files.get("file")
+    if not file or not file.filename:
+        return jsonify({"success": False, "error": "No file uploaded"}), 400
+    pdf_bytes = file.read()
+    custom_id = request.form.get("client_id", "").strip() or None
+    result = client_manager.ingest_cv(pdf_bytes, filename=file.filename, client_id=custom_id)
+    return jsonify(result)
 
 
 @autofill_bp.route("/api/autofill/profiles/<profile_id>", methods=["GET"])

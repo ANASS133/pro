@@ -15,6 +15,9 @@
         const profileSelector = document.getElementById("autofill-profile-selector");
         const btnNewProfile = document.getElementById("autofill-btn-new-profile");
         const btnSaveProfile = document.getElementById("autofill-btn-save-profile");
+        const btnImportCv = document.getElementById("autofill-btn-import-cv");
+        const afCvFileInput = document.getElementById("af-cv-file-input");
+        const btnSetActive = document.getElementById("autofill-btn-set-active");
         const statusBar = document.getElementById("autofill-status-bar");
         const unsavedBadge = document.getElementById("autofill-unsaved-badge");
         const avatarEl = document.getElementById("candidate-avatar");
@@ -533,6 +536,77 @@
                 setStatus("Upload fehlgeschlagen: " + err.message, true);
             } finally {
                 fileUploadInput.value = "";
+            }
+        });
+
+        // --- Import CV via PDF ---
+        if (btnImportCv && afCvFileInput) {
+            btnImportCv.addEventListener("click", () => afCvFileInput.click());
+            afCvFileInput.addEventListener("change", async (e) => {
+                const file = e.target.files && e.target.files[0];
+                if (!file) return;
+
+                const origHtml = btnImportCv.innerHTML;
+                btnImportCv.innerHTML = "<span>Analysiere CV...</span>";
+                btnImportCv.disabled = true;
+                setStatus("Analysiere Lebenslauf-PDF und extrahiere Profildaten...");
+
+                const formData = new FormData();
+                formData.append("cv_file", file);
+
+                try {
+                    const res = await fetch("/api/clients/ingest-cv", {
+                        method: "POST",
+                        body: formData
+                    });
+                    const result = await res.json();
+                    if (res.ok && result.success) {
+                        setStatus(`✓ Bewerber "${result.client_name}" erfolgreich aus Lebenslauf importiert!`);
+                        if (window.refreshGlobalClients) {
+                            window.refreshGlobalClients(result.client_id);
+                        }
+                        await loadProfilesList(result.client_id);
+                    } else {
+                        setStatus("Import fehlgeschlagen: " + (result.error || "Unbekannter Fehler"), true);
+                    }
+                } catch (err) {
+                    setStatus("Netzwerkfehler beim CV-Import: " + err.message, true);
+                } finally {
+                    btnImportCv.innerHTML = origHtml;
+                    btnImportCv.disabled = false;
+                    afCvFileInput.value = "";
+                }
+            });
+        }
+
+        // --- Set Active Client Button ---
+        if (btnSetActive) {
+            btnSetActive.addEventListener("click", async () => {
+                if (!currentProfileId) return;
+                try {
+                    const res = await fetch("/api/clients/active", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ client_id: currentProfileId })
+                    });
+                    if (res.ok) {
+                        setStatus(`⭐ Profil "${currentProfileId}" ist jetzt der aktive Bewerber!`);
+                        if (window.refreshGlobalClients) {
+                            window.refreshGlobalClients(currentProfileId);
+                        }
+                        await loadProfilesList(currentProfileId);
+                    }
+                } catch (err) {
+                    setStatus("Konnte nicht als aktiv gesetzt werden: " + err.message, true);
+                }
+            });
+        }
+
+        // Listen for global client change from header
+        window.addEventListener("activeClientChanged", (e) => {
+            const newId = e.detail && e.detail.clientId;
+            if (newId && newId !== currentProfileId) {
+                loadProfilesList(newId);
             }
         });
 

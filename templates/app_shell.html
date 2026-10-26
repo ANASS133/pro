@@ -92,6 +92,23 @@
         </aside>
 
         <main class="shell-main">
+            <!-- Global Active Client Bar -->
+            <header class="shell-global-header" id="shell-global-header" aria-label="Aktiver Bewerber">
+                <div class="global-client-pill">
+                    <span class="global-client-icon">👤</span>
+                    <span class="global-client-label">Aktiver Bewerber:</span>
+                    <select id="global-active-client-select" class="global-client-dropdown" title="Aktiven Bewerber für alle Aktionen wechseln">
+                        <option value="">Lade Bewerber...</option>
+                    </select>
+                </div>
+                <div class="global-client-actions">
+                    <button type="button" class="btn-quick-import-cv" id="btn-global-quick-cv" title="Neuen Bewerber via Lebenslauf-PDF importieren">
+                        ⚡ Neuer Bewerber (CV Upload)
+                    </button>
+                    <input type="file" id="global-quick-cv-file" accept=".pdf" style="display:none;" />
+                    <span class="global-active-status-badge" id="global-active-client-status">Aktiv</span>
+                </div>
+            </header>
             <div class="shell-content">
                 <section
                     id="search-section"
@@ -2420,6 +2437,14 @@
                                             <span id="autofill-unsaved-badge" class="af-unsaved-badge" hidden>
                                                 <span class="af-unsaved-dot"></span> Nicht gespeichert
                                             </span>
+                                            <button type="button" id="autofill-btn-import-cv" class="af-btn-secondary" title="Lebenslauf (PDF) analysieren und Daten automatisch übernehmen">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                                                <span>⚡ CV importieren</span>
+                                            </button>
+                                            <input type="file" id="af-cv-file-input" accept=".pdf" style="display:none;" />
+                                            <button type="button" id="autofill-btn-set-active" class="af-btn-secondary" title="Als aktiven Bewerber für alle Kampagnen festlegen">
+                                                <span>⭐ Aktivieren</span>
+                                            </button>
                                             <button type="button" id="autofill-btn-new-profile" class="af-btn-secondary" title="Neues Profil erstellen">
                                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                                                 <span>Neu</span>

@@ -289,15 +289,18 @@ async function loadProfiles() {
       profileSelect.appendChild(opt);
     });
 
+    const activeServerId = data.active_profile_id;
     const stored = await safeStorage.get(["selectedProfileId"]);
     const savedId = stored?.selectedProfileId;
 
-    if (savedId && cachedProfiles.some(p => p.id === savedId)) {
+    if (activeServerId && cachedProfiles.some(p => p.id === activeServerId)) {
+      profileSelect.value = activeServerId;
+    } else if (savedId && cachedProfiles.some(p => p.id === savedId)) {
       profileSelect.value = savedId;
     } else {
       profileSelect.value = cachedProfiles[0].id;
-      await safeStorage.set({ selectedProfileId: profileSelect.value });
     }
+    await safeStorage.set({ selectedProfileId: profileSelect.value });
 
     const currentId = profileSelect.value;
     updatePreview(currentId);
@@ -372,6 +375,13 @@ profileSelect.addEventListener("change", async () => {
   loadApplicantDocuments(selectedId);
   checkMultiStepSession(selectedId);
   checkCorrectionsBadge(selectedId);
+  try {
+    await fetch(`${BACKEND_BASE}/api/clients/active`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ client_id: selectedId })
+    });
+  } catch (_) {}
 });
 
 refreshProfilesBtn.addEventListener("click", () => {

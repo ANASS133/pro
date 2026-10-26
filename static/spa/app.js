@@ -252,8 +252,98 @@
             .catch(() => {});
     }
 
-    checkActiveJobs();
-    setInterval(checkActiveJobs, 15000);
+    // --- Global Active Client Manager ---
+    const globalClientSelect = document.getElementById("global-active-client-select");
+    const globalClientStatus = document.getElementById("global-active-client-status");
+    const btnGlobalQuickCv = document.getElementById("btn-global-quick-cv");
+    const globalQuickCvFile = document.getElementById("global-quick-cv-file");
+
+    async function refreshGlobalClients(preferredId) {
+        if (!globalClientSelect) return;
+        try {
+            const res = await fetch("/api/clients");
+            if (!res.ok) return;
+            const data = await res.json();
+            const clients = data.clients || [];
+            const activeId = preferredId || data.active_client_id;
+
+            globalClientSelect.innerHTML = "";
+            if (!clients.length) {
+                globalClientSelect.innerHTML = '<option value="">Keine Bewerber</option>';
+                if (globalClientStatus) globalClientStatus.textContent = "Kein Profil";
+                return;
+            }
+
+            clients.forEach(c => {
+                const opt = document.createElement("option");
+                opt.value = c.id;
+                opt.textContent = `${c.is_active ? "⭐ " : ""}${c.name} (${c.id})`;
+                if (c.id === activeId) opt.selected = true;
+                globalClientSelect.appendChild(opt);
+            });
+
+            if (globalClientStatus) {
+                const activeClient = clients.find(c => c.id === activeId) || clients[0];
+                globalClientStatus.textContent = `Aktiv: ${activeClient.name}`;
+            }
+        } catch (_) {}
+    }
+
+    if (globalClientSelect) {
+        globalClientSelect.addEventListener("change", async (e) => {
+            const newId = e.target.value;
+            if (!newId) return;
+            try {
+                const res = await fetch("/api/clients/active", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ client_id: newId })
+                });
+                if (res.ok) {
+                    await refreshGlobalClients(newId);
+                    window.dispatchEvent(new CustomEvent("activeClientChanged", { detail: { clientId: newId } }));
+                }
+            } catch (_) {}
+        });
+    }
+
+    if (btnGlobalQuickCv && globalQuickCvFile) {
+        btnGlobalQuickCv.addEventListener("click", () => globalQuickCvFile.click());
+        globalQuickCvFile.addEventListener("change", async (e) => {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+            const originalText = btnGlobalQuickCv.textContent;
+            btnGlobalQuickCv.textContent = "Analysiere CV...";
+            btnGlobalQuickCv.disabled = true;
+
+            const formData = new FormData();
+            formData.append("cv_file", file);
+
+            try {
+                const res = await fetch("/api/clients/ingest-cv", {
+                    method: "POST",
+                    body: formData
+                });
+                const result = await res.json();
+                if (res.ok && result.success) {
+                    alert(`✓ Bewerber "${result.client_name}" erfolgreich aus Lebenslauf importiert und als aktiv gesetzt!`);
+                    await refreshGlobalClients(result.client_id);
+                    window.dispatchEvent(new CustomEvent("activeClientChanged", { detail: { clientId: result.client_id } }));
+                } else {
+                    alert("Import fehlgeschlagen: " + (result.error || "Unbekannter Fehler"));
+                }
+            } catch (err) {
+                alert("Netzwerkfehler beim CV-Import: " + err.message);
+            } finally {
+                btnGlobalQuickCv.textContent = originalText;
+                btnGlobalQuickCv.disabled = false;
+                globalQuickCvFile.value = "";
+            }
+        });
+    }
+
+    refreshGlobalClients();
+    window.refreshGlobalClients = refreshGlobalClients;
 })();
 
 

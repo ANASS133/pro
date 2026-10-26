@@ -64,7 +64,7 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "change-me-local")
 
-from routes import autofill_bp, enhancements_bp, health_bp, jobs_bp, pdf_bp, campaigns_bp
+from routes import autofill_bp, enhancements_bp, health_bp, jobs_bp, pdf_bp, campaigns_bp, clients_bp
 from services.job_store import job_store
 
 app.register_blueprint(health_bp)
@@ -73,6 +73,7 @@ app.register_blueprint(pdf_bp)
 app.register_blueprint(enhancements_bp)
 app.register_blueprint(autofill_bp)
 app.register_blueprint(campaigns_bp)
+app.register_blueprint(clients_bp)
 
 # Reset any uncompleted jobs from previous server run
 try:

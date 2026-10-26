@@ -67,16 +67,17 @@ class CVParser:
         phone_match = re.search(r"(?:\+49|0049|0)[1-9][0-9\s/.-]{7,15}", text)
         phone = re.sub(r"\s+", " ", phone_match.group(0)).strip() if phone_match else ""
 
-        # 3. Name extraction (check first 5 non-empty lines)
+        # 3. Name extraction (check first 8 non-empty lines)
         full_name = ""
-        for line in lines[:5]:
-            if line.lower().startswith(("lebenslauf", "curriculum", "resume", "bewerbung", "cv")):
+        for line in lines[:8]:
+            cleaned_line = re.sub(r"^(?:lebenslauf|curriculum\s+vitae|resume|bewerbung|cv)\s*[-|:–—von\s]*", "", line, flags=re.IGNORECASE).strip()
+            if not cleaned_line:
                 continue
-            if "@" in line or any(c in line for c in "+0123456789"):
+            if "@" in cleaned_line or any(c in cleaned_line for c in "+0123456789"):
                 continue
-            words = line.split()
+            words = cleaned_line.split()
             if 2 <= len(words) <= 4 and all(w[0].isupper() for w in words if w.isalpha()):
-                full_name = line
+                full_name = cleaned_line
                 break
 
         first_name = full_name.split()[0] if full_name else "Bewerber"

@@ -16,7 +16,7 @@ import uuid
 import random
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart

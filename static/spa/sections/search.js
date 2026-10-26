@@ -457,8 +457,6 @@
                     contactBadge = `<span class="job-contact-pill has-verified-form" title="Verifiziertes Online-Bewerbungsformular">✅ Online-Bewerbungsformular</span>`;
                 } else if (hasValidEmail) {
                     contactBadge = `<span class="job-contact-pill has-email" title="Bewerbungs-E-Mail vorhanden">✉️ ${escapeHtml(email)}</span>`;
-                } else {
-                    contactBadge = `<span class="job-contact-pill has-no-contact" title="Kein verifiziertes Bewerbungsformular und keine Direkt-Mail">⚠️ Kein Direktkontakt</span>`;
                 }
 
                 const aiButtonsHtml = `

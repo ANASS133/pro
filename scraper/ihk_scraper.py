@@ -98,6 +98,7 @@ class IhkScraper:
                     if len(all_jobs) >= max_jobs:
                         break
 
+
                 logger.info(
                     "IHK page %s: found %s cards, added %s new (total=%s)",
                     page,
@@ -168,16 +169,19 @@ class IhkScraper:
                     if city_candidate:
                         city = city_candidate
 
+                from .search_filter_engine import clean_extracted_location
+                loc_meta = clean_extracted_location(loc_clean, city)
+
                 parsed.append(
                     {
                         "title": title,
                         "company": company,
-                        "location": loc_clean or city,
-                        "city": city,
-                        "postal_code": postal_code,
+                        "location": loc_meta["location"],
+                        "city": loc_meta["city"],
+                        "postal_code": loc_meta["postal_code"] if loc_meta["postal_code"] != "N/A" else postal_code,
                         "reference": ref,
                         "job_type": "Ausbildung",
-                        "published_date": now_str[:10],
+                        "published_date": "k. A.",
                         "start_date": "nach Absprache",
                         "vacancies": "1 Platz",
                         "hauptberuf": title,

@@ -223,6 +223,7 @@
         }
 
         function renderTopPayers() {
+            if (!topPayers) return;
             var sorted = allRows.slice().sort(function(a,b){ return b.money - a.money; }).slice(0, 5);
             if (!sorted.length) { topPayers.innerHTML = '<div class="money-empty-inline">Noch keine Daten.</div>'; return; }
             var html = "";

@@ -126,3 +126,19 @@ def ats_heatmap_route():
     return jsonify(result), status_code
 
 
+@pdf_bp.route("/api/pdf/batch-ats-eval", methods=["POST"])
+def batch_ats_eval_route():
+    """Batch evaluate multiple scraped job postings and rank them by ATS match percentage."""
+    data = request.get_json(silent=True) or {}
+    jobs = data.get("jobs", [])
+    profile_id = data.get("profile_id", "anass_sibbi")
+
+    if not isinstance(jobs, list):
+        return jsonify({"success": False, "error": "jobs list is required"}), 400
+
+    from pdf_generator.services.ats_service import batch_evaluate_ats_jobs
+    ranked_jobs = batch_evaluate_ats_jobs(jobs, profile_id=profile_id)
+    return jsonify({"success": True, "count": len(ranked_jobs), "jobs": ranked_jobs}), 200
+
+
+

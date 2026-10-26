@@ -12,6 +12,15 @@ from .overpass_scraper import OverpassBusinessScraper
 from .hook_generator import DynamicHookGenerator
 from .tech_detector import TechDetector
 from .career_crawler import CareerPageCrawler
+from .search_filter_engine import (
+    filter_and_deduplicate_jobs,
+    is_profession_relevant,
+    is_location_relevant,
+    is_publication_date_matching,
+    clean_extracted_location,
+    verify_application_workflow,
+)
+from .google_maps_ausbildung_verifier import GoogleMapsAusbildungVerifier
 
 __all__ = [
     "EnhancedJobScraper",
@@ -28,4 +37,12 @@ __all__ = [
     "DynamicHookGenerator",
     "TechDetector",
     "CareerPageCrawler",
+    "filter_and_deduplicate_jobs",
+    "is_profession_relevant",
+    "is_location_relevant",
+    "is_publication_date_matching",
+    "clean_extracted_location",
+    "verify_application_workflow",
+    "GoogleMapsAusbildungVerifier",
 ]
+

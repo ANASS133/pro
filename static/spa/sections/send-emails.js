@@ -7,42 +7,113 @@
         const sendBtn = document.getElementById('send-emails-sendBtn');
         const saveTemplateBtn = document.getElementById('send-emails-saveTemplateBtn');
         const stopSendBtn = document.getElementById('send-emails-stopSendBtn');
-        const campaignIdInput = form.querySelector('input[name="campaign_id"]');
-        const transferIdInput = form.querySelector('input[name="transfer_session_id"]');
+        const campaignIdInput = form ? form.querySelector('input[name="campaign_id"]') : null;
+        const transferIdInput = form ? form.querySelector('input[name="transfer_session_id"]') : null;
         const dataFileInput = document.getElementById('send-emails-data_file');
         const dataFileName = document.getElementById('send-emails-data_file_name');
+        const dropzone = document.getElementById('send-emails-dropzone');
+        const dropzonePrompt = document.getElementById('cb-dropzone-prompt');
+        const fileLoadedState = document.getElementById('cb-file-loaded-state');
+        const fileMetaSummary = document.getElementById('cb-file-meta-summary');
+        const fileStatsGrid = document.getElementById('cb-file-stats-grid');
+        const statTotalRows = document.getElementById('stat-total-rows');
+        const statValidEmails = document.getElementById('stat-valid-emails');
+        const statDuplicateEmails = document.getElementById('stat-duplicate-emails');
+        const statTotalColumns = document.getElementById('stat-total-columns');
+        const recipientColumnInput = document.getElementById('send-emails-recipient_column');
+        const columnChipsContainer = document.getElementById('cb-column-chips');
+        const previewTable = document.getElementById('cb-preview-table');
+        const previewTableHead = document.getElementById('cb-preview-table-head');
+        const previewTableBody = document.getElementById('cb-preview-table-body');
+        const tableEmptyState = document.getElementById('cb-table-empty-state');
+        const tableRowCountBadge = document.getElementById('cb-table-row-count-badge');
+        const headerRecipientCount = document.getElementById('cb-header-recipient-count');
+        const headerStepIndicator = document.getElementById('cb-header-step-indicator');
+
+        // Step 2 elements
+        const subjectInput = document.getElementById('send-emails-subject_template');
+        const bodyInput = document.getElementById('send-emails-body_template');
+        const subjectCounter = document.getElementById('cb-subject-counter');
+        const bodyCounter = document.getElementById('cb-body-counter');
+        const templateVarChips = document.getElementById('cb-template-var-chips');
         const attachmentsInput = document.getElementById('send-emails-attachments');
-        const attachmentsName = document.getElementById('send-emails-attachments_name');
+        const attachmentsChipsList = document.getElementById('cb-attachments-chips-list');
         const oneDocumentToggle = document.getElementById('send-emails-one_document_enabled');
         const oneDocumentFields = document.getElementById('send-emails-oneDocumentFields');
         const oneDocumentBaseInput = document.getElementById('send-emails-one_document_base_file');
         const oneDocumentBaseName = document.getElementById('send-emails-one_document_base_file_name');
+        const sampleRowSelect = document.getElementById('cb-sample-row-select');
+        const previewToVal = document.getElementById('cb-preview-to-val');
+        const previewSubjectVal = document.getElementById('cb-preview-subject-val');
+        const previewBodyVal = document.getElementById('cb-preview-body-val');
+
+        // Step 3 elements
+        const fullNameInput = document.getElementById('send-emails-full_name');
+        const senderEmailInput = document.getElementById('send-emails-sender_email');
+        const appPasswordInput = document.getElementById('send-emails-app_password');
+        const pwToggleBtn = document.getElementById('cb-pw-toggle');
+        const dayPresetSelect = document.getElementById('send-emails-day_preset');
+        const limitInput = document.getElementById('send-emails-limit');
+        const jitterMinInput = document.getElementById('send-emails-jitter_min_seconds');
+        const jitterMaxInput = document.getElementById('send-emails-jitter_max_seconds');
+        const batchSizeInput = document.getElementById('send-emails-batch_size');
+        const batchPauseInput = document.getElementById('send-emails-batch_pause_minutes');
+
+        // Step 4 elements
+        const summarySender = document.getElementById('cb-summary-sender');
+        const summaryRecipients = document.getElementById('cb-summary-recipients');
+        const summaryAttachments = document.getElementById('cb-summary-attachments');
+        const summaryDuration = document.getElementById('cb-summary-duration');
+        const checkSender = document.getElementById('check-sender');
+        const checkRecipients = document.getElementById('check-recipients');
+        const checkSubject = document.getElementById('check-subject');
+        const checkBody = document.getElementById('check-body');
+        const testRecipientInput = document.getElementById('cb-test-recipient-input');
+        const sendTestBtn = document.getElementById('cb-send-test-btn');
+        const testBtnText = document.getElementById('cb-test-btn-text');
+        const testBtnSpinner = document.getElementById('cb-test-btn-spinner');
+        const testResultMsg = document.getElementById('cb-test-result-msg');
+        const confirmCheckbox = document.getElementById('send-emails-confirm-checkbox');
+
+        // Navigation & progress elements
+        const wizardBackBtn = document.getElementById('cb-wizard-back-btn');
+        const wizardNextBtn = document.getElementById('cb-wizard-next-btn');
+        const autosaveIndicator = document.getElementById('cb-autosave-indicator');
         const sendProgressDock = document.getElementById('send-emails-sendProgressDock');
         const sendProgressText = document.getElementById('send-emails-sendProgressText');
         const sendProgressFill = document.getElementById('send-emails-sendProgressFill');
-        const dayPresetSelect = document.getElementById('send-emails-day_preset');
+        const sendProgressStatusText = document.getElementById('send-emails-sendProgressStatusText');
         const errorDiv = document.getElementById('send-emails-error');
         const transferBox = document.getElementById('send-emails-transfer-box');
         const campaignBox = document.getElementById('send-emails-campaign-box');
-        const deleteCampaignBtn = document.getElementById('send-emails-deleteCampaignBtn');
 
-        if (!form || !resultDiv || !sendBtn) {
+        if (!form || !sendBtn) {
             return {
                 show() {},
                 hide() {},
             };
         }
 
-        let sendJobPoll = null;
+        let currentStep = 1;
+        let lastFocusedInput = subjectInput;
         let activeSendJobId = '';
+        let sendJobPoll = null;
+        let parsedDataRows = [];
+        let detectedColumns = [];
+        let totalFileRows = 0;
+        let validEmailCount = 0;
+        let duplicateCount = 0;
+
         const escapeHtml = window.SPAUtils?.escapeHtml || ((value) => String(value || '')
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#039;'));
-        const SEND_FORM_STATE_KEY = 'aa_send_form_state_v1';
+
+        const SEND_FORM_STATE_KEY = 'aa_send_form_state_v2';
         const SEND_RESULT_FLASH_KEY = 'aa_send_result_flash_v1';
+
         const DAY_PRESETS = {
             day1: {
                 limit: '100',
@@ -74,265 +145,882 @@
             }
         };
 
-        function updateFileLabel(inputEl, outputEl, isMultiple = false) {
-            const files = Array.from(inputEl.files || []);
-            if (!files.length) {
-                outputEl.textContent = 'Keine Datei ausgew\u00E4hlt';
-                outputEl.title = '';
-                return;
+        // --- STEP WIZARD NAVIGATION ---
+        function goToStep(step) {
+            const targetStep = Math.max(1, Math.min(4, Number(step) || 1));
+            currentStep = targetStep;
+
+            // Update Stepper List
+            for (let i = 1; i <= 4; i++) {
+                const item = document.getElementById(`stepper-item-${i}`);
+                const pane = document.getElementById(`wizard-pane-${i}`);
+                if (!item || !pane) continue;
+
+                if (i < currentStep) {
+                    item.className = 'stepper-item completed';
+                    pane.classList.remove('active');
+                } else if (i === currentStep) {
+                    item.className = 'stepper-item active';
+                    pane.classList.add('active');
+                } else {
+                    item.className = 'stepper-item upcoming';
+                    pane.classList.remove('active');
+                }
             }
 
-            if (!isMultiple) {
-                outputEl.textContent = files[0].name;
-                outputEl.title = files[0].name;
-                return;
+            // Update Header Indicator
+            if (headerStepIndicator) {
+                headerStepIndicator.textContent = `${currentStep} / 4`;
             }
 
-            const names = files.map((file) => file.name);
-            const shortText = names.length <= 2
-                ? names.join(', ')
-                : `${names.slice(0, 2).join(', ')} +${names.length - 2} weitere`;
-            outputEl.textContent = shortText;
-            outputEl.title = names.join(', ');
+            // Update Footer Buttons
+            if (wizardBackBtn) {
+                wizardBackBtn.hidden = (currentStep === 1);
+            }
+
+            if (wizardNextBtn) {
+                if (currentStep < 4) {
+                    wizardNextBtn.hidden = false;
+                    wizardNextBtn.querySelector('span').textContent = `Next to Step ${currentStep + 1}`;
+                } else {
+                    wizardNextBtn.hidden = true;
+                }
+            }
+
+            if (sendBtn) {
+                sendBtn.hidden = (currentStep !== 4);
+                if (currentStep === 4) {
+                    validateStep4();
+                }
+            }
+
+            // Specific step hooks
+            if (currentStep === 2) {
+                updateLivePreview();
+                updateCharCounters();
+            } else if (currentStep === 3) {
+                highlightActivePresetCard();
+            } else if (currentStep === 4) {
+                updateSummaryDashboard();
+                validateStep4();
+                // Default test recipient to sender email if empty
+                if (testRecipientInput && !testRecipientInput.value.trim() && senderEmailInput?.value) {
+                    testRecipientInput.value = senderEmailInput.value.trim();
+                }
+            }
+
+            // Scroll smoothly to top of wizard container
+            const container = document.querySelector('.campaign-builder-wrapper');
+            if (container) {
+                container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
         }
 
-        dataFileInput.addEventListener('change', () => updateFileLabel(dataFileInput, dataFileName));
-        attachmentsInput.addEventListener('change', () => updateFileLabel(attachmentsInput, attachmentsName, true));
+        window.CampaignWizard = {
+            goToStep: goToStep
+        };
+
+        if (wizardBackBtn) {
+            wizardBackBtn.addEventListener('click', () => {
+                if (currentStep > 1) {
+                    goToStep(currentStep - 1);
+                }
+            });
+        }
+
+        if (wizardNextBtn) {
+            wizardNextBtn.addEventListener('click', () => {
+                if (currentStep < 4) {
+                    goToStep(currentStep + 1);
+                }
+            });
+        }
+
+        // --- STEP 1: FILE UPLOAD & PREVIEW ---
+        async function handleUploadedDataFile(file) {
+            if (!file) return;
+
+            if (dropzonePrompt) dropzonePrompt.hidden = true;
+            if (fileLoadedState) fileLoadedState.hidden = false;
+            if (dataFileName) dataFileName.textContent = file.name;
+            if (fileMetaSummary) fileMetaSummary.textContent = `Analyzing file (${formatFileSize(file.size)})...`;
+
+            const formData = new FormData();
+            formData.append('data_file', file);
+
+            try {
+                const response = await fetch('/api/send-bulk/preview-file', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || 'File analysis failed');
+                }
+
+                totalFileRows = data.total_rows || 0;
+                validEmailCount = data.valid_email_count || 0;
+                duplicateCount = data.duplicate_count || 0;
+                detectedColumns = data.columns || [];
+                parsedDataRows = data.preview_rows || [];
+
+                // Update loaded summary
+                if (fileMetaSummary) {
+                    fileMetaSummary.textContent = `${totalFileRows} rows detected • ${formatFileSize(file.size)}`;
+                }
+
+                // Show & update stats
+                if (fileStatsGrid) fileStatsGrid.hidden = false;
+                if (statTotalRows) statTotalRows.textContent = totalFileRows;
+                if (statValidEmails) statValidEmails.textContent = validEmailCount;
+                if (statDuplicateEmails) statDuplicateEmails.textContent = duplicateCount;
+                if (statTotalColumns) statTotalColumns.textContent = detectedColumns.length;
+                if (headerRecipientCount) headerRecipientCount.textContent = totalFileRows;
+
+                // Auto-set recipient column
+                if (data.detected_recipient_column && recipientColumnInput) {
+                    recipientColumnInput.value = data.detected_recipient_column;
+                }
+
+                renderColumnChips(detectedColumns, data.detected_recipient_column);
+                renderPreviewTable(detectedColumns, parsedDataRows);
+                renderDynamicVariablePills(detectedColumns);
+                populateSampleRowSelector(parsedDataRows);
+                updateLivePreview();
+                saveSendFormState();
+            } catch (err) {
+                if (fileMetaSummary) {
+                    fileMetaSummary.textContent = `Error: ${err.message}`;
+                }
+                showErrorNotification(err.message || 'Error analyzing file.');
+            }
+        }
+
+        function formatFileSize(bytes) {
+            if (!bytes || bytes <= 0) return '0 B';
+            const units = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(1024));
+            return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+        }
+
+        function renderColumnChips(columns, activeCol) {
+            if (!columnChipsContainer) return;
+            columnChipsContainer.innerHTML = '';
+
+            columns.forEach(col => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = `cb-col-chip ${col.toLowerCase() === (activeCol || '').toLowerCase() ? 'active' : ''}`;
+                btn.textContent = col;
+                btn.title = `Select column '${col}' as recipient email`;
+                btn.addEventListener('click', () => {
+                    if (recipientColumnInput) {
+                        recipientColumnInput.value = col;
+                        saveSendFormState();
+                    }
+                    columnChipsContainer.querySelectorAll('.cb-col-chip').forEach(c => c.classList.remove('active'));
+                    btn.classList.add('active');
+                    updateLivePreview();
+                });
+                columnChipsContainer.appendChild(btn);
+            });
+        }
+
+        function renderPreviewTable(columns, rows) {
+            if (!previewTable || !previewTableHead || !previewTableBody) return;
+
+            if (!rows || rows.length === 0) {
+                if (tableEmptyState) tableEmptyState.hidden = false;
+                previewTable.hidden = true;
+                if (tableRowCountBadge) tableRowCountBadge.textContent = '0 rows loaded';
+                return;
+            }
+
+            if (tableEmptyState) tableEmptyState.hidden = true;
+            previewTable.hidden = false;
+            if (tableRowCountBadge) tableRowCountBadge.textContent = `${totalFileRows} rows found (Showing first ${rows.length})`;
+
+            // Render Header
+            let headHtml = '<tr><th style="width: 45px;">#</th>';
+            columns.forEach(col => {
+                const isEmail = col.toLowerCase().includes('mail') || col.toLowerCase() === (recipientColumnInput?.value || '').toLowerCase();
+                headHtml += `<th>${escapeHtml(col)} ${isEmail ? '<span class="cb-pill-sm">Email</span>' : ''}</th>`;
+            });
+            headHtml += '</tr>';
+            previewTableHead.innerHTML = headHtml;
+
+            // Render Body
+            let bodyHtml = '';
+            rows.forEach((row, idx) => {
+                bodyHtml += `<tr><td class="text-muted">${idx + 1}</td>`;
+                columns.forEach(col => {
+                    const val = row[col] || '';
+                    const isEmail = val.includes('@') && val.includes('.');
+                    bodyHtml += `<td>${isEmail ? `<span class="cb-table-email">${escapeHtml(val)}</span>` : escapeHtml(val)}</td>`;
+                });
+                bodyHtml += '</tr>';
+            });
+            previewTableBody.innerHTML = bodyHtml;
+        }
+
+        function renderDynamicVariablePills(columns) {
+            if (!templateVarChips) return;
+
+            // Preserve standard default pills
+            const defaultVars = ['company', 'person', 'email', 'city'];
+            const allVars = new Set(defaultVars);
+            columns.forEach(col => {
+                const cleaned = col.trim();
+                if (cleaned) allVars.add(cleaned);
+            });
+
+            templateVarChips.innerHTML = '';
+            allVars.forEach(v => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'cb-var-pill';
+                btn.setAttribute('data-var', `{{${v}}}`);
+                btn.textContent = `+ {{${v}}}`;
+                btn.addEventListener('click', () => insertVariableAtCursor(`{{${v}}}`));
+                templateVarChips.appendChild(btn);
+            });
+        }
+
+        function populateSampleRowSelector(rows) {
+            if (!sampleRowSelect) return;
+            sampleRowSelect.innerHTML = '';
+
+            if (!rows || rows.length === 0) {
+                sampleRowSelect.innerHTML = '<option value="0">Row 1 (Sample)</option>';
+                return;
+            }
+
+            rows.forEach((row, idx) => {
+                const opt = document.createElement('option');
+                opt.value = String(idx);
+                const recCol = recipientColumnInput?.value || 'email';
+                const recipient = row[recCol] || row['email'] || row['recipient'] || `Recipient ${idx + 1}`;
+                const company = row['company'] || row['Unternehmen'] || row['firma'] || '';
+                opt.textContent = `Row ${idx + 1}: ${recipient}${company ? ` (${company})` : ''}`;
+                sampleRowSelect.appendChild(opt);
+            });
+        }
+
+        // Drag & Drop Listeners
+        if (dropzone) {
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropzone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropzone.classList.add('drag-active');
+                });
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropzone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropzone.classList.remove('drag-active');
+                });
+            });
+
+            dropzone.addEventListener('drop', (e) => {
+                const files = e.dataTransfer?.files;
+                if (files && files.length > 0) {
+                    if (dataFileInput) {
+                        dataFileInput.files = files;
+                    }
+                    handleUploadedDataFile(files[0]);
+                }
+            });
+        }
+
+        if (dataFileInput) {
+            dataFileInput.addEventListener('change', () => {
+                if (dataFileInput.files && dataFileInput.files[0]) {
+                    handleUploadedDataFile(dataFileInput.files[0]);
+                }
+            });
+        }
+
+        // --- STEP 2: COMPOSE & LIVE PREVIEW ---
+        function insertVariableAtCursor(variableStr) {
+            const target = lastFocusedInput || subjectInput || bodyInput;
+            if (!target) return;
+
+            const start = target.selectionStart || 0;
+            const end = target.selectionEnd || 0;
+            const text = target.value;
+            target.value = text.substring(0, start) + variableStr + text.substring(end);
+            target.focus();
+            const newCursorPos = start + variableStr.length;
+            target.setSelectionRange(newCursorPos, newCursorPos);
+
+            updateCharCounters();
+            updateLivePreview();
+            saveSendFormState();
+        }
+
+        if (subjectInput) {
+            subjectInput.addEventListener('focus', () => { lastFocusedInput = subjectInput; });
+            subjectInput.addEventListener('input', () => {
+                updateCharCounters();
+                updateLivePreview();
+                saveSendFormState();
+            });
+        }
+
+        if (bodyInput) {
+            bodyInput.addEventListener('focus', () => { lastFocusedInput = bodyInput; });
+            bodyInput.addEventListener('input', () => {
+                updateCharCounters();
+                updateLivePreview();
+                saveSendFormState();
+            });
+        }
+
+        function updateCharCounters() {
+            if (subjectCounter && subjectInput) {
+                subjectCounter.textContent = `${subjectInput.value.length} characters`;
+            }
+            if (bodyCounter && bodyInput) {
+                const text = bodyInput.value.trim();
+                const words = text ? text.split(/\s+/).length : 0;
+                bodyCounter.textContent = `${words} words | ${bodyInput.value.length} characters`;
+            }
+        }
+
+        function updateLivePreview() {
+            if (!previewSubjectVal || !previewBodyVal) return;
+
+            const rowIndex = Number(sampleRowSelect?.value || 0);
+            const sampleRow = (parsedDataRows && parsedDataRows[rowIndex]) ? parsedDataRows[rowIndex] : {
+                company: 'JobScout Partner GmbH',
+                Unternehmen: 'JobScout Partner GmbH',
+                person: 'Frau Dr. Schmidt',
+                name: 'Frau Dr. Schmidt',
+                email: 'kontakt@jobscout-partner.de',
+                city: 'München'
+            };
+
+            const recCol = recipientColumnInput?.value || 'email';
+            const recipientEmail = sampleRow[recCol] || sampleRow['email'] || 'empfaenger@unternehmen.de';
+            if (previewToVal) {
+                previewToVal.textContent = recipientEmail;
+            }
+
+            const rawSubject = subjectInput?.value || '';
+            const rawBody = bodyInput?.value || '';
+
+            const renderTemplate = (tmpl, data) => {
+                if (!tmpl) return '';
+                return tmpl.replace(/\{\{\s*([a-zA-Z0-9_\u00C0-\u017F]+)\s*\}\}/g, (match, key) => {
+                    // Try exact, lower, and fallback lookup
+                    if (data[key] !== undefined) return data[key];
+                    const lowerKey = key.toLowerCase();
+                    const foundKey = Object.keys(data).find(k => k.toLowerCase() === lowerKey);
+                    if (foundKey && data[foundKey] !== undefined) return data[foundKey];
+                    return match;
+                });
+            };
+
+            const renderedSubject = renderTemplate(rawSubject, sampleRow);
+            const renderedBody = renderTemplate(rawBody, sampleRow);
+
+            previewSubjectVal.textContent = renderedSubject || 'No subject entered yet';
+            previewBodyVal.textContent = renderedBody || 'Rendered email body preview will appear here...';
+        }
+
+        if (sampleRowSelect) {
+            sampleRowSelect.addEventListener('change', updateLivePreview);
+        }
+
+        // Attachments Management
+        if (attachmentsInput) {
+            attachmentsInput.addEventListener('change', () => {
+                renderAttachmentsChips(Array.from(attachmentsInput.files || []));
+            });
+        }
+
+        function renderAttachmentsChips(files) {
+            if (!attachmentsChipsList) return;
+            attachmentsChipsList.innerHTML = '';
+
+            if (!files || files.length === 0) {
+                attachmentsChipsList.innerHTML = '<span class="cb-attachments-empty">No attachments added yet.</span>';
+                return;
+            }
+
+            files.forEach((file) => {
+                const chip = document.createElement('div');
+                chip.className = 'cb-attachment-chip';
+                chip.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                    <span class="cb-attachment-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+                    <span class="cb-attachment-size">(${formatFileSize(file.size)})</span>
+                `;
+                attachmentsChipsList.appendChild(chip);
+            });
+        }
+
+        // One Document Mode Toggle
+        if (oneDocumentToggle && oneDocumentFields) {
+            oneDocumentToggle.addEventListener('change', () => {
+                oneDocumentFields.hidden = !oneDocumentToggle.checked;
+                saveSendFormState();
+            });
+        }
+
         if (oneDocumentBaseInput && oneDocumentBaseName) {
             oneDocumentBaseInput.addEventListener('change', () => {
-                updateFileLabel(oneDocumentBaseInput, oneDocumentBaseName);
-            });
-        }
-
-        function syncOneDocumentFields() {
-            if (!oneDocumentToggle || !oneDocumentFields) {
-                return;
-            }
-            oneDocumentFields.hidden = !oneDocumentToggle.checked;
-        }
-
-        if (oneDocumentToggle) {
-            oneDocumentToggle.addEventListener('change', () => {
-                syncOneDocumentFields();
-                saveSendFormState();
-            });
-        }
-
-        function setLoadedCampaignDeleteState(isSending) {
-            if (!deleteCampaignBtn) {
-                return;
-            }
-
-            const hasCampaignId = Boolean(String(campaignIdInput?.value || '').trim());
-            deleteCampaignBtn.disabled = !hasCampaignId || isSending;
-            deleteCampaignBtn.textContent = isSending ? 'Versand aktiv' : 'Vorlage löschen';
-            deleteCampaignBtn.title = isSending
-                ? 'Laufenden Versand zuerst stoppen oder abschließen'
-                : '';
-        }
-
-        function consumeTransientResult() {
-            const raw = sessionStorage.getItem(SEND_RESULT_FLASH_KEY);
-            if (!raw) {
-                return;
-            }
-
-            sessionStorage.removeItem(SEND_RESULT_FLASH_KEY);
-            try {
-                const payload = JSON.parse(raw);
-                if (!payload || !payload.message) {
-                    return;
+                const files = oneDocumentBaseInput.files || [];
+                if (files.length > 0) {
+                    oneDocumentBaseName.textContent = files[0].name;
+                } else {
+                    oneDocumentBaseName.textContent = 'No file selected';
                 }
-                resultDiv.className = `result ${payload.level === 'error' ? 'error' : 'success'}`;
-                resultDiv.textContent = payload.message;
-                resultDiv.style.display = 'block';
-            } catch (_error) {
-                // ignore invalid transient payload
-            }
+            });
         }
 
-        function saveSendFormState() {
-            const state = {
-                full_name: document.getElementById('send-emails-full_name')?.value || '',
-                sender_email: document.getElementById('send-emails-sender_email')?.value || '',
-                recipient_column: document.getElementById('send-emails-recipient_column')?.value || '',
-                limit: document.getElementById('send-emails-limit')?.value || '',
-                day_preset: dayPresetSelect?.value || '',
-                jitter_min_seconds: document.getElementById('send-emails-jitter_min_seconds')?.value || '',
-                jitter_max_seconds: document.getElementById('send-emails-jitter_max_seconds')?.value || '',
-                batch_size: document.getElementById('send-emails-batch_size')?.value || '',
-                batch_pause_minutes: document.getElementById('send-emails-batch_pause_minutes')?.value || '',
-                one_document_enabled: oneDocumentToggle?.checked ? '1' : '',
-                one_document_page: document.getElementById('send-emails-one_document_page')?.value || '',
-                one_document_action: document.getElementById('send-emails-one_document_action')?.value || 'replace',
-                subject_template: document.getElementById('send-emails-subject_template')?.value || '',
-                body_template: document.getElementById('send-emails-body_template')?.value || ''
-            };
-            localStorage.setItem(SEND_FORM_STATE_KEY, JSON.stringify(state));
-        }
-
-        function setInputValue(element, value) {
-            if (!element) {
-                return false;
-            }
-            const normalizedValue = String(value ?? '').trim();
-            element.value = normalizedValue;
-            return true;
-        }
-
-        function setTextareaValue(element, value) {
-            if (!element) {
-                return false;
-            }
-            element.value = String(value ?? '');
-            return true;
-        }
-
-        function setInputValueIfEmpty(element, value) {
-            if (!element) {
-                return false;
-            }
-            const normalizedValue = String(value || '').trim();
-            if (!normalizedValue || String(element.value || '').trim()) {
-                return false;
-            }
-            return setInputValue(element, normalizedValue);
-        }
-
-        function setTextareaValueIfEmpty(element, value) {
-            if (!element) {
-                return false;
-            }
-            const normalizedValue = String(value || '');
-            if (!normalizedValue.trim() || String(element.value || '').trim()) {
-                return false;
-            }
-            return setTextareaValue(element, normalizedValue);
-        }
-
-        function applyTransferDefaults(transferInfo) {
-            const fullNameInput = document.getElementById('send-emails-full_name');
-            const senderEmailInput = document.getElementById('send-emails-sender_email');
-            const subjectInput = document.getElementById('send-emails-subject_template');
-            const bodyInput = document.getElementById('send-emails-body_template');
-
-            const fullNameApplied = setInputValue(fullNameInput, transferInfo.full_name);
-            const senderApplied = setInputValue(senderEmailInput, transferInfo.sender_email);
-            const subjectApplied = setInputValue(subjectInput, transferInfo.email_subject_template);
-            const bodyApplied = setTextareaValue(bodyInput, transferInfo.email_body_template);
-
-            if (fullNameApplied || senderApplied || subjectApplied || bodyApplied) {
-                saveSendFormState();
-            }
+        // --- STEP 3: SETTINGS & PRESETS ---
+        if (pwToggleBtn && appPasswordInput) {
+            pwToggleBtn.addEventListener('click', () => {
+                const isPassword = appPasswordInput.type === 'password';
+                appPasswordInput.type = isPassword ? 'text' : 'password';
+                const eyeOpen = pwToggleBtn.querySelector('.eye-open');
+                const eyeClosed = pwToggleBtn.querySelector('.eye-closed');
+                if (eyeOpen && eyeClosed) {
+                    eyeOpen.hidden = isPassword;
+                    eyeClosed.hidden = !isPassword;
+                }
+            });
         }
 
         function applyDayPreset(presetKey) {
             const preset = DAY_PRESETS[presetKey];
-            if (!preset) {
-                return;
-            }
+            if (!preset) return;
 
-            Object.entries(preset).forEach(([id, value]) => {
-                const el = document.getElementById(`send-emails-${id}`);
-                if (el) {
-                    el.value = value;
+            if (limitInput) limitInput.value = preset.limit;
+            if (jitterMinInput) jitterMinInput.value = preset.jitter_min_seconds;
+            if (jitterMaxInput) jitterMaxInput.value = preset.jitter_max_seconds;
+            if (batchSizeInput) batchSizeInput.value = preset.batch_size;
+            if (batchPauseInput) batchPauseInput.value = preset.batch_pause_minutes;
+
+            if (dayPresetSelect) dayPresetSelect.value = presetKey;
+            highlightActivePresetCard(presetKey);
+            saveSendFormState();
+        }
+
+        function highlightActivePresetCard(presetKey) {
+            const key = presetKey || dayPresetSelect?.value || '';
+            document.querySelectorAll('.cb-preset-card').forEach(card => {
+                if (card.getAttribute('data-preset') === key) {
+                    card.classList.add('active');
+                } else {
+                    card.classList.remove('active');
                 }
             });
         }
 
-        function detectDayPresetFromInputs() {
-            const currentValues = {
-                limit: document.getElementById('send-emails-limit')?.value || '',
-                jitter_min_seconds: document.getElementById('send-emails-jitter_min_seconds')?.value || '',
-                jitter_max_seconds: document.getElementById('send-emails-jitter_max_seconds')?.value || '',
-                batch_size: document.getElementById('send-emails-batch_size')?.value || '',
-                batch_pause_minutes: document.getElementById('send-emails-batch_pause_minutes')?.value || ''
+        document.querySelectorAll('.cb-preset-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const presetKey = card.getAttribute('data-preset');
+                applyDayPreset(presetKey);
+            });
+        });
+
+        // --- STEP 4: REVIEW & VALIDATION ---
+        function updateSummaryDashboard() {
+            if (summarySender) {
+                summarySender.textContent = senderEmailInput?.value.trim() || 'Not specified';
+            }
+            if (summaryRecipients) {
+                const count = totalFileRows || 0;
+                summaryRecipients.textContent = `${count} Recipients`;
+            }
+            if (summaryAttachments) {
+                const attCount = attachmentsInput?.files?.length || 0;
+                const hasOneDoc = oneDocumentToggle?.checked;
+                const parts = [];
+                if (attCount > 0) parts.push(`${attCount} ${attCount === 1 ? 'Attachment' : 'Attachments'}`);
+                if (hasOneDoc) parts.push('One Document PDF');
+                summaryAttachments.textContent = parts.length > 0 ? parts.join(' + ') : 'No attachments';
+            }
+            if (summaryDuration) {
+                const count = totalFileRows || 0;
+                const jMin = Number(jitterMinInput?.value) || 80;
+                const jMax = Number(jitterMaxInput?.value) || 120;
+                const avgJitter = (jMin + jMax) / 2;
+                const bSize = Number(batchSizeInput?.value) || 20;
+                const bPause = (Number(batchPauseInput?.value) || 25) * 60;
+
+                const batches = bSize > 0 ? Math.floor(count / bSize) : 0;
+                const totalSeconds = (count * avgJitter) + (batches * bPause);
+
+                if (totalSeconds < 60) {
+                    summaryDuration.textContent = `~ ${Math.round(totalSeconds)} seconds`;
+                } else if (totalSeconds < 3600) {
+                    summaryDuration.textContent = `~ ${Math.round(totalSeconds / 60)} minutes`;
+                } else {
+                    const hours = Math.floor(totalSeconds / 3600);
+                    const minutes = Math.round((totalSeconds % 3600) / 60);
+                    summaryDuration.textContent = `~ ${hours}h ${minutes}m`;
+                }
+            }
+        }
+
+        function validateStep4() {
+            let isValid = true;
+
+            // 1. Sender credentials
+            const hasSender = Boolean(senderEmailInput?.value.trim() && appPasswordInput?.value.trim());
+            updateCheckItem(checkSender, hasSender);
+            if (!hasSender) isValid = false;
+
+            // 2. Recipients
+            const hasRecipients = Boolean(totalFileRows > 0 || transferIdInput?.value || campaignIdInput?.value);
+            updateCheckItem(checkRecipients, hasRecipients);
+            if (!hasRecipients) isValid = false;
+
+            // 3. Subject
+            const hasSubject = Boolean(subjectInput?.value.trim());
+            updateCheckItem(checkSubject, hasSubject);
+            if (!hasSubject) isValid = false;
+
+            // 4. Body
+            const hasBody = Boolean(bodyInput?.value.trim());
+            updateCheckItem(checkBody, hasBody);
+            if (!hasBody) isValid = false;
+
+            // Confirmation checkbox
+            const isConfirmed = Boolean(confirmCheckbox?.checked);
+            if (sendBtn) {
+                sendBtn.disabled = !(isValid && isConfirmed);
+            }
+
+            return isValid;
+        }
+
+        function updateCheckItem(itemEl, isOk) {
+            if (!itemEl) return;
+            if (isOk) {
+                itemEl.className = 'cb-check-item success';
+            } else {
+                itemEl.className = 'cb-check-item error';
+            }
+        }
+
+        if (confirmCheckbox) {
+            confirmCheckbox.addEventListener('change', validateStep4);
+        }
+
+        // Test Email Sender
+        if (sendTestBtn) {
+            sendTestBtn.addEventListener('click', async () => {
+                const senderEmail = senderEmailInput?.value.trim();
+                const appPassword = appPasswordInput?.value.trim();
+                const testRecipient = testRecipientInput?.value.trim() || senderEmail;
+                const subject = subjectInput?.value.trim();
+                const body = bodyInput?.value.trim();
+
+                if (!senderEmail || !appPassword) {
+                    showTestResult('Please enter sender email and Gmail App Password in Step 3 first.', false);
+                    return;
+                }
+                if (!testRecipient) {
+                    showTestResult('Please provide a test recipient email address.', false);
+                    return;
+                }
+
+                sendTestBtn.disabled = true;
+                if (testBtnSpinner) testBtnSpinner.hidden = false;
+                if (testBtnText) testBtnText.textContent = 'Sending test email...';
+
+                try {
+                    const testFormData = new FormData();
+                    testFormData.append('sender_email', senderEmail);
+                    testFormData.append('app_password', appPassword);
+                    testFormData.append('test_recipient', testRecipient);
+                    testFormData.append('subject_template', subject || 'JobScout Test Email');
+                    testFormData.append('body_template', body || 'This is a test email.');
+                    testFormData.append('full_name', fullNameInput?.value.trim() || '');
+
+                    // Include attachments if present
+                    if (attachmentsInput?.files) {
+                        Array.from(attachmentsInput.files).forEach(f => {
+                            testFormData.append('attachments', f);
+                        });
+                    }
+
+                    const response = await fetch('/api/send-bulk/test-email', {
+                        method: 'POST',
+                        body: testFormData
+                    });
+                    const data = await response.json();
+
+                    if (!response.ok || !data.success) {
+                        throw new Error(data.message || 'Error sending test email');
+                    }
+
+                    showTestResult(data.message || 'Test email sent successfully!', true);
+                } catch (testErr) {
+                    showTestResult(testErr.message || 'Test email could not be sent.', false);
+                } finally {
+                    sendTestBtn.disabled = false;
+                    if (testBtnSpinner) testBtnSpinner.hidden = true;
+                    if (testBtnText) testBtnText.textContent = 'Send Test Email Now';
+                }
+            });
+        }
+
+        function showTestResult(msg, isSuccess) {
+            if (!testResultMsg) return;
+            testResultMsg.hidden = false;
+            testResultMsg.className = `cb-test-status ${isSuccess ? 'success' : 'error'}`;
+            testResultMsg.textContent = msg;
+        }
+
+        function showErrorNotification(msg) {
+            if (!errorDiv) return;
+            errorDiv.textContent = msg;
+            errorDiv.hidden = false;
+        }
+
+        // --- DRAFT PERSISTENCE (SECURITY-SAFE) ---
+        // Excludes app_password!
+        function saveSendFormState() {
+            const state = {
+                full_name: fullNameInput?.value || '',
+                sender_email: senderEmailInput?.value || '',
+                recipient_column: recipientColumnInput?.value || '',
+                limit: limitInput?.value || '',
+                day_preset: dayPresetSelect?.value || '',
+                jitter_min_seconds: jitterMinInput?.value || '',
+                jitter_max_seconds: jitterMaxInput?.value || '',
+                batch_size: batchSizeInput?.value || '',
+                batch_pause_minutes: batchPauseInput?.value || '',
+                one_document_enabled: oneDocumentToggle?.checked ? '1' : '',
+                one_document_page: document.getElementById('send-emails-one_document_page')?.value || '',
+                one_document_action: document.getElementById('send-emails-one_document_action')?.value || 'replace',
+                subject_template: subjectInput?.value || '',
+                body_template: bodyInput?.value || ''
             };
-
-            const matchingPreset = Object.entries(DAY_PRESETS).find(([, preset]) =>
-                Object.entries(preset).every(([key, value]) => currentValues[key] === value)
-            );
-
-            return matchingPreset ? matchingPreset[0] : '';
+            try {
+                localStorage.setItem(SEND_FORM_STATE_KEY, JSON.stringify(state));
+                if (autosaveIndicator) {
+                    autosaveIndicator.classList.add('saving');
+                    setTimeout(() => autosaveIndicator.classList.remove('saving'), 800);
+                }
+            } catch (_e) {
+                // Ignore localStorage errors
+            }
         }
 
         function restoreSendFormState() {
             const raw = localStorage.getItem(SEND_FORM_STATE_KEY);
-            if (!raw) {
-                if (dayPresetSelect) {
-                    dayPresetSelect.value = detectDayPresetFromInputs();
-                }
-                syncOneDocumentFields();
-                return;
-            }
+            if (!raw) return;
+
             try {
                 const state = JSON.parse(raw);
-                Object.entries(state).forEach(([id, value]) => {
-                    if (id === 'one_document_enabled') {
-                        if (oneDocumentToggle) {
-                            oneDocumentToggle.checked = Boolean(value);
-                        }
-                        return;
-                    }
-                    const el = document.getElementById(`send-emails-${id}`);
-                    if (!el || el.value) {
-                        return;
-                    }
-                    el.value = typeof value === 'string' ? value : '';
-                });
-                syncOneDocumentFields();
-                if (dayPresetSelect && !dayPresetSelect.value) {
-                    dayPresetSelect.value = detectDayPresetFromInputs();
+                if (fullNameInput && !fullNameInput.value) fullNameInput.value = state.full_name || '';
+                if (senderEmailInput && !senderEmailInput.value) senderEmailInput.value = state.sender_email || '';
+                if (recipientColumnInput && !recipientColumnInput.value) recipientColumnInput.value = state.recipient_column || 'email';
+                if (limitInput && !limitInput.value) limitInput.value = state.limit || '';
+                if (dayPresetSelect && !dayPresetSelect.value) dayPresetSelect.value = state.day_preset || '';
+                if (jitterMinInput && !jitterMinInput.value) jitterMinInput.value = state.jitter_min_seconds || '';
+                if (jitterMaxInput && !jitterMaxInput.value) jitterMaxInput.value = state.jitter_max_seconds || '';
+                if (batchSizeInput && !batchSizeInput.value) batchSizeInput.value = state.batch_size || '';
+                if (batchPauseInput && !batchPauseInput.value) batchPauseInput.value = state.batch_pause_minutes || '';
+
+                if (oneDocumentToggle) {
+                    oneDocumentToggle.checked = Boolean(state.one_document_enabled);
+                    if (oneDocumentFields) oneDocumentFields.hidden = !oneDocumentToggle.checked;
                 }
-            } catch (_error) {
-                // ignore bad local state
+                const pageInput = document.getElementById('send-emails-one_document_page');
+                if (pageInput && !pageInput.value) pageInput.value = state.one_document_page || '1';
+                const actionInput = document.getElementById('send-emails-one_document_action');
+                if (actionInput && !actionInput.value) actionInput.value = state.one_document_action || 'replace';
+
+                if (subjectInput && !subjectInput.value) subjectInput.value = state.subject_template || '';
+                if (bodyInput && !bodyInput.value) bodyInput.value = state.body_template || '';
+
+                highlightActivePresetCard(state.day_preset);
+                updateCharCounters();
+                updateLivePreview();
+            } catch (_e) {
+                // Ignore parse errors
             }
         }
 
-        function bindSendFormState() {
-            ['full_name', 'sender_email', 'recipient_column', 'limit', 'day_preset', 'jitter_min_seconds', 'jitter_max_seconds', 'batch_size', 'batch_pause_minutes', 'one_document_page', 'one_document_action', 'subject_template', 'body_template'].forEach((id) => {
-                const el = document.getElementById(`send-emails-${id}`);
-                if (!el) {
-                    return;
-                }
+        function bindAutoSaveEvents() {
+            [fullNameInput, senderEmailInput, recipientColumnInput, limitInput, jitterMinInput, jitterMaxInput, batchSizeInput, batchPauseInput].forEach(el => {
+                if (!el) return;
                 el.addEventListener('input', saveSendFormState);
                 el.addEventListener('change', saveSendFormState);
             });
         }
 
-        if (dayPresetSelect) {
-            dayPresetSelect.addEventListener('change', () => {
-                applyDayPreset(dayPresetSelect.value);
-                saveSendFormState();
-            });
+        // --- CAMPAIGN & TRANSFER URL LOADER ---
+        async function loadCampaignOrTransferData() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const transferId = (urlParams.get('transfer') || '').trim();
+            const campaignId = (urlParams.get('campaign') || '').trim();
+
+            if (!transferId && !campaignId) return;
+
+            try {
+                const query = transferId 
+                    ? `?transfer=${encodeURIComponent(transferId)}`
+                    : `?campaign=${encodeURIComponent(campaignId)}`;
+                
+                const response = await fetch(`/api/send-emails/campaigns${query}`);
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    if (data.transfer_error) showErrorNotification(data.transfer_error);
+                    if (data.campaign_error) showErrorNotification(data.campaign_error);
+                    return;
+                }
+
+                if (data.campaign_info) {
+                    renderCampaignInfo(data.campaign_info, data.active_send_job);
+                } else if (data.transfer_info) {
+                    renderTransferInfo(data.transfer_info);
+                }
+            } catch (err) {
+                showErrorNotification('Error loading campaign data: ' + err.message);
+            }
         }
 
+        function renderCampaignInfo(campaignInfo, activeSendJob) {
+            if (campaignIdInput) campaignIdInput.value = campaignInfo.id || '';
+            if (dataFileInput) dataFileInput.disabled = true;
+            if (dataFileName) dataFileName.textContent = `${campaignInfo.total_rows} recipients loaded`;
+            if (fileMetaSummary) fileMetaSummary.textContent = `Saved campaign: ${campaignInfo.name || campaignInfo.id}`;
+            if (dropzonePrompt) dropzonePrompt.hidden = true;
+            if (fileLoadedState) fileLoadedState.hidden = false;
+
+            totalFileRows = campaignInfo.total_rows || 0;
+            if (headerRecipientCount) headerRecipientCount.textContent = totalFileRows;
+
+            const html = `
+                <div class="campaign-box-head">
+                    <div>
+                        <strong>Saved template loaded:</strong> ${escapeHtml(campaignInfo.name)}<br>
+                        Progress: ${campaignInfo.sent_rows}/${campaignInfo.total_rows} sent, ${campaignInfo.remaining_rows} remaining.
+                        ${campaignInfo.one_document?.enabled ? `<br>One Document Mode: ${campaignInfo.one_document.action === 'add' ? 'Add' : 'Replace'} on page ${campaignInfo.one_document.page || 1}` : ''}
+                    </div>
+                </div>
+            `;
+            if (campaignBox) {
+                campaignBox.innerHTML = html;
+                campaignBox.hidden = false;
+            }
+
+            if (fullNameInput && campaignInfo.full_name) fullNameInput.value = campaignInfo.full_name;
+            if (senderEmailInput && campaignInfo.sender_email) senderEmailInput.value = campaignInfo.sender_email;
+            if (recipientColumnInput && campaignInfo.recipient_column) recipientColumnInput.value = campaignInfo.recipient_column;
+            if (subjectInput && campaignInfo.subject_template) subjectInput.value = campaignInfo.subject_template;
+            if (bodyInput && campaignInfo.body_template) bodyInput.value = campaignInfo.body_template;
+
+            if (campaignInfo.preview && campaignInfo.preview.length > 0) {
+                parsedDataRows = campaignInfo.preview.map(p => ({
+                    recipient: p.recipient,
+                    email: p.recipient,
+                    company: p.company,
+                    filename: p.filename
+                }));
+                populateSampleRowSelector(parsedDataRows);
+                renderPreviewTable(['email', 'company', 'filename'], parsedDataRows);
+            }
+
+            updateCharCounters();
+            updateLivePreview();
+            saveSendFormState();
+
+            if (activeSendJob && activeSendJob.job_id) {
+                attachToSendJob(activeSendJob.job_id);
+            }
+        }
+
+        function renderTransferInfo(transferInfo) {
+            if (transferIdInput) transferIdInput.value = transferInfo.id || '';
+            if (dataFileInput) dataFileInput.disabled = true;
+            if (dataFileName) dataFileName.textContent = `${transferInfo.total_rows} recipients loaded from cover letters`;
+            if (fileMetaSummary) fileMetaSummary.textContent = `${transferInfo.total_rows} recipients with personalized cover letter PDFs`;
+            if (dropzonePrompt) dropzonePrompt.hidden = true;
+            if (fileLoadedState) fileLoadedState.hidden = false;
+
+            totalFileRows = transferInfo.total_rows || 0;
+            if (headerRecipientCount) headerRecipientCount.textContent = totalFileRows;
+
+            const html = `
+                <div>
+                    <strong>Cover letter transfer loaded:</strong> ${transferInfo.total_rows} recipients with attached PDF documents.
+                </div>
+            `;
+            if (transferBox) {
+                transferBox.innerHTML = html;
+                transferBox.hidden = false;
+            }
+
+            if (fullNameInput && transferInfo.full_name) fullNameInput.value = transferInfo.full_name;
+            if (senderEmailInput && transferInfo.sender_email) senderEmailInput.value = transferInfo.sender_email;
+            if (subjectInput && transferInfo.email_subject_template) subjectInput.value = transferInfo.email_subject_template;
+            if (bodyInput && transferInfo.email_body_template) bodyInput.value = transferInfo.email_body_template;
+
+            if (transferInfo.preview && transferInfo.preview.length > 0) {
+                parsedDataRows = transferInfo.preview.map(p => ({
+                    recipient: p.recipient,
+                    email: p.recipient,
+                    company: p.company || 'N/A',
+                    filename: p.filename
+                }));
+                populateSampleRowSelector(parsedDataRows);
+                renderPreviewTable(['email', 'company', 'filename'], parsedDataRows);
+            }
+
+            updateCharCounters();
+            updateLivePreview();
+            saveSendFormState();
+        }
+
+        // --- SUBMISSION & SEND PROGRESS ---
         function setSendingUiActive() {
-            sendBtn.disabled = true;
-            saveTemplateBtn.disabled = true;
-            sendBtn.textContent = 'Wird gesendet...';
-            stopSendBtn.style.display = 'block';
-            stopSendBtn.disabled = false;
-            stopSendBtn.textContent = 'Speichern und stoppen';
-            sendProgressDock.classList.add('visible');
-            setLoadedCampaignDeleteState(true);
+            if (sendBtn) {
+                sendBtn.disabled = true;
+                sendBtn.textContent = 'Sending in progress...';
+            }
+            if (saveTemplateBtn) saveTemplateBtn.disabled = true;
+            if (stopSendBtn) {
+                stopSendBtn.style.display = 'inline-flex';
+                stopSendBtn.disabled = false;
+                stopSendBtn.textContent = 'Save and stop';
+            }
+            if (sendProgressDock) sendProgressDock.classList.add('visible');
+            if (sendProgressStatusText) sendProgressStatusText.textContent = 'Sending active';
         }
 
         function resetSendingUi() {
-            sendBtn.disabled = false;
-            saveTemplateBtn.disabled = false;
-            sendBtn.textContent = 'Massenversand starten';
-            stopSendBtn.style.display = 'none';
-            stopSendBtn.disabled = false;
-            stopSendBtn.textContent = 'Speichern und stoppen';
-            setLoadedCampaignDeleteState(false);
+            if (sendBtn) {
+                sendBtn.disabled = false;
+                sendBtn.textContent = 'Launch Bulk Send Now';
+            }
+            if (saveTemplateBtn) saveTemplateBtn.disabled = false;
+            if (stopSendBtn) {
+                stopSendBtn.style.display = 'none';
+                stopSendBtn.disabled = false;
+            }
+            if (sendProgressStatusText) sendProgressStatusText.textContent = 'Completed';
         }
 
         async function saveTemplateToDashboard() {
-            resultDiv.style.display = 'none';
+            if (!saveTemplateBtn) return;
+            if (resultDiv) resultDiv.style.display = 'none';
             saveTemplateBtn.disabled = true;
-            const previousLabel = saveTemplateBtn.textContent;
-            saveTemplateBtn.textContent = 'Speichert...';
+            const prevLabel = saveTemplateBtn.innerHTML;
+            saveTemplateBtn.innerHTML = '<span>Saving template...</span>';
 
             try {
                 const formData = new FormData(form);
@@ -342,7 +1030,7 @@
                 });
                 const data = await response.json();
                 if (!response.ok || !data.success) {
-                    throw new Error(data.message || 'Vorlage konnte nicht gespeichert werden');
+                    throw new Error(data.message || 'Template could not be saved');
                 }
 
                 if (data.campaign_id && campaignIdInput) {
@@ -354,42 +1042,77 @@
                 }
 
                 saveSendFormState();
-                resultDiv.className = 'result success';
-                resultDiv.textContent = data.message || 'Vorlage gespeichert.';
-                resultDiv.style.display = 'block';
-            } catch (saveError) {
-                resultDiv.className = 'result error';
-                resultDiv.textContent = saveError.message || 'Vorlage konnte nicht gespeichert werden.';
-                resultDiv.style.display = 'block';
+                if (resultDiv) {
+                    resultDiv.className = 'cb-alert result success';
+                    resultDiv.textContent = data.message || 'Template saved to dashboard successfully.';
+                    resultDiv.style.display = 'block';
+                }
+            } catch (err) {
+                if (resultDiv) {
+                    resultDiv.className = 'cb-alert result error';
+                    resultDiv.textContent = err.message || 'Template could not be saved.';
+                    resultDiv.style.display = 'block';
+                }
             } finally {
                 saveTemplateBtn.disabled = false;
-                saveTemplateBtn.textContent = previousLabel;
+                saveTemplateBtn.innerHTML = prevLabel;
             }
         }
 
         function attachToSendJob(jobId) {
             activeSendJobId = String(jobId || '').trim();
-            if (!activeSendJobId) {
-                return;
-            }
+            if (!activeSendJobId) return;
+
             setSendingUiActive();
-            if (sendJobPoll) {
-                clearInterval(sendJobPoll);
-            }
+            if (sendJobPoll) clearInterval(sendJobPoll);
+
             sendJobPoll = setInterval(async () => {
                 try {
                     await pollSendJobStatus();
-                } catch (pollError) {
+                } catch (err) {
                     if (sendJobPoll) {
                         clearInterval(sendJobPoll);
                         sendJobPoll = null;
                     }
                     resetSendingUi();
-                    resultDiv.className = 'result error';
-                    resultDiv.textContent = pollError.message || 'Versandfortschritt konnte nicht geladen werden.';
-                    resultDiv.style.display = 'block';
+                    if (resultDiv) {
+                        resultDiv.className = 'cb-alert result error';
+                        resultDiv.textContent = err.message || 'Could not update send progress.';
+                        resultDiv.style.display = 'block';
+                    }
                 }
             }, 1500);
+        }
+
+        async function pollSendJobStatus() {
+            if (!activeSendJobId) return;
+
+            const response = await fetch(`/api/send-bulk/status/${activeSendJobId}`);
+            const data = await response.json();
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || 'Could not load send status');
+            }
+
+            const job = data.job || {};
+            updateSendProgress(job);
+
+            if (job.campaign_id && campaignIdInput) {
+                campaignIdInput.value = job.campaign_id;
+            }
+
+            if (job.status === 'completed' || job.status === 'failed') {
+                if (sendJobPoll) {
+                    clearInterval(sendJobPoll);
+                    sendJobPoll = null;
+                }
+                activeSendJobId = '';
+                resetSendingUi();
+                if (resultDiv) {
+                    resultDiv.className = `cb-alert result ${job.success ? 'success' : 'error'}`;
+                    resultDiv.textContent = job.message || 'Campaign finished.';
+                    resultDiv.style.display = 'block';
+                }
+            }
         }
 
         function updateSendProgress(job) {
@@ -401,256 +1124,39 @@
             const remainingSeconds = Number(job.estimated_remaining_seconds);
 
             function formatEta(seconds) {
-                if (!Number.isFinite(seconds) || seconds < 0) {
-                    return '';
-                }
-                if (seconds < 60) {
-                    return `${Math.round(seconds)}s`;
-                }
+                if (!Number.isFinite(seconds) || seconds < 0) return '';
+                if (seconds < 60) return `${Math.round(seconds)}s`;
                 const hours = Math.floor(seconds / 3600);
                 const minutes = Math.floor((seconds % 3600) / 60);
                 const secs = Math.round(seconds % 60);
-                if (hours > 0) {
-                    return `${hours}h ${minutes}m`;
-                }
-                if (minutes > 0) {
-                    return `${minutes}m ${secs}s`;
-                }
+                if (hours > 0) return `${hours}h ${minutes}m`;
+                if (minutes > 0) return `${minutes}m ${secs}s`;
                 return `${secs}s`;
             }
 
-            sendProgressDock.classList.add('visible');
-            sendProgressFill.style.width = `${percent}%`;
+            if (sendProgressDock) sendProgressDock.classList.add('visible');
+            if (sendProgressFill) sendProgressFill.style.width = `${percent}%`;
+
             const etaText = total > processed && Number.isFinite(remainingSeconds)
                 ? ` | ETA ${formatEta(remainingSeconds)}`
                 : '';
-            const base = `Gesendet ${sentSuccess}/${total} | Verarbeitet ${processed}/${total} | ${percent.toFixed(1)}%${etaText}`;
-            sendProgressText.textContent = stageMessage ? `${base} | ${stageMessage}` : base;
-        }
-
-        async function pollSendJobStatus() {
-            if (!activeSendJobId) {
-                return;
+            const base = `Sent ${sentSuccess}/${total} | Processed ${processed}/${total} | ${percent.toFixed(1)}%${etaText}`;
+            if (sendProgressText) {
+                sendProgressText.textContent = stageMessage ? `${base} | ${stageMessage}` : base;
             }
-            const response = await fetch(`/api/send-bulk/status/${activeSendJobId}`);
-            const data = await response.json();
-            if (!response.ok || !data.success) {
-                throw new Error(data.message || 'Versandfortschritt konnte nicht geladen werden');
-            }
-
-            const job = data.job || {};
-            updateSendProgress(job);
-
-            if (job.campaign_id && campaignIdInput) {
-                campaignIdInput.value = job.campaign_id;
-                const currentUrl = new URL(window.location.href);
-                currentUrl.searchParams.set('campaign', job.campaign_id);
-                currentUrl.searchParams.delete('transfer');
-                window.history.replaceState({}, '', currentUrl.toString());
-            }
-
-            if (job.status === 'completed' || job.status === 'failed') {
-                if (sendJobPoll) {
-                    clearInterval(sendJobPoll);
-                    sendJobPoll = null;
-                }
-                activeSendJobId = '';
-                resetSendingUi();
-                resultDiv.className = `result ${job.success ? 'success' : 'error'}`;
-                resultDiv.textContent = job.message || 'Versandauftrag abgeschlossen.';
-                resultDiv.style.display = 'block';
-            }
-        }
-
-        async function restoreActiveSendJobForCampaign() {
-            const campaignId = String(campaignIdInput?.value || '').trim();
-            if (!campaignId) {
-                return;
-            }
-
-            const response = await fetch(`/api/send-bulk/active?campaign_id=${encodeURIComponent(campaignId)}`);
-            const data = await response.json();
-            if (!response.ok || !data.success || !data.job || !data.job.job_id) {
-                return;
-            }
-
-            attachToSendJob(data.job.job_id);
-            await pollSendJobStatus();
-        }
-
-        async function deleteLoadedCampaign() {
-            const campaignId = String(campaignIdInput?.value || '').trim();
-            if (!campaignId) {
-                return;
-            }
-            if (!window.confirm('Diese gespeicherte Vorlage löschen? Das kann nicht rückgängig gemacht werden.')) {
-                return;
-            }
-
-            resultDiv.style.display = 'none';
-            const previousLabel = deleteCampaignBtn.textContent;
-            deleteCampaignBtn.disabled = true;
-            deleteCampaignBtn.textContent = 'Loescht...';
-
-            try {
-                const response = await fetch(`/api/campaign/delete/${encodeURIComponent(campaignId)}`, {
-                    method: 'POST'
-                });
-                const data = await response.json();
-                if (!response.ok || !data.success) {
-                    throw new Error(data.message || 'Vorlage konnte nicht gelöscht werden');
-                }
-
-                sessionStorage.setItem(SEND_RESULT_FLASH_KEY, JSON.stringify({
-                    level: 'success',
-                    message: data.message || 'Vorlage wurde gelöscht.'
-                }));
-
-                const currentUrl = new URL(window.location.href);
-                currentUrl.searchParams.delete('campaign');
-                window.location.href = currentUrl.toString();
-            } catch (deleteError) {
-                resultDiv.className = 'result error';
-                resultDiv.textContent = deleteError.message || 'Vorlage konnte nicht gelöscht werden.';
-                resultDiv.style.display = 'block';
-                deleteCampaignBtn.textContent = previousLabel;
-                setLoadedCampaignDeleteState(Boolean(activeSendJobId));
-            }
-        }
-
-        async function loadCampaignData() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const transferId = (urlParams.get('transfer') || '').trim();
-            const campaignId = (urlParams.get('campaign') || '').trim();
-
-            if (!transferId && !campaignId) {
-                return;
-            }
-
-            try {
-                const query = transferId 
-                    ? `?transfer=${encodeURIComponent(transferId)}`
-                    : `?campaign=${encodeURIComponent(campaignId)}`;
-                
-                const response = await fetch(`/api/send-emails/campaigns${query}`);
-                const data = await response.json();
-
-                if (!response.ok || !data.success) {
-                    if (data.transfer_error) {
-                        errorDiv.textContent = data.transfer_error;
-                        errorDiv.hidden = false;
-                    }
-                    if (data.campaign_error) {
-                        errorDiv.textContent = data.campaign_error;
-                        errorDiv.hidden = false;
-                    }
-                    return;
-                }
-
-                if (data.campaign_info) {
-                    renderCampaignInfo(data.campaign_info, data.active_send_job);
-                } else if (data.transfer_info) {
-                    renderTransferInfo(data.transfer_info);
-                }
-            } catch (error) {
-                errorDiv.textContent = 'Fehler beim Laden der Kampagnendaten: ' + error.message;
-                errorDiv.hidden = false;
-            }
-        }
-
-        function renderCampaignInfo(campaignInfo, activeSendJob) {
-            campaignIdInput.value = campaignInfo.id || '';
-            dataFileInput.disabled = true;
-            dataFileName.textContent = `${campaignInfo.total_rows} Empf\u00E4nger geladen`;
-
-            const html = `
-                <div class="campaign-box-head">
-                    <div>
-                        <strong>Gespeicherte Vorlage geladen:</strong> ${campaignInfo.name}<br>
-                        Fortschritt: ${campaignInfo.sent_rows}/${campaignInfo.total_rows} gesendet, ${campaignInfo.remaining_rows} offen.
-                        ${campaignInfo.one_document?.enabled ? `<br>One Document Mode: ${campaignInfo.one_document.action === 'add' ? 'Add' : 'Replace'} auf Seite ${campaignInfo.one_document.page || 1}${campaignInfo.one_document.base_filename ? ` | ${escapeHtml(campaignInfo.one_document.base_filename)}` : ''}` : ''}
-                    </div>
-                    <button
-                        class="btn btn-danger btn-inline"
-                        type="button"
-                        id="send-emails-deleteCampaignBtn"
-                        ${activeSendJob ? 'disabled title="Laufenden Versand zuerst stoppen oder abschließen"' : ''}
-                    >
-                        ${activeSendJob ? 'Versand aktiv' : 'Vorlage löschen'}
-                    </button>
-                </div>
-                ${campaignInfo.preview ? `
-                    <ul class="campaign-list">
-                        ${campaignInfo.preview.map(row => `<li>Zeile ${row.row_index} | ${row.recipient} | ${row.company}</li>`).join('')}
-                    </ul>
-                ` : ''}
-            `;
-            campaignBox.innerHTML = html;
-            campaignBox.hidden = false;
-
-            const newDeleteBtn = document.getElementById('send-emails-deleteCampaignBtn');
-            if (newDeleteBtn) {
-                newDeleteBtn.addEventListener('click', () => deleteLoadedCampaign());
-            }
-
-            setInputValue(document.getElementById('send-emails-full_name'), campaignInfo.full_name || '');
-            setInputValue(document.getElementById('send-emails-sender_email'), campaignInfo.sender_email || '');
-            setInputValue(document.getElementById('send-emails-recipient_column'), campaignInfo.recipient_column || '');
-            setInputValue(document.getElementById('send-emails-subject_template'), campaignInfo.subject_template || '');
-            setTextareaValue(document.getElementById('send-emails-body_template'), campaignInfo.body_template || '');
-            if (campaignInfo.one_document) {
-                const oneDocumentInfo = campaignInfo.one_document;
-                if (oneDocumentToggle) {
-                    oneDocumentToggle.checked = Boolean(oneDocumentInfo.enabled);
-                }
-                const pageInput = document.getElementById('send-emails-one_document_page');
-                if (pageInput && oneDocumentInfo.page) {
-                    pageInput.value = String(oneDocumentInfo.page);
-                }
-                const actionInput = document.getElementById('send-emails-one_document_action');
-                if (actionInput && oneDocumentInfo.action) {
-                    actionInput.value = String(oneDocumentInfo.action);
-                }
-                if (oneDocumentBaseName && oneDocumentInfo.base_filename) {
-                    oneDocumentBaseName.textContent = `Gespeichert: ${oneDocumentInfo.base_filename}`;
-                    oneDocumentBaseName.title = oneDocumentInfo.base_filename;
-                }
-                syncOneDocumentFields();
-            }
-
-            saveSendFormState();
-
-            if (activeSendJob && activeSendJob.job_id) {
-                attachToSendJob(activeSendJob.job_id);
-            }
-        }
-
-        function renderTransferInfo(transferInfo) {
-            transferIdInput.value = transferInfo.id || '';
-            dataFileInput.disabled = true;
-            dataFileName.textContent = `${transferInfo.total_rows} Empf\u00E4nger geladen`;
-
-            const html = `
-                <strong>Transfer aus Anschreiben geladen:</strong> ${transferInfo.total_rows} Empf\u00E4nger mit zugeordneten PDF-Dateien.
-                ${transferInfo.preview ? `
-                    <ul class="transfer-list">
-                        ${transferInfo.preview.map(row => `<li>${row.recipient} | ${row.company || 'k. A.'} | ${row.filename}</li>`).join('')}
-                    </ul>
-                ` : ''}
-            `;
-            transferBox.innerHTML = html;
-            transferBox.hidden = false;
-
-            applyTransferDefaults(transferInfo);
         }
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (!validateStep4()) {
+                showErrorNotification('Please review all required fields in the previous steps.');
+                return;
+            }
+
             setSendingUiActive();
-            resultDiv.style.display = 'none';
-            sendProgressDock.classList.add('visible');
-            sendProgressText.textContent = 'Versandauftrag wird gestartet...';
-            sendProgressFill.style.width = '0%';
+            if (resultDiv) resultDiv.style.display = 'none';
+            if (sendProgressText) sendProgressText.textContent = 'Starting campaign job...';
+            if (sendProgressFill) sendProgressFill.style.width = '0%';
 
             try {
                 const formData = new FormData(form);
@@ -658,64 +1164,87 @@
                     method: 'POST',
                     body: formData
                 });
-
                 const data = await response.json();
+
                 if (!response.ok || !data.success || !data.job_id) {
-                    throw new Error(data.message || 'Versandauftrag konnte nicht gestartet werden');
+                    throw new Error(data.message || 'Could not start campaign job');
                 }
 
                 attachToSendJob(data.job_id);
                 saveSendFormState();
                 await pollSendJobStatus();
-            } catch (_error) {
-                resultDiv.className = 'result error';
-                resultDiv.textContent = _error.message || 'Netzwerkfehler. Bitte erneut versuchen.';
-                resultDiv.style.display = 'block';
+            } catch (err) {
+                if (resultDiv) {
+                    resultDiv.className = 'cb-alert result error';
+                    resultDiv.textContent = err.message || 'Network error. Please try again.';
+                    resultDiv.style.display = 'block';
+                }
                 resetSendingUi();
             }
         });
 
-        stopSendBtn.addEventListener('click', async () => {
-            if (!activeSendJobId) {
-                return;
-            }
-            stopSendBtn.disabled = true;
-            stopSendBtn.textContent = 'Stoppe...';
+        if (stopSendBtn) {
+            stopSendBtn.addEventListener('click', async () => {
+                if (!activeSendJobId) return;
+                stopSendBtn.disabled = true;
+                stopSendBtn.textContent = 'Stopping...';
+
+                try {
+                    const response = await fetch(`/api/send-bulk/stop/${activeSendJobId}`, {
+                        method: 'POST'
+                    });
+                    const data = await response.json();
+                    if (!response.ok || !data.success) {
+                        throw new Error(data.message || 'Could not request stop');
+                    }
+                } catch (stopErr) {
+                    stopSendBtn.disabled = false;
+                    stopSendBtn.textContent = 'Save and stop';
+                    if (resultDiv) {
+                        resultDiv.className = 'cb-alert result error';
+                        resultDiv.textContent = stopErr.message || 'Could not request stop.';
+                        resultDiv.style.display = 'block';
+                    }
+                }
+            });
+        }
+
+        if (saveTemplateBtn) {
+            saveTemplateBtn.addEventListener('click', () => {
+                saveTemplateToDashboard().catch(() => {});
+            });
+        }
+
+        function consumeTransientResult() {
+            const raw = sessionStorage.getItem(SEND_RESULT_FLASH_KEY);
+            if (!raw) return;
+            sessionStorage.removeItem(SEND_RESULT_FLASH_KEY);
 
             try {
-                const response = await fetch(`/api/send-bulk/stop/${activeSendJobId}`, {
-                    method: 'POST'
-                });
-                const data = await response.json();
-                if (!response.ok || !data.success) {
-                    throw new Error(data.message || 'Stoppen konnte nicht angefordert werden');
-                }
-            } catch (stopError) {
-                stopSendBtn.disabled = false;
-                stopSendBtn.textContent = 'Speichern und stoppen';
-                resultDiv.className = 'result error';
-                resultDiv.textContent = stopError.message || 'Stoppen konnte nicht angefordert werden.';
+                const payload = JSON.parse(raw);
+                if (!payload || !payload.message || !resultDiv) return;
+                resultDiv.className = `cb-alert result ${payload.level === 'error' ? 'error' : 'success'}`;
+                resultDiv.textContent = payload.message;
                 resultDiv.style.display = 'block';
+            } catch (_e) {
+                // Ignore transient flash parse errors
             }
-        });
-
-        saveTemplateBtn.addEventListener('click', () => {
-            saveTemplateToDashboard().catch(() => {});
-        });
+        }
 
         return {
             show() {
                 consumeTransientResult();
                 restoreSendFormState();
-                bindSendFormState();
-                loadCampaignData().catch(() => {});
+                bindAutoSaveEvents();
+                goToStep(1);
+                loadCampaignOrTransferData().catch(() => {});
             },
             hide() {
                 if (sendJobPoll) {
                     clearInterval(sendJobPoll);
                     sendJobPoll = null;
                 }
-            },
+            }
         };
     };
 

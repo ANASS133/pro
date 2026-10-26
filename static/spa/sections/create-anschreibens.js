@@ -55,10 +55,20 @@
             columns: [],
             previewRows: [],
             designPdfName: null,
+            activeBgTemplateId: null,
+            cachedBgTemplates: null,
             transferReadyCount: 0,
             templates: [defaultTemplate],
             activeTemplateIndex: 0,
             filenameFormat: "{{Unternehmen}}",
+            variantNames: ["Variante 1"],
+            previewRowIndex: 0,
+            isDirty: false,
+            history: [],
+            historyIndex: -1,
+            displayMode: "split",
+            livePreviewObjectUrl: "",
+            livePreviewDebounceTimer: null,
         };
 
         function byId(name) {
@@ -66,6 +76,33 @@
         }
 
         const els = {
+            studioRoot: document.getElementById(`${prefix}-studio`),
+            modeBtns: root.querySelectorAll(".as-mode-btn"),
+            saveStatusPill: byId("saveStatusPill"),
+            duplicateTemplateBtn: byId("duplicateTemplateBtn"),
+            renameTemplateBtn: byId("renameTemplateBtn"),
+            activeVariantTitle: document.getElementById("as-active-variant-title"),
+            wordCountEl: document.getElementById("as-word-count"),
+            charCountEl: document.getElementById("as-char-count"),
+            autoDraftNote: document.getElementById("as-auto-draft-note"),
+            editorUndoBtn: document.getElementById("as-editor-undo"),
+            editorRedoBtn: document.getElementById("as-editor-redo"),
+            livePreviewIframe: document.getElementById("as-live-preview-iframe"),
+            livePreviewPlaceholder: document.getElementById("as-preview-placeholder"),
+            liveDocName: document.getElementById("as-live-doc-name"),
+            recordPrevBtn: document.getElementById("as-record-prev"),
+            recordNextBtn: document.getElementById("as-record-next"),
+            recordIndicator: document.getElementById("as-record-indicator"),
+            refreshPreviewBtn: document.getElementById("as-refresh-preview"),
+            checkRecords: document.getElementById("as-check-records"),
+            checkVariants: document.getElementById("as-check-variants"),
+            checkDesign: document.getElementById("as-check-design"),
+            checkPlaceholders: document.getElementById("as-check-placeholders"),
+            readinessPill: document.getElementById("as-readiness-pill"),
+            placeholderSearch: document.getElementById("as-placeholder-search"),
+            placeholderAccordion: document.getElementById("as-placeholder-accordion"),
+            placeholderToggle: document.getElementById("as-placeholder-toggle"),
+            placeholderCounter: document.getElementById("as-placeholder-counter"),
             error: byId("error"),
             exportSelect: byId("exportSelect"),
             loadExportBtn: byId("loadExportBtn"),
@@ -87,6 +124,13 @@
             designFileInput: byId("designFileInput"),
             designFileInfo: byId("designFileInfo"),
             designFileName: byId("designFileName"),
+            removeDesignBtn: byId("removeDesignBtn"),
+            bgTemplatesBtn: byId("bgTemplatesBtn"),
+            bgTemplatesModal: byId("bgTemplatesModal"),
+            closeBgTemplatesBtn: byId("closeBgTemplatesBtn"),
+            cancelBgModalBtn: byId("cancelBgModalBtn"),
+            clearBgTemplateBtn: byId("clearBgTemplateBtn"),
+            bgTemplatesList: byId("bgTemplatesList"),
             placeholderTags: byId("placeholderTags"),
             templateList: byId("templateList"),
             addTemplateBtn: byId("addTemplateBtn"),
@@ -234,6 +278,12 @@
             if (!Array.isArray(state.templates) || !state.templates.length) {
                 state.templates = [defaultTemplate];
             }
+            if (!Array.isArray(state.variantNames)) {
+                state.variantNames = [];
+            }
+            while (state.variantNames.length < state.templates.length) {
+                state.variantNames.push(`Variante ${state.variantNames.length + 1}`);
+            }
             if (
                 state.activeTemplateIndex < 0
                 || state.activeTemplateIndex >= state.templates.length
@@ -348,6 +398,88 @@
             state.templates[state.activeTemplateIndex] = els.templateEditor.value || "";
         }
 
+        function updateEditorStats() {
+            const text = els.templateEditor?.value || "";
+            const trimmed = text.trim();
+            const words = trimmed ? trimmed.split(/\s+/).length : 0;
+            const chars = text.length;
+            if (els.wordCountEl) {
+                els.wordCountEl.textContent = `${words} ${words === 1 ? 'Wort' : 'Wörter'}`;
+            }
+            if (els.charCountEl) {
+                els.charCountEl.textContent = `${chars} ${chars === 1 ? 'Zeichen' : 'Zeichen'}`;
+            }
+        }
+
+        function setSaveStatus(saved) {
+            state.isDirty = !saved;
+            if (els.saveStatusPill) {
+                els.saveStatusPill.className = `as-save-indicator ${saved ? 'is-saved' : 'is-unsaved'}`;
+                const textEl = els.saveStatusPill.querySelector(".as-save-text");
+                if (textEl) {
+                    textEl.textContent = saved ? "Gespeichert" : "Ungespeichert";
+                }
+            }
+            if (els.autoDraftNote) {
+                els.autoDraftNote.textContent = saved ? "Alle Änderungen gespeichert" : "Änderungen ungespeichert";
+            }
+            updateReadiness();
+        }
+
+        function updateReadiness() {
+            if (els.checkRecords) {
+                const count = state.previewRows?.length || 0;
+                els.checkRecords.textContent = `${count} ${count === 1 ? 'Kontakt' : 'Kontakte'}`;
+            }
+            if (els.checkVariants) {
+                const count = state.templates?.length || 1;
+                els.checkVariants.textContent = `${count} ${count === 1 ? 'Variante' : 'Varianten'}`;
+            }
+            if (els.checkDesign) {
+                if (state.activeBgTemplateId) {
+                    els.checkDesign.textContent = `Briefpapier (${state.activeBgTemplateId})`;
+                } else if (state.designPdfName) {
+                    els.checkDesign.textContent = "Eigenes PDF";
+                } else {
+                    els.checkDesign.textContent = "Standard";
+                }
+            }
+            if (els.checkPlaceholders) {
+                const editorText = els.templateEditor?.value || "";
+                const matches = editorText.match(/\{\{([^}]+)\}\}/g) || [];
+                const knownTokens = new Set([
+                    ...state.columns,
+                    "custom_hook",
+                    "salutation",
+                    "ansprechpartner",
+                    "geschaeftsfuehrer",
+                    "heutigenDatum",
+                ]);
+                const unresolved = matches
+                    .map(m => m.replace(/^\{\{|\}\}$/g, "").trim())
+                    .filter(t => !knownTokens.has(t));
+
+                if (unresolved.length > 0 && state.columns.length > 0) {
+                    els.checkPlaceholders.textContent = `${unresolved.length} unvollständig`;
+                    els.checkPlaceholders.className = "as-item-val is-warn";
+                } else {
+                    els.checkPlaceholders.textContent = "Gültig";
+                    els.checkPlaceholders.className = "as-item-val is-ok";
+                }
+            }
+            if (els.readinessPill) {
+                const hasData = state.previewRows?.length > 0;
+                const hasText = Boolean((els.templateEditor?.value || "").trim());
+                if (hasData && hasText) {
+                    els.readinessPill.textContent = "Bereit";
+                    els.readinessPill.className = "as-readiness-pill ready";
+                } else {
+                    els.readinessPill.textContent = !hasData ? "Warten auf Daten" : "Text leer";
+                    els.readinessPill.className = "as-readiness-pill waiting";
+                }
+            }
+        }
+
         function renderTemplateList() {
             ensureTemplateState();
             els.templateList.innerHTML = "";
@@ -355,19 +487,29 @@
             state.templates.forEach((template, index) => {
                 const button = document.createElement("button");
                 button.type = "button";
-                button.className = `anschreiben-template-chip${index === state.activeTemplateIndex ? " is-active" : ""}${template.trim() ? "" : " is-empty"}`;
-                button.textContent = `Variante ${index + 1}${template.trim() ? "" : " (leer)"}`;
+                button.className = `as-var-tab${index === state.activeTemplateIndex ? " is-active" : ""}${template.trim() ? "" : " is-empty"}`;
+                const name = state.variantNames[index] || `Variante ${index + 1}`;
+                button.innerHTML = `<span>${escapeHtml(name)}</span>${template.trim() ? "" : ' <span class="as-tab-empty">(leer)</span>'}`;
+                button.title = `${name} auswählen`;
                 button.addEventListener("click", () => switchTemplate(index));
                 els.templateList.appendChild(button);
             });
 
+            if (els.activeVariantTitle) {
+                els.activeVariantTitle.textContent = state.variantNames[state.activeTemplateIndex] || `Variante ${state.activeTemplateIndex + 1}`;
+            }
+
             els.deleteTemplateBtn.disabled = state.templates.length <= 1;
+            updateEditorStats();
+            updateReadiness();
         }
 
         function loadActiveTemplateIntoEditor() {
             ensureTemplateState();
             els.templateEditor.value = state.templates[state.activeTemplateIndex] || "";
             renderTemplateList();
+            pushHistory(els.templateEditor.value);
+            scheduleLivePreviewUpdate();
         }
 
         function switchTemplate(index) {
@@ -379,20 +521,215 @@
         function addTemplate() {
             persistActiveTemplateValue();
             state.templates.push("");
+            state.variantNames.push(`Variante ${state.templates.length}`);
             state.activeTemplateIndex = state.templates.length - 1;
             loadActiveTemplateIntoEditor();
+            setSaveStatus(false);
+        }
+
+        function duplicateActiveTemplate() {
+            persistActiveTemplateValue();
+            const currentContent = state.templates[state.activeTemplateIndex] || "";
+            const currentName = state.variantNames[state.activeTemplateIndex] || `Variante ${state.activeTemplateIndex + 1}`;
+            state.templates.push(currentContent);
+            state.variantNames.push(`${currentName} (Kopie)`);
+            state.activeTemplateIndex = state.templates.length - 1;
+            loadActiveTemplateIntoEditor();
+            setSaveStatus(false);
+            showToast("Variante dupliziert");
+        }
+
+        function renameActiveTemplate() {
+            ensureTemplateState();
+            const currentName = state.variantNames[state.activeTemplateIndex] || `Variante ${state.activeTemplateIndex + 1}`;
+            const newName = window.prompt("Name der Variante eingeben:", currentName);
+            if (newName && newName.trim()) {
+                state.variantNames[state.activeTemplateIndex] = newName.trim();
+                renderTemplateList();
+                showToast(`Variante umbenannt in "${newName.trim()}"`);
+            }
         }
 
         function deleteActiveTemplate() {
             ensureTemplateState();
             if (state.templates.length <= 1) {
-                state.templates[0] = "";
-                state.activeTemplateIndex = 0;
-            } else {
-                state.templates.splice(state.activeTemplateIndex, 1);
-                state.activeTemplateIndex = Math.max(0, state.activeTemplateIndex - 1);
+                if (window.confirm("Möchten Sie diese Variante leeren?")) {
+                    state.templates[0] = "";
+                    loadActiveTemplateIntoEditor();
+                    setSaveStatus(false);
+                    showToast("Variante geleert");
+                }
+                return;
             }
-            loadActiveTemplateIntoEditor();
+            if (window.confirm("Möchten Sie diese Variante wirklich löschen?")) {
+                state.templates.splice(state.activeTemplateIndex, 1);
+                state.variantNames.splice(state.activeTemplateIndex, 1);
+                state.activeTemplateIndex = Math.max(0, state.activeTemplateIndex - 1);
+                loadActiveTemplateIntoEditor();
+                setSaveStatus(false);
+                showToast("Variante gelöscht");
+            }
+        }
+
+        function pushHistory(text) {
+            if (state.historyIndex >= 0 && state.history[state.historyIndex] === text) {
+                return;
+            }
+            if (state.historyIndex < state.history.length - 1) {
+                state.history = state.history.slice(0, state.historyIndex + 1);
+            }
+            state.history.push(text);
+            if (state.history.length > 50) {
+                state.history.shift();
+            }
+            state.historyIndex = state.history.length - 1;
+        }
+
+        function editorUndo() {
+            if (state.historyIndex > 0) {
+                state.historyIndex--;
+                els.templateEditor.value = state.history[state.historyIndex] || "";
+                persistActiveTemplateValue();
+                updateEditorStats();
+                setSaveStatus(false);
+                scheduleLivePreviewUpdate();
+            }
+        }
+
+        function editorRedo() {
+            if (state.historyIndex < state.history.length - 1) {
+                state.historyIndex++;
+                els.templateEditor.value = state.history[state.historyIndex] || "";
+                persistActiveTemplateValue();
+                updateEditorStats();
+                setSaveStatus(false);
+                scheduleLivePreviewUpdate();
+            }
+        }
+
+        function setDisplayMode(mode) {
+            const validModes = ["editor", "split", "preview"];
+            const targetMode = validModes.includes(mode) ? mode : "split";
+            state.displayMode = targetMode;
+
+            if (els.studioRoot) {
+                els.studioRoot.dataset.displayMode = targetMode;
+            }
+
+            if (els.modeBtns) {
+                els.modeBtns.forEach((btn) => {
+                    btn.classList.toggle("is-active", btn.dataset.mode === targetMode);
+                });
+            }
+
+            try {
+                window.localStorage.setItem("as_display_mode", targetMode);
+            } catch (_e) {}
+
+            if (targetMode !== "editor" && (!els.livePreviewIframe || !els.livePreviewIframe.src)) {
+                updateLivePreview(state.previewRowIndex, true).catch(() => {});
+            }
+        }
+
+        function initDisplayMode() {
+            let savedMode = "split";
+            try {
+                savedMode = window.localStorage.getItem("as_display_mode") || "split";
+            } catch (_e) {}
+            setDisplayMode(savedMode);
+        }
+
+        async function updateLivePreview(rowIndex = state.previewRowIndex, silent = true) {
+            if (!state.sessionId || !Array.isArray(state.previewRows) || state.previewRows.length === 0) {
+                if (els.livePreviewPlaceholder) els.livePreviewPlaceholder.hidden = false;
+                if (els.livePreviewIframe) {
+                    els.livePreviewIframe.hidden = true;
+                    els.livePreviewIframe.src = "";
+                }
+                if (els.recordIndicator) els.recordIndicator.textContent = "0 / 0";
+                if (els.liveDocName) els.liveDocName.textContent = "Keine Daten";
+                return;
+            }
+
+            const total = state.previewRows.length;
+            const clampedIndex = Math.max(0, Math.min(total - 1, Number(rowIndex) || 0));
+            state.previewRowIndex = clampedIndex;
+
+            if (els.recordIndicator) {
+                els.recordIndicator.textContent = `${clampedIndex + 1} / ${total}`;
+            }
+
+            const currentRow = state.previewRows[clampedIndex] || {};
+            const recipientLabel = currentRow["Unternehmen"]
+                || currentRow["Firma"]
+                || currentRow["Company"]
+                || currentRow["Nachname"]
+                || `Empfänger ${clampedIndex + 1}`;
+
+            if (els.liveDocName) {
+                els.liveDocName.textContent = recipientLabel;
+            }
+
+            try {
+                await saveTemplate({ silent: true });
+
+                const response = await fetch(`${API_BASE}/preview-pdf`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        session_id: state.sessionId,
+                        row_index: clampedIndex,
+                        layout_options: getLayoutOptions(),
+                    }),
+                });
+
+                if (!response.ok) {
+                    return;
+                }
+
+                if (state.livePreviewObjectUrl) {
+                    URL.revokeObjectURL(state.livePreviewObjectUrl);
+                    state.livePreviewObjectUrl = "";
+                }
+
+                const blob = await response.blob();
+                state.livePreviewObjectUrl = URL.createObjectURL(blob);
+
+                if (els.livePreviewIframe) {
+                    els.livePreviewIframe.src = state.livePreviewObjectUrl;
+                    els.livePreviewIframe.hidden = false;
+                }
+                if (els.livePreviewPlaceholder) {
+                    els.livePreviewPlaceholder.hidden = true;
+                }
+            } catch (_e) {
+                // Ignore silent preview errors
+            }
+        }
+
+        function scheduleLivePreviewUpdate() {
+            if (state.livePreviewDebounceTimer) {
+                window.clearTimeout(state.livePreviewDebounceTimer);
+            }
+            state.livePreviewDebounceTimer = window.setTimeout(() => {
+                if (state.displayMode !== "editor") {
+                    updateLivePreview(state.previewRowIndex, true).catch(() => {});
+                }
+            }, 1000);
+        }
+
+        function nextPreviewRecord() {
+            if (!state.previewRows || !state.previewRows.length) return;
+            if (state.previewRowIndex < state.previewRows.length - 1) {
+                updateLivePreview(state.previewRowIndex + 1, false);
+            }
+        }
+
+        function prevPreviewRecord() {
+            if (!state.previewRows || !state.previewRows.length) return;
+            if (state.previewRowIndex > 0) {
+                updateLivePreview(state.previewRowIndex - 1, false);
+            }
         }
 
         function insertPlaceholder(placeholderName) {
@@ -400,6 +737,8 @@
             wrapSelection(token, "");
             persistActiveTemplateValue();
             renderTemplateList();
+            setSaveStatus(false);
+            scheduleLivePreviewUpdate();
             showToast(`Eingefügt: ${token}`, 1200);
         }
 
@@ -443,34 +782,85 @@
                 { name: "heutigenDatum", label: "Heutiges Datum" },
             ];
 
-            const container = document.createElement("div");
-            container.className = "placeholder-pills-flow";
+            const defaultCompanyTokens = ["Unternehmen", "Ort", "Stelle"];
+            const defaultContactTokens = ["Vorname", "Nachname", "Email"];
 
-            // 1. KI / Smart Badge + Pills
-            const smartBadge = document.createElement("span");
-            smartBadge.className = "placeholder-flow-badge badge-smart";
-            smartBadge.textContent = "KI";
-            container.appendChild(smartBadge);
-            smartTokens.forEach(t => container.appendChild(createPlaceholderPill(t.name, "smart", t.label)));
+            const rawCols = Array.isArray(columns) ? columns : [];
+            const isSmartOrSys = (c) => ["custom_hook", "salutation", "ansprechpartner", "geschaeftsfuehrer", "heutigenDatum"].includes(c);
 
-            // 2. Data Columns from loaded file
-            const dataCols = (columns || []).filter(c => !["custom_hook", "salutation", "ansprechpartner", "geschaeftsfuehrer", "heutigenDatum"].includes(c));
-            if (dataCols.length > 0) {
-                const dataBadge = document.createElement("span");
-                dataBadge.className = "placeholder-flow-badge badge-data";
-                dataBadge.textContent = "Datei";
-                container.appendChild(dataBadge);
-                dataCols.forEach(c => container.appendChild(createPlaceholderPill(c, "data")));
+            const matchedContact = rawCols.filter(c => !isSmartOrSys(c) && /vorname|nachname|name|email|mail|telefon|phone|mobil/i.test(c));
+            const contactCols = matchedContact.length ? matchedContact : defaultContactTokens;
+
+            const matchedCompany = rawCols.filter(c => !isSmartOrSys(c) && !contactCols.includes(c) && /firma|unternehmen|company|arbeitgeber|ort|city|plz|straße|adresse|branche|job|beruf|stelle|position/i.test(c));
+            const companyCols = matchedCompany.length ? matchedCompany : defaultCompanyTokens;
+
+            const otherCols = rawCols.filter(c => !isSmartOrSys(c) && !contactCols.includes(c) && !companyCols.includes(c));
+
+            function createGroupRow(badgeText, badgeClass, tokens, category) {
+                if (!tokens || !tokens.length) return null;
+                const row = document.createElement("div");
+                row.className = "as-placeholder-group-row";
+
+                const badge = document.createElement("span");
+                badge.className = `as-group-badge ${badgeClass}`;
+                badge.textContent = badgeText;
+                row.appendChild(badge);
+
+                const pillsWrap = document.createElement("div");
+                pillsWrap.className = "as-pills-wrap";
+                tokens.forEach((t) => {
+                    const name = typeof t === "string" ? t : t.name;
+                    const label = typeof t === "object" ? t.label : "";
+                    pillsWrap.appendChild(createPlaceholderPill(name, category, label));
+                });
+                row.appendChild(pillsWrap);
+                return row;
             }
 
-            // 3. System Tokens
-            const sysBadge = document.createElement("span");
-            sysBadge.className = "placeholder-flow-badge badge-sys";
-            sysBadge.textContent = "System";
-            container.appendChild(sysBadge);
-            systemTokens.forEach(t => container.appendChild(createPlaceholderPill(t.name, "system", t.label)));
+            // 1. KI
+            const kiRow = createGroupRow("KI", "bg-ki", smartTokens, "smart");
+            if (kiRow) els.placeholderTags.appendChild(kiRow);
 
-            els.placeholderTags.appendChild(container);
+            // 2. Kontakt
+            const contactRow = createGroupRow("Kontakt", "bg-contact", contactCols, "data");
+            if (contactRow) els.placeholderTags.appendChild(contactRow);
+
+            // 3. Unternehmen
+            const companyRow = createGroupRow("Firma", "bg-company", companyCols, "data");
+            if (companyRow) els.placeholderTags.appendChild(companyRow);
+
+            // 4. Datei-Spalten
+            const dataRow = createGroupRow("Datei", "bg-data", otherCols, "data");
+            if (dataRow) els.placeholderTags.appendChild(dataRow);
+
+            // 5. System
+            const sysRow = createGroupRow("System", "bg-sys", systemTokens, "system");
+            if (sysRow) els.placeholderTags.appendChild(sysRow);
+
+            const totalCount = smartTokens.length + systemTokens.length + contactCols.length + companyCols.length + otherCols.length;
+            if (els.placeholderCounter) {
+                els.placeholderCounter.textContent = `${totalCount} verfügbar`;
+            }
+
+            applyPlaceholderFilter();
+        }
+
+        function applyPlaceholderFilter() {
+            if (!els.placeholderTags) return;
+            const query = (els.placeholderSearch?.value || "").toLowerCase().trim();
+            const pills = els.placeholderTags.querySelectorAll(".placeholder-pill");
+            pills.forEach((pill) => {
+                const text = pill.textContent.toLowerCase();
+                const title = (pill.title || "").toLowerCase();
+                const matches = !query || text.includes(query) || title.includes(query);
+                pill.style.display = matches ? "inline-flex" : "none";
+            });
+
+            const rows = els.placeholderTags.querySelectorAll(".as-placeholder-group-row");
+            rows.forEach((row) => {
+                const visiblePills = row.querySelectorAll('.placeholder-pill:not([style*="display: none"])');
+                row.style.display = visiblePills.length > 0 ? "flex" : "none";
+            });
         }
 
         function renderColumns(columns) {
@@ -788,6 +1178,9 @@
             loadActiveTemplateIntoEditor();
             clearValidation();
             clearInlineError();
+            setSaveStatus(true);
+            updateReadiness();
+            updateLivePreview(0, true).catch(() => {});
         }
 
         function buildAutoloadDisplayName(source) {
@@ -855,6 +1248,7 @@
             if (!configOptions.silent) {
                 showToast(`Vorlagen gespeichert (${data.template_count || state.templates.length})`);
             }
+            setSaveStatus(true);
         }
 
         async function previewPdf() {
@@ -1271,11 +1665,184 @@
                 return;
             }
 
+            state.activeBgTemplateId = null;
             uploadDesignPdf(file).catch((error) => {
                 hideProgress();
                 showInlineError(error.message || "Design-PDF Upload fehlgeschlagen");
                 showToast(error.message || "Design-PDF Upload fehlgeschlagen");
             });
+        }
+
+        async function openBgTemplatesModal() {
+            if (!els.bgTemplatesModal) return;
+            els.bgTemplatesModal.hidden = false;
+            await loadAndRenderBgTemplates();
+        }
+
+        function closeBgTemplatesModal() {
+            if (els.bgTemplatesModal) {
+                els.bgTemplatesModal.hidden = true;
+            }
+        }
+
+        async function loadAndRenderBgTemplates() {
+            if (!els.bgTemplatesList) return;
+            if (!state.cachedBgTemplates) {
+                els.bgTemplatesList.innerHTML = '<div class="bg-loading-state"><span class="spinner-ring"></span> Lade Vorlagen...</div>';
+                try {
+                    const data = await fetchJson(`${API_BASE}/pdf-background-templates`);
+                    state.cachedBgTemplates = Array.isArray(data.templates) ? data.templates : [];
+                } catch (e) {
+                    els.bgTemplatesList.innerHTML = `<div class="bg-error-state">Vorlagen konnten nicht geladen werden: ${escapeHtml(e.message)}</div>`;
+                    return;
+                }
+            }
+            renderBgTemplatesList(state.cachedBgTemplates);
+        }
+
+        function renderBgTemplatesList(templates) {
+            if (!els.bgTemplatesList) return;
+            if (!templates || !templates.length) {
+                els.bgTemplatesList.innerHTML = '<div class="empty-state">Keine Vorlagen verfügbar.</div>';
+                return;
+            }
+
+            els.bgTemplatesList.innerHTML = templates.map((t) => {
+                const isActive = state.activeBgTemplateId === t.id
+                    || (state.designPdfName && state.designPdfName.toLowerCase().includes(t.name.toLowerCase()));
+                return `
+                    <div class="bg-template-card ${isActive ? 'is-active' : ''}" data-template-id="${escapeHtml(t.id)}">
+                        <div class="bg-card-preview-wrap">
+                            <div class="bg-mini-sheet" style="--p-color: ${t.primaryColor || '#4F46E5'}; --s-color: ${t.secondaryColor || '#818CF8'};">
+                                <div class="bg-mini-header"></div>
+                                <div class="bg-mini-accent"></div>
+                                <div class="bg-mini-body">
+                                    <span class="bg-mini-line w-80"></span>
+                                    <span class="bg-mini-line w-60"></span>
+                                    <span class="bg-mini-line w-90"></span>
+                                    <span class="bg-mini-line w-70"></span>
+                                    <span class="bg-mini-line w-50"></span>
+                                </div>
+                                <div class="bg-mini-din-mark mark-1"></div>
+                                <div class="bg-mini-din-mark mark-2"></div>
+                                <div class="bg-mini-din-mark mark-3"></div>
+                                <div class="bg-mini-footer"></div>
+                            </div>
+                            ${isActive ? '<span class="bg-active-tag">✓ Aktiv</span>' : ''}
+                        </div>
+                        <div class="bg-card-info">
+                            <div class="bg-card-top-row">
+                                <span class="bg-category-badge">${escapeHtml(t.category || "Design")}</span>
+                                <span class="bg-color-dot" style="background-color: ${t.primaryColor};" title="Primärfarbe: ${t.primaryColor}"></span>
+                            </div>
+                            <h4 class="bg-card-title">${escapeHtml(t.name)}</h4>
+                            <p class="bg-card-desc">${escapeHtml(t.description || "")}</p>
+                            <div class="bg-card-actions">
+                                <a href="${API_BASE}/pdf-background-templates/${encodeURIComponent(t.id)}/pdf" target="_blank" class="bg-btn-preview" title="Vorlage in voller A4-Größe im neuen Tab ansehen">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                    Vorschau
+                                </a>
+                                <button type="button" class="bg-btn-select ${isActive ? 'is-selected' : ''}" data-action="select-template" data-template-id="${escapeHtml(t.id)}">
+                                    ${isActive ? '✓ Ausgewählt' : 'Auswählen'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join("");
+
+            els.bgTemplatesList.querySelectorAll('[data-action="select-template"]').forEach((btn) => {
+                btn.addEventListener("click", async (e) => {
+                    e.stopPropagation();
+                    const templateId = btn.getAttribute("data-template-id");
+                    if (templateId) {
+                        await applyBgTemplate(templateId);
+                    }
+                });
+            });
+
+            els.bgTemplatesList.querySelectorAll('.bg-template-card').forEach((card) => {
+                card.addEventListener("click", async (e) => {
+                    if (e.target.closest('.bg-btn-preview')) return;
+                    const templateId = card.getAttribute("data-template-id");
+                    if (templateId) {
+                        await applyBgTemplate(templateId);
+                    }
+                });
+            });
+        }
+
+        async function applyBgTemplate(templateId) {
+            if (!state.sessionId) {
+                showToast(noDataMessage);
+                return;
+            }
+
+            try {
+                showProgress("Wende Hintergrund-Vorlage an...", 40);
+                const res = await fetchJson(`${API_BASE}/set-background-template`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        session_id: state.sessionId,
+                        template_id: templateId,
+                    }),
+                });
+
+                state.activeBgTemplateId = templateId;
+                setDesignFileState(res.filename || `Vorlage: ${templateId}`);
+
+                if (res.recommendedMargins) {
+                    const m = res.recommendedMargins;
+                    if (els.marginTopInput && m.margin_top !== undefined) els.marginTopInput.value = m.margin_top;
+                    if (els.marginLeftInput && m.margin_left !== undefined) els.marginLeftInput.value = m.margin_left;
+                    if (els.marginRightInput && m.margin_right !== undefined) els.marginRightInput.value = m.margin_right;
+                    if (els.marginBottomInput && m.margin_bottom !== undefined) els.marginBottomInput.value = m.margin_bottom;
+                    if (els.textWidthInput && m.text_width !== undefined) els.textWidthInput.value = m.text_width;
+                    if (els.textHeightInput && m.text_height !== undefined) els.textHeightInput.value = m.text_height;
+                }
+
+                closeBgTemplatesModal();
+                showProgress("Vorlage aktiviert!", 100);
+                window.setTimeout(hideProgress, 400);
+                showToast(`Briefpapier "${res.template?.name || templateId}" erfolgreich aktiviert!`);
+                updateReadiness();
+                scheduleLivePreviewUpdate();
+            } catch (err) {
+                hideProgress();
+                showToast(err.message || "Fehler beim Anwenden der Vorlage");
+            }
+        }
+
+        async function clearBgTemplate() {
+            if (!state.sessionId) {
+                setDesignFileState("");
+                state.activeBgTemplateId = null;
+                closeBgTemplatesModal();
+                updateReadiness();
+                scheduleLivePreviewUpdate();
+                return;
+            }
+
+            try {
+                await fetchJson(`${API_BASE}/set-background-template`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        session_id: state.sessionId,
+                        template_id: "none",
+                    }),
+                });
+
+                state.activeBgTemplateId = null;
+                setDesignFileState("");
+                closeBgTemplatesModal();
+                showToast("Hintergrund entfernt. Verwende Standard-Layout.");
+                updateReadiness();
+                scheduleLivePreviewUpdate();
+            } catch (err) {
+                showToast(err.message || "Fehler beim Entfernen");
+            }
         }
 
         function bindDropZone(dropZone, fileInput, handler) {
@@ -1824,26 +2391,122 @@
             if (els.hookInsertBtn) els.hookInsertBtn.addEventListener("click", insertGoldenHook);
             if (els.hookCopyBtn) els.hookCopyBtn.addEventListener("click", copyGoldenHook);
 
-            els.formatToolbar.addEventListener("click", (event) => {
-                const button = event.target.closest(".anschreiben-format-btn, .format-micro-btn");
-                if (!button) {
-                    return;
-                }
-                wrapSelection(button.dataset.prefix || "", button.dataset.suffix || "");
-                persistActiveTemplateValue();
-                renderTemplateList();
+            if (els.modeBtns) {
+                els.modeBtns.forEach((btn) => {
+                    btn.addEventListener("click", () => setDisplayMode(btn.dataset.mode));
+                });
+            }
+
+            if (els.duplicateTemplateBtn) {
+                els.duplicateTemplateBtn.addEventListener("click", duplicateActiveTemplate);
+            }
+
+            if (els.renameTemplateBtn) {
+                els.renameTemplateBtn.addEventListener("click", renameActiveTemplate);
+            }
+
+            if (els.placeholderToggle) {
+                els.placeholderToggle.addEventListener("click", () => {
+                    if (els.placeholderAccordion) {
+                        els.placeholderAccordion.classList.toggle("is-collapsed");
+                    }
+                });
+            }
+
+            if (els.placeholderSearch) {
+                els.placeholderSearch.addEventListener("input", applyPlaceholderFilter);
+            }
+
+            if (els.editorUndoBtn) {
+                els.editorUndoBtn.addEventListener("click", editorUndo);
+            }
+
+            if (els.editorRedoBtn) {
+                els.editorRedoBtn.addEventListener("click", editorRedo);
+            }
+
+            if (els.recordPrevBtn) {
+                els.recordPrevBtn.addEventListener("click", prevPreviewRecord);
+            }
+
+            if (els.recordNextBtn) {
+                els.recordNextBtn.addEventListener("click", nextPreviewRecord);
+            }
+
+            if (els.refreshPreviewBtn) {
+                els.refreshPreviewBtn.addEventListener("click", () => {
+                    updateLivePreview(state.previewRowIndex, false).catch(() => {});
+                });
+            }
+
+            [
+                els.fontSizeInput,
+                els.lineHeightInput,
+                els.marginTopInput,
+                els.marginLeftInput,
+                els.marginRightInput,
+                els.marginBottomInput,
+                els.textWidthInput,
+                els.textHeightInput,
+            ].forEach((inputEl) => {
+                inputEl?.addEventListener("input", scheduleLivePreviewUpdate);
             });
 
             els.templateEditor.addEventListener("input", () => {
                 persistActiveTemplateValue();
                 renderTemplateList();
+                updateEditorStats();
+                setSaveStatus(false);
+                pushHistory(els.templateEditor.value);
+                scheduleLivePreviewUpdate();
             });
+
+            els.templateEditor.addEventListener("keydown", (event) => {
+                if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+                    event.preventDefault();
+                    saveTemplate().catch((error) => {
+                        showInlineError(error.message || "Vorlage konnte nicht gespeichert werden.");
+                        showToast(error.message || "Vorlage konnte nicht gespeichert werden.");
+                    });
+                } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !event.shiftKey) {
+                    event.preventDefault();
+                    editorUndo();
+                } else if ((event.ctrlKey || event.metaKey) && (event.key.toLowerCase() === "y" || (event.key.toLowerCase() === "z" && event.shiftKey))) {
+                    event.preventDefault();
+                    editorRedo();
+                }
+            });
+
+            els.formatToolbar.addEventListener("click", (event) => {
+                const button = event.target.closest(".anschreiben-format-btn, .as-fmt-btn");
+                if (!button || button.id === "as-editor-undo" || button.id === "as-editor-redo") {
+                    return;
+                }
+                wrapSelection(button.dataset.prefix || "", button.dataset.suffix || "");
+                persistActiveTemplateValue();
+                renderTemplateList();
+                setSaveStatus(false);
+                pushHistory(els.templateEditor.value);
+                scheduleLivePreviewUpdate();
+            });
+
+            if (els.bgTemplatesBtn) els.bgTemplatesBtn.addEventListener("click", openBgTemplatesModal);
+            if (els.closeBgTemplatesBtn) els.closeBgTemplatesBtn.addEventListener("click", closeBgTemplatesModal);
+            if (els.cancelBgModalBtn) els.cancelBgModalBtn.addEventListener("click", closeBgTemplatesModal);
+            if (els.clearBgTemplateBtn) els.clearBgTemplateBtn.addEventListener("click", clearBgTemplate);
+            if (els.removeDesignBtn) els.removeDesignBtn.addEventListener("click", clearBgTemplate);
+            if (els.bgTemplatesModal) {
+                els.bgTemplatesModal.addEventListener("click", (e) => {
+                    if (e.target === els.bgTemplatesModal) closeBgTemplatesModal();
+                });
+            }
 
             window.addEventListener("keydown", (event) => {
                 if (event.key === "Escape") {
                     closePreview();
                     closeAtsModal();
                     closeGoldenHookModal();
+                    closeBgTemplatesModal();
                 }
             });
 
@@ -1859,10 +2522,14 @@
                 return;
             }
             initialized = true;
+            initDisplayMode();
             setLayoutInputs(defaultLayout);
             syncFilenameFormatDisplay("{{Unternehmen}}");
             loadActiveTemplateIntoEditor();
             renderPlaceholders(state.columns || []);
+            updateEditorStats();
+            setSaveStatus(true);
+            updateReadiness();
             if (els.toEmailBtn && !transferEnabled) {
                 els.toEmailBtn.hidden = true;
             }

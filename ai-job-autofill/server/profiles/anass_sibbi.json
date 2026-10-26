@@ -1,0 +1,296 @@
+{
+  "profile_version": "1.0",
+  "profile_language": "de",
+  "applicant": {
+    "personal": {
+      "first_name": "Anass",
+      "last_name": "Sibbi",
+      "full_name": "Anass Sibbi",
+      "date_of_birth": "2001-05-15",
+      "date_of_birth_display": "15.05.2001",
+      "place_of_birth": "Settat",
+      "country_of_birth": "Marokko",
+      "nationality": "Marokkanisch",
+      "gender": "male",
+      "salutation": "Herr",
+      "marital_status": "ledig"
+    },
+    "contact": {
+      "email": "anass.sibbi@example.com",
+      "phone": "+4917612345678",
+      "phone_display": "+49 176 12345678",
+      "address": {
+        "street": "Musterstraße",
+        "house_number": "12",
+        "postal_code": "50667",
+        "city": "Koeln",
+        "region": "Nordrhein-Westfalen",
+        "country": "Deutschland",
+        "country_code": "DE"
+      },
+      "linkedin": {
+        "display_name": "Anass Sibbi",
+        "url": "https://linkedin.com/in/anass-sibbi"
+      },
+      "portfolio": {
+        "url": "https://github.com/ANASS133"
+      },
+      "github": {
+        "url": "https://github.com/ANASS133",
+        "username": "ANASS133"
+      }
+    },
+    "identity": {
+      "gender": "male",
+      "gender_labels": {
+        "de": {
+          "male": [
+            "männlich",
+            "Herr",
+            "Mann"
+          ],
+          "female": [
+            "weiblich",
+            "Frau",
+            "Dame"
+          ],
+          "diverse": [
+            "divers",
+            "nicht-binär"
+          ]
+        },
+        "en": {
+          "male": [
+            "male",
+            "Mr",
+            "Man"
+          ],
+          "female": [
+            "female",
+            "Ms",
+            "Mrs",
+            "Woman"
+          ],
+          "diverse": [
+            "diverse",
+            "non-binary"
+          ]
+        },
+        "fr": {
+          "male": [
+            "homme",
+            "masculin",
+            "Monsieur"
+          ],
+          "female": [
+            "femme",
+            "féminin",
+            "Madame"
+          ],
+          "diverse": [
+            "divers",
+            "non-binaire"
+          ]
+        }
+      },
+      "salutation": "Herr",
+      "nationality": "Marokkanisch",
+      "nationality_labels": {
+        "de": "marokkanisch",
+        "en": "Moroccan",
+        "fr": "marocaine"
+      },
+      "country_of_birth": "Morocco",
+      "country_of_residence": "Germany",
+      "country_labels": {
+        "de": "Deutschland",
+        "en": "Germany",
+        "fr": "Allemagne"
+      },
+      "country_code": "DE"
+    },
+    "professional_profile": {
+      "current_title": "Fachinformatiker Anwendungsentwicklung",
+      "alternative_title": "Junior Full-Stack Entwickler",
+      "headline": "Auszubildender / Junior Entwickler | Python, JavaScript & Cloud Solutions",
+      "summary_de": "Zielstrebiger und technologiebegeisterter Entwickler mit solider Basis in Python, REST-APIs, Automatisierung und modernen Webtechnologien.",
+      "years_of_experience": 1,
+      "primary_fields": [
+        "Softwareentwicklung",
+        "Webentwicklung",
+        "Automatisierung & Web Scraping"
+      ]
+    },
+    "work_experience": [
+      {
+        "id": "exp_dev",
+        "current": true,
+        "job_title": "Softwareentwickler (Praktikum & Projekte)",
+        "employer": "Tech Solutions",
+        "city": "Köln",
+        "country": "Germany",
+        "start_date": "2023-01",
+        "end_date": null,
+        "description": [
+          "Entwicklung und Wartung von Scraping-Pipelines und Web-Applikationen.",
+          "Konzeption von RESTful Endpoints mit Python Flask und SQLite/PostgreSQL.",
+          "Implementierung automatisierter Test- und Validierungsabläufe."
+        ],
+        "technologies": [
+          "Python",
+          "Flask",
+          "JavaScript",
+          "REST APIs",
+          "Docker",
+          "Git"
+        ]
+      }
+    ],
+    "education": [
+      {
+        "id": "edu_abitur",
+        "current": false,
+        "degree": "Abitur / Baccalauréat",
+        "original_degree": "Baccalauréat Sciences Mathématiques",
+        "field_of_study": "Mathematik und Naturwissenschaften",
+        "institution": "Lycée Ibn Abbad",
+        "city": "Settat",
+        "country": "Marokko",
+        "start_date": "2019-09",
+        "end_date": "2022-06",
+        "result": "Sehr gut"
+      }
+    ],
+    "education_mapping": {
+      "highest_completed_qualification": {
+        "original_title": "Baccalauréat (Abitur-Äquivalent)",
+        "institution": "Lycée",
+        "german_qualification_label": "Allgemeine Hochschulreife (Abitur)",
+        "german_educational_level": "Abitur",
+        "german_dropdown_categories": [
+          "Abitur / Fachabitur / Allgemeine Hochschulreife",
+          "Fachhochschulreife",
+          "Abitur"
+        ]
+      }
+    },
+    "skills": {
+      "programming_languages": [
+        "Python",
+        "JavaScript",
+        "SQL",
+        "HTML5",
+        "CSS3"
+      ],
+      "frontend": [
+        "Vanilla JS",
+        "Responsive Web Design",
+        "HTML/CSS"
+      ],
+      "backend": [
+        "Python",
+        "Flask",
+        "REST APIs",
+        "SQLite",
+        "PostgreSQL"
+      ],
+      "tools": [
+        "Git",
+        "GitHub",
+        "Docker",
+        "Selenium",
+        "VS Code"
+      ],
+      "technologies_from_cv": [
+        "Docker",
+        "Flask",
+        "Git",
+        "JavaScript",
+        "Python",
+        "REST APIs",
+        "React",
+        "SQLite",
+        "Selenium"
+      ]
+    },
+    "languages": [
+      {
+        "language": "German",
+        "language_de": "Deutsch",
+        "level": "B2/C1",
+        "level_de": "Fließend in Wort und Schrift",
+        "certificate": "Goethe-Zertifikat B2"
+      },
+      {
+        "language": "English",
+        "language_de": "Englisch",
+        "level": "B2",
+        "level_de": "Gut",
+        "certificate": null
+      },
+      {
+        "language": "French",
+        "language_de": "Französisch",
+        "level": "C1",
+        "level_de": "Verhandlungssicher",
+        "certificate": null
+      },
+      {
+        "language": "Arabic",
+        "language_de": "Arabisch",
+        "level": "Native",
+        "level_de": "Muttersprache",
+        "certificate": null
+      }
+    ],
+    "certificates": [],
+    "job_application": {
+      "availability": {
+        "earliest_start_date": "asap",
+        "available_immediately": true,
+        "notice_period": "Sofort verfügbar"
+      },
+      "visa": {
+        "requires_visa_for_germany": false,
+        "requires_work_permit": false,
+        "status": "Aufenthaltstitel vorhanden"
+      },
+      "relocation": {
+        "willing_to_relocate": true,
+        "target_country": "Germany",
+        "target_country_de": "Deutschland",
+        "target_cities": [
+          "Köln",
+          "Düsseldorf",
+          "Bonn",
+          "Frankfurt",
+          "bundesweit"
+        ]
+      },
+      "work_model": {
+        "remote": true,
+        "hybrid": true,
+        "onsite": true
+      },
+      "salary_expectation": "Ausbildungsvergütung"
+    },
+    "documents": {
+      "cv": {
+        "file_name": "Lebenslauf_Anass_Sibbi.pdf",
+        "language": "de",
+        "description": "Tabellarischer Lebenslauf",
+        "available": true
+      },
+      "cover_letter": {
+        "file_name": "Anschreiben_Anass_Sibbi.pdf",
+        "language": "de",
+        "available": true,
+        "text_content": "Sehr geehrte Damen und Herren,\n\nmit großem Interesse bewerbe ich mich bei Ihnen. Durch meine praxisnahen Programmierkenntnisse in Python, REST-APIs und Webtechnologien sowie meine hohe Lernbereitschaft möchte ich Ihr Entwicklerteam tatkräftig unterstützen.\n\nMit freundlichen Grüßen,\nAnass Sibbi"
+      },
+      "certificates": []
+    },
+    "legal_and_sensitive": {
+      "instructions": "Never automatically answer, infer, or check legal, consent, health, disability, criminal-record, political, religious, or similarly sensitive fields. Always require explicit user review."
+    }
+  }
+}

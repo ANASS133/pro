@@ -9,6 +9,7 @@ import re
 import urllib.request
 import urllib.error
 from datetime import datetime
+from pathlib import Path
 from flask import Blueprint, jsonify, request, send_from_directory, Response
 from werkzeug.utils import secure_filename
 
@@ -547,3 +548,40 @@ def serve_french_form():
         with open(form_path, "r", encoding="utf-8") as f:
             return Response(f.read(), mimetype="text/html")
     return "French form not found", 404
+
+
+@autofill_bp.route("/api/autofill/upload-cv", methods=["POST"])
+@autofill_bp.route("/api/profiles/upload-cv", methods=["POST"])
+def upload_and_parse_cv():
+    """Uploads a PDF resume, parses candidate information, and syncs into candidate profile JSON."""
+    if "cv_file" not in request.files and "file" not in request.files:
+        return jsonify({"success": False, "error": "No file uploaded"}), 400
+
+    file = request.files.get("cv_file") or request.files.get("file")
+    if not file or not file.filename.lower().endswith(".pdf"):
+        return jsonify({"success": False, "error": "Only PDF files are supported"}), 400
+
+    profile_id = request.form.get("profile_id") or request.form.get("profileId") or "anass_sibbi"
+    clean_id = sanitize_profile_id(profile_id)
+    profile_path = Path(PROFILES_DIR) / f"{clean_id}.json"
+
+    try:
+        from services.cv_parser import CVParser
+        pdf_bytes = file.read()
+        extracted_text = CVParser.extract_text_from_pdf(pdf_bytes)
+        if not extracted_text:
+            return jsonify({"success": False, "error": "Could not extract text from PDF"}), 400
+
+        parsed_data = CVParser.parse_cv_text(extracted_text)
+        updated_profile = CVParser.update_profile_from_cv(profile_path, parsed_data)
+
+        return jsonify({
+            "success": True,
+            "profile_id": clean_id,
+            "parsed_data": parsed_data,
+            "skills_count": len(parsed_data["skills"]["technologies_from_cv"]),
+            "message": f"Successfully parsed and updated profile for {clean_id}"
+        }), 200
+    except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)}), 500
+

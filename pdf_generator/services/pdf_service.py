@@ -2,10 +2,12 @@ from datetime import datetime
 import base64
 import html
 import io
+import logging
 import os
 import re
 import tempfile
 
+logger = logging.getLogger(__name__)
 from fpdf import FPDF
 from pypdf import PdfReader, PdfWriter
 from .html_template import is_html_template
@@ -284,9 +286,14 @@ class PDFService:
                     }
                 )
 
-            with open(output_path, 'wb') as out_file:
-                writer.write(out_file)
-            return output_path
+            if output_path:
+                with open(output_path, 'wb') as out_file:
+                    writer.write(out_file)
+                return output_path
+            stream = io.BytesIO()
+            writer.write(stream)
+            stream.seek(0)
+            return stream
         finally:
             try:
                 os.remove(overlay_path)
@@ -318,54 +325,61 @@ class PDFService:
         defaults.string = '@page { size: A4; margin: 0; } html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }'
         document.head.insert(1, defaults)
 
-        browser_name, binary = find_browser()
-        options = new_options(browser_name)
-        options.binary_location = binary
-        options.add_argument('--headless=new')
-        options.add_argument('--disable-gpu')
-        options.add_argument('--no-first-run')
-        driver = start_driver(browser_name, options)
         try:
-            driver.set_page_load_timeout(30)
-            driver.set_script_timeout(30)
-            driver.execute_cdp_cmd('Emulation.setEmulatedMedia', {'media': 'print'})
-            encoded = base64.b64encode(str(document).encode('utf-8')).decode('ascii')
-            driver.get('data:text/html;charset=utf-8;base64,' + encoded)
-            driver.execute_async_script('''
-                const done = arguments[arguments.length - 1];
-                Promise.all([document.fonts.ready, ...Array.from(document.images, img =>
-                    img.complete ? Promise.resolve() : new Promise(resolve => {
-                        img.onload = resolve; img.onerror = resolve;
-                    }))]).then(() => done());
-            ''')
-            result = driver.execute_cdp_cmd('Page.printToPDF', {
-                'printBackground': True, 'preferCSSPageSize': True,
-                'displayHeaderFooter': False, 'paperWidth': 210 / 25.4,
-                'paperHeight': 297 / 25.4, 'marginTop': 0, 'marginBottom': 0,
-                'marginLeft': 0, 'marginRight': 0,
-            })
-            reader = PdfReader(io.BytesIO(base64.b64decode(result['data'])))
-            if not reader.pages:
-                raise ValueError('HTML rendering produced an empty PDF')
-            writer = PdfWriter()
-            writer.append_pages_from_reader(reader)
-            if metadata:
-                writer.add_metadata({
-                    '/Title': metadata.get('title', 'Document'),
-                    '/Author': metadata.get('author', 'PDF Generator'),
-                    '/Subject': metadata.get('subject', ''),
+            from .browser_pool import browser_pool
+            pdf_raw_data = browser_pool.render_html_to_pdf(str(document))
+            reader = PdfReader(io.BytesIO(pdf_raw_data))
+        except Exception as pool_err:
+            logger.warning(f"Browser pool rendering failed ({pool_err}); falling back to one-shot browser.")
+            browser_name, binary = find_browser()
+            options = new_options(browser_name)
+            if binary:
+                options.binary_location = binary
+            options.add_argument('--headless=new')
+            options.add_argument('--disable-gpu')
+            options.add_argument('--no-first-run')
+            driver = start_driver(browser_name, options)
+            try:
+                driver.set_page_load_timeout(30)
+                driver.set_script_timeout(30)
+                driver.execute_cdp_cmd('Emulation.setEmulatedMedia', {'media': 'print'})
+                encoded = base64.b64encode(str(document).encode('utf-8')).decode('ascii')
+                driver.get('data:text/html;charset=utf-8;base64,' + encoded)
+                driver.execute_async_script('''
+                    const done = arguments[arguments.length - 1];
+                    Promise.all([document.fonts.ready, ...Array.from(document.images, img =>
+                        img.complete ? Promise.resolve() : new Promise(resolve => {
+                            img.onload = resolve; img.onerror = resolve;
+                        }))]).then(() => done());
+                ''')
+                result = driver.execute_cdp_cmd('Page.printToPDF', {
+                    'printBackground': True, 'preferCSSPageSize': True,
+                    'displayHeaderFooter': False, 'paperWidth': 210 / 25.4,
+                    'paperHeight': 297 / 25.4, 'marginTop': 0, 'marginBottom': 0,
+                    'marginLeft': 0, 'marginRight': 0,
                 })
-            if output_path:
-                with open(output_path, 'wb') as output:
-                    writer.write(output)
-                return output_path
-            stream = io.BytesIO()
-            writer.write(stream)
-            stream.seek(0)
-            return stream
+                reader = PdfReader(io.BytesIO(base64.b64decode(result['data'])))
+            finally:
+                driver.quit()
 
-        finally:
-            driver.quit()
+        if not reader.pages:
+            raise ValueError('HTML rendering produced an empty PDF')
+        writer = PdfWriter()
+        writer.append_pages_from_reader(reader)
+        if metadata:
+            writer.add_metadata({
+                '/Title': metadata.get('title', 'Document'),
+                '/Author': metadata.get('author', 'PDF Generator'),
+                '/Subject': metadata.get('subject', ''),
+            })
+        if output_path:
+            with open(output_path, 'wb') as output:
+                writer.write(output)
+            return output_path
+        stream = io.BytesIO()
+        writer.write(stream)
+        stream.seek(0)
+        return stream
 
     def set_font_style(self, font='helvetica', size=11):
         self.font = font

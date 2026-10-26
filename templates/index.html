@@ -302,10 +302,128 @@
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
         }
-        @media (max-width: 900px) {
-            .search-grid {
-                grid-template-columns: 1fr;
-            }
+        /* Search Progress Button & Card */
+        .search-submit-btn {
+            position: relative;
+            overflow: hidden;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            min-height: 42px;
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: 700;
+            color: #ffffff;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .search-btn-bar {
+            position: absolute;
+            top: 0; left: 0; bottom: 0;
+            width: 0%;
+            background: linear-gradient(90deg, #10b981, #059669);
+            transition: width 0.35s ease;
+            z-index: 1;
+            pointer-events: none;
+        }
+        .search-btn-content {
+            position: relative;
+            z-index: 2;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+        }
+        .search-progress-card {
+            margin-top: 14px;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 14px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+        }
+        .search-progress-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        .search-progress-title {
+            margin: 0;
+            font-size: 13.5px;
+            font-weight: 700;
+            color: #2d3748;
+        }
+        .search-progress-counter {
+            font-size: 12px;
+            font-weight: 700;
+            color: #667eea;
+            background: #edf2f7;
+            padding: 2px 8px;
+            border-radius: 999px;
+        }
+        .search-progress-track {
+            width: 100%;
+            height: 12px;
+            background: #e2e8f0;
+            border-radius: 999px;
+            overflow: hidden;
+            position: relative;
+        }
+        .search-progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #667eea 0%, #10b981 100%);
+            border-radius: 999px;
+            transition: width 0.35s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 6px;
+        }
+        .search-progress-pct {
+            font-size: 9px;
+            font-weight: 800;
+            color: #ffffff;
+        }
+        .search-progress-status {
+            margin-top: 8px;
+            font-size: 12.5px;
+            color: #4a5568;
+            font-weight: 600;
+        }
+        .search-progress-stages {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px dashed #e2e8f0;
+        }
+        .stage-pill {
+            font-size: 11px;
+            padding: 2px 7px;
+            border-radius: 5px;
+            background: #f7fafc;
+            color: #718096;
+            border: 1px solid #edf2f7;
+        }
+        .stage-pill.is-active {
+            background: #ebf4ff;
+            color: #3182ce;
+            border-color: #bee3f8;
+            font-weight: 700;
+        }
+        .stage-pill.is-done {
+            background: #f0fff4;
+            color: #276749;
+            border-color: #c6f6d5;
+            font-weight: 700;
         }
     </style>
     <link rel="stylesheet" href="{{ url_for('static', filename='shared_nav.css') }}">
@@ -328,52 +446,127 @@
             <p>Stellen von der Bundesagentur für Arbeit abrufen</p>
         </div>
 
-        <div class="search-grid">
-            <div class="search-card">
-                <form id="search_form_1" action="{{ url_for('search') }}" method="POST">
-                    <div class="form-group">
-                        <label for="keyword">Stellentitel / Stichwort</label>
+        <div class="unified-search-wrapper" style="max-width: 900px; margin: 0 auto 20px;">
+            <div class="search-card unified-search-card">
+                <form id="search_form_1" action="{{ url_for('search') }}" method="POST" style="display:flex; flex-direction:column; gap:16px;">
+                    <!-- Row 1: Search Mode Segmented Control -->
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label style="margin-bottom:6px;">Suchmodus</label>
+                        <div class="segmented-control" role="radiogroup" style="display:inline-flex; background:#f1f5f9; padding:4px; border-radius:10px; border:1px solid #e2e8f0; width:100%; max-width:340px;">
+                            <input type="radio" id="mode_ausbildung" name="mode" value="ausbildung" checked style="display:none;">
+                            <label for="mode_ausbildung" class="segmented-option" style="flex:1; text-align:center; padding:8px 16px; border-radius:8px; font-weight:700; cursor:pointer; color:#475569; margin:0;">
+                                🎓 Ausbildung
+                            </label>
+
+                            <input type="radio" id="mode_arbeit" name="mode" value="arbeit" style="display:none;">
+                            <label for="mode_arbeit" class="segmented-option" style="flex:1; text-align:center; padding:8px 16px; border-radius:8px; font-weight:700; cursor:pointer; color:#475569; margin:0;">
+                                💼 Arbeit
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Row 2: Profession / Keyword -->
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label for="keyword">Beruf oder Stichwort</label>
                         <input
                             type="text"
                             id="keyword"
                             name="keyword"
-                            placeholder="z. B. Softwareentwickler, Krankenschwester"
+                            placeholder="z. B. Fachinformatiker, Koch, Softwareentwickler"
                             required
                         >
+                        <small id="keyword_hint" style="color:#64748b; font-size:12px; margin-top:4px; display:block;">Geben Sie einfach die Berufsbezeichnung ein — Suche passt sich automatisch an.</small>
                     </div>
 
-                    <div class="form-group">
-                        <label for="location">Ort (optional)</label>
+                    <!-- Row 3: Location -->
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label for="location">Stadt oder PLZ <span style="font-weight:400; color:#94a3b8; font-size:12px;">(optional)</span></label>
                         <input
                             type="text"
                             id="location"
                             name="location"
-                            placeholder="z. B. Berlin, Muenchen"
+                            placeholder="z. B. Berlin, München, Ahaus oder 48683"
                         >
+                        <small style="color:#64748b; font-size:12px; margin-top:4px; display:block;">Ohne Ortsangabe wird bundesweit gesucht.</small>
                     </div>
 
-                    <div class="form-group">
-                        <label for="published_since">Veroeffentlicht seit</label>
-                        <select id="published_since" name="published_since">
-                            <option value="all" selected>Alle anzeigen</option>
-                            <option value="today">Heute</option>
-                            <option value="yesterday">Gestern</option>
-                            <option value="1week">1 Woche</option>
-                            <option value="2weeks">2 Wochen</option>
-                            <option value="4weeks">4 Wochen</option>
-                        </select>
+                    <!-- Row 4: Collapsible Advanced Filters -->
+                    <div class="advanced-filters-wrapper" style="border:1px solid #e2e8f0; border-radius:8px; background:#f8fafc; overflow:hidden;">
+                        <button type="button" id="advanced_filters_toggle" style="width:100%; display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:transparent; border:none; cursor:pointer; font-weight:700; color:#334155; font-size:13px;">
+                            <span>⚙️ Erweiterte Filter <span id="filters_summary_badge" style="font-size:11px; background:#e2e8f0; padding:2px 6px; border-radius:4px; margin-left:6px; font-weight:600;">Alle Quellen • 30 Tage</span></span>
+                            <span id="advanced_filters_icon">▾</span>
+                        </button>
+                        <div id="advanced_filters_content" style="display:none; padding:14px; background:#fff; border-top:1px solid #e2e8f0;">
+                            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px;">
+                                <div class="form-group" style="margin-bottom:0;">
+                                    <label for="search_source_1" style="font-size:12px;">Suchquellen</label>
+                                    <select id="search_source_1" name="source">
+                                        <option value="all" selected>Alle Quellen inkl. Google Maps</option>
+                                        <option value="job_portals">Nur Jobbörsen</option>
+                                        <option value="google_maps">Nur Google Maps</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin-bottom:0;">
+                                    <label for="published_since" style="font-size:12px;">Veröffentlichungszeitraum</label>
+                                    <select id="published_since" name="published_since">
+                                        <option value="30days" selected>30 Tage (Standard)</option>
+                                        <option value="14days">14 Tage</option>
+                                        <option value="7days">7 Tage</option>
+                                        <option value="all">Alle Anzeigen</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="margin-bottom:0;">
+                                    <label for="search_radius" style="font-size:12px;">Umkreis</label>
+                                    <select id="search_radius" name="radius">
+                                        <option value="" selected>Kein Radius (Standard)</option>
+                                        <option value="5">5 km</option>
+                                        <option value="10">10 km</option>
+                                        <option value="25">25 km</option>
+                                        <option value="50">50 km</option>
+                                        <option value="100">100 km</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <button id="search_btn_1" type="submit">Suchen</button>
+                    <!-- Row 5: Full-width Search button -->
+                    <button id="search_btn_1" type="submit" class="search-submit-btn" style="min-height:46px; font-size:15px; border-radius:8px;">
+                        <span class="search-btn-bar" id="search_btn_bar_1"></span>
+                        <span class="search-btn-content">
+                            <span class="search-btn-label" id="search_btn_label_1">Suche starten</span>
+                        </span>
+                    </button>
                 </form>
 
-                <div class="loading" id="loading_1">
+                <div class="search-progress-card" id="search_progress_card_1" style="display:none;">
+                    <div class="search-progress-header">
+                        <h4 class="search-progress-title" id="search_progress_title_1">Jobsuche läuft...</h4>
+                        <span class="search-progress-counter" id="search_progress_counter_1">0 Stellen gefunden</span>
+                    </div>
+                    <div class="search-progress-track">
+                        <div class="search-progress-fill" id="search_progress_fill_1" style="width: 0%;">
+                            <span class="search-progress-pct" id="search_progress_pct_1">0%</span>
+                        </div>
+                    </div>
+                    <div class="search-progress-status" id="search_progress_status_1">Verbindung zu Jobbörsen wird aufgebaut...</div>
+                    <div class="search-progress-stages" id="search_progress_stages_1">
+                        <span class="stage-pill" data-portal="arbeitsagentur">Arbeitsagentur</span>
+                        <span class="stage-pill" data-portal="ausbildung_de">Ausbildung.de</span>
+                        <span class="stage-pill" data-portal="azubiyo">Azubiyo</span>
+                        <span class="stage-pill" data-portal="aubi_plus">AUBI-plus</span>
+                        <span class="stage-pill" data-portal="ihk">IHK</span>
+                        <span class="stage-pill" data-portal="google_maps">Google Maps</span>
+                    </div>
+                </div>
+
+                <div class="loading" id="loading_1" style="display:none;">
                     <div class="spinner"></div>
                     <p>Stellen werden geladen, bitte warten.</p>
                 </div>
 
-                <div class="info">
-                    <strong>Hinweis:</strong> Bitte verantwortungsvoll und gemaess Website-Bedingungen nutzen.
+                <div class="unified-search-footnote">
+                    <span>Echtzeit-Aggregierung über deutsche Portale. Bitte verantwortungsvoll und gemäß den Nutzungsbedingungen der jeweiligen Jobbörsen nutzen.</span>
                 </div>
                 <div id="results_1" class="results-box">
                     <div id="results_meta_1" class="results-meta"></div>
@@ -402,106 +595,66 @@
                     <div id="results_error_1" class="results-error" style="display:none;"></div>
                 </div>
             </div>
-
-            <div class="search-card">
-                <form id="search_form_2" action="{{ url_for('search') }}" method="POST">
-                    <div class="form-group">
-                        <label for="keyword_2">Stellentitel / Stichwort</label>
-                        <input
-                            type="text"
-                            id="keyword_2"
-                            name="keyword"
-                            placeholder="z. B. Softwareentwickler, Krankenschwester"
-                            required
-                        >
-                    </div>
-
-                    <div class="form-group">
-                        <label for="location_2">Ort (optional)</label>
-                        <input
-                            type="text"
-                            id="location_2"
-                            name="location"
-                            placeholder="z. B. Berlin, Muenchen"
-                        >
-                    </div>
-
-                    <div class="form-group">
-                        <label for="published_since_2">Veroeffentlicht seit</label>
-                        <select id="published_since_2" name="published_since">
-                            <option value="all" selected>Alle anzeigen</option>
-                            <option value="today">Heute</option>
-                            <option value="yesterday">Gestern</option>
-                            <option value="1week">1 Woche</option>
-                            <option value="2weeks">2 Wochen</option>
-                            <option value="4weeks">4 Wochen</option>
-                        </select>
-                    </div>
-
-                    <button id="search_btn_2" type="submit">Suchen</button>
-                </form>
-
-                <div class="loading" id="loading_2">
-                    <div class="spinner"></div>
-                    <p>Stellen werden geladen, bitte warten.</p>
-                </div>
-
-                <div class="info">
-                    <strong>Hinweis:</strong> Bitte verantwortungsvoll und gemaess Website-Bedingungen nutzen.
-                </div>
-                <div id="results_2" class="results-box">
-                    <div id="results_meta_2" class="results-meta"></div>
-                    <div id="results_list_2" class="results-list"></div>
-                    <div class="results-actions">
-                        <button id="auto_btn_2" type="button" class="auto-btn" style="display:none;">Automatisch extrahieren</button>
-                    </div>
-                    <section id="progress_panel_2" class="progress-panel">
-                        <h4 class="progress-title">Fortschritt Auto-Extraktion</h4>
-                        <div class="progress-stats">
-                            <div class="progress-stat"><span id="processed_2" class="value">0</span><span class="label">Verarbeitet</span></div>
-                            <div class="progress-stat"><span id="emails_2" class="value">0</span><span class="label">E-Mails</span></div>
-                            <div class="progress-stat"><span id="captcha_2" class="value">0</span><span class="label">CAPTCHAs</span></div>
-                            <div class="progress-stat"><span id="failed_2" class="value">0</span><span class="label">Fehler</span></div>
-                        </div>
-                        <div class="progress-track"><div id="progress_fill_2" class="progress-fill">0%</div></div>
-                        <div id="progress_status_2" class="progress-status">Leerlauf</div>
-                        <div id="progress_error_2" class="progress-error"></div>
-                        <div class="progress-actions">
-                            <button id="stop_btn_2" type="button" class="progress-btn stop">Stoppen + Ergebnis herunterladen</button>
-                            <button data-auto-continue id="continue_btn_2" type="button" class="progress-btn continue">Fortsetzen</button>
-                            <button id="download_btn_2" type="button" class="progress-btn download">Ergebnis herunterladen</button>
-                            <button id="anschreiben_btn_2" type="button" class="progress-btn" style="background:#667eea; display:none;">Zu Anschreiben</button>
-                        </div>
-                    </section>
-                    <div id="results_error_2" class="results-error" style="display:none;"></div>
-                </div>
-            </div>
         </div>
 
     </div>
 
     <script>
-        const INDEX_STATE_KEY = 'aa_index_form_state_v1';
+        const INDEX_STATE_KEY = 'aa_index_form_state_v2';
+
+        function updateFilterSummaryBadge() {
+            const badge = document.getElementById("filters_summary_badge");
+            if (!badge) return;
+            const srcEl = document.getElementById("search_source_1");
+            const dateEl = document.getElementById("published_since");
+            const radEl = document.getElementById("search_radius");
+
+            const srcLabels = {
+                all: "Alle Quellen inkl. Google Maps",
+                job_portals: "Nur Jobbörsen",
+                google_maps: "Nur Google Maps",
+            };
+            const dateLabels = {
+                "30days": "30 Tage",
+                "14days": "14 Tage",
+                "7days": "7 Tage",
+                all: "Alle Anzeigen",
+            };
+            const srcText = srcLabels[srcEl ? srcEl.value : "all"] || "Alle Quellen";
+            const dateText = dateLabels[dateEl ? dateEl.value : "30days"] || "30 Tage";
+            const radText = (radEl && radEl.value) ? ` • +${radEl.value} km` : "";
+            badge.textContent = `${srcText} • ${dateText}${radText}`;
+        }
 
         function saveIndexState() {
+            const modeChecked = document.querySelector('input[name="mode"]:checked');
             const state = {
-                keyword: document.getElementById('keyword').value,
-                location: document.getElementById('location').value,
-                published_since: document.getElementById('published_since').value,
-                keyword_2: document.getElementById('keyword_2').value,
-                location_2: document.getElementById('location_2').value,
-                published_since_2: document.getElementById('published_since_2').value
+                mode: modeChecked ? modeChecked.value : 'ausbildung',
+                keyword: document.getElementById('keyword') ? document.getElementById('keyword').value : '',
+                location: document.getElementById('location') ? document.getElementById('location').value : '',
+                published_since: document.getElementById('published_since') ? document.getElementById('published_since').value : '30days',
+                source: document.getElementById('search_source_1') ? document.getElementById('search_source_1').value : 'all',
+                radius: document.getElementById('search_radius') ? document.getElementById('search_radius').value : ''
             };
             localStorage.setItem(INDEX_STATE_KEY, JSON.stringify(state));
+            updateFilterSummaryBadge();
         }
 
         function restoreIndexState() {
             const raw = localStorage.getItem(INDEX_STATE_KEY);
             if (!raw) {
+                updateFilterSummaryBadge();
                 return;
             }
             try {
                 const state = JSON.parse(raw);
+                if (state.mode) {
+                    const r = document.getElementById(`mode_${state.mode}`);
+                    if (r) {
+                        r.checked = true;
+                        r.dispatchEvent(new Event('change'));
+                    }
+                }
                 for (const [id, value] of Object.entries(state)) {
                     const el = document.getElementById(id);
                     if (!el) {
@@ -511,6 +664,15 @@
                         el.value = String(value);
                     }
                 }
+                if (state.source) {
+                    const srcEl = document.getElementById('search_source_1');
+                    if (srcEl) srcEl.value = state.source;
+                }
+                if (state.radius !== undefined) {
+                    const radEl = document.getElementById('search_radius');
+                    if (radEl) radEl.value = String(state.radius);
+                }
+                updateFilterSummaryBadge();
             } catch (_error) {
                 // ignore invalid local state
             }
@@ -518,8 +680,7 @@
 
         function bindIndexStatePersistence() {
             const ids = [
-                'keyword', 'location', 'published_since',
-                'keyword_2', 'location_2', 'published_since_2'
+                'keyword', 'location', 'published_since', 'search_source_1', 'search_radius'
             ];
             for (const id of ids) {
                 const el = document.getElementById(id);
@@ -529,6 +690,8 @@
                 el.addEventListener('input', saveIndexState);
                 el.addEventListener('change', saveIndexState);
             }
+            const modeRadios = document.querySelectorAll('input[name="mode"]');
+            modeRadios.forEach((r) => r.addEventListener('change', saveIndexState));
         }
 
         function escapeHtml(value) {
@@ -542,20 +705,104 @@
 
         function publishedSinceLabel(value) {
             const labels = {
-                all: 'Alle anzeigen',
+                all: 'Alle Anzeigen',
+                '30days': '30 Tage',
+                '14days': '14 Tage',
+                '7days': '7 Tage',
                 today: 'Heute',
                 yesterday: 'Gestern',
-                '1week': '1 Woche',
-                '2weeks': '2 Wochen',
-                '4weeks': '4 Wochen'
+                '1week': '7 Tage',
+                '2weeks': '14 Tage',
+                '4weeks': '30 Tage'
             };
-            return labels[value] || 'Alle anzeigen';
+            return labels[value] || '30 Tage';
+        }
+
+        function setSearchProgress(ui, progressData) {
+            const pct = Math.max(0, Math.min(100, Math.round(progressData.percent || 0)));
+            const stage = progressData.stage || "";
+            const found = typeof progressData.found === "number" ? progressData.found : 0;
+            const source = progressData.source || "";
+            const finishedSource = progressData.finished_source || "";
+            const sourceCount = progressData.source_count;
+
+            if (ui.progressCard) {
+                ui.progressCard.style.display = "block";
+            }
+            if (ui.btnBar) {
+                ui.btnBar.style.width = `${pct}%`;
+            }
+            if (ui.btnLabel) {
+                if (pct >= 100) {
+                    ui.btnLabel.textContent = `Fertig (${found} Stellen)`;
+                } else if (found > 0) {
+                    ui.btnLabel.textContent = `Suche läuft... ${pct}% (${found} Stellen)`;
+                } else {
+                    ui.btnLabel.textContent = `Suche läuft... ${pct}%`;
+                }
+            }
+            if (ui.searchProgressFill) {
+                ui.searchProgressFill.style.width = `${pct}%`;
+            }
+            if (ui.searchProgressPct) {
+                ui.searchProgressPct.textContent = `${pct}%`;
+            }
+            if (ui.progressCounter) {
+                if (data.raw_found && data.raw_found > found) {
+                    ui.progressCounter.textContent = `${found} passende Stellen (${data.raw_found} geprüft)`;
+                } else {
+                    ui.progressCounter.textContent = `${found} Stellen gefunden`;
+                }
+            }
+            if (ui.searchProgressStatus && stage) {
+                ui.searchProgressStatus.textContent = stage;
+            }
+            if (ui.searchProgressStages) {
+                if (source && source !== "all") {
+                    const activePill = ui.searchProgressStages.querySelector(`[data-portal="${source}"]`);
+                    if (activePill) activePill.classList.add("is-active");
+                }
+                if (finishedSource) {
+                    const donePill = ui.searchProgressStages.querySelector(`[data-portal="${finishedSource}"]`);
+                    if (donePill) {
+                        donePill.classList.remove("is-active");
+                        donePill.classList.add("is-done");
+                        const baseLabel = donePill.dataset.label || donePill.textContent.replace(/^✓\s*/, "").replace(/\s*\(\d+\)$/, "");
+                        donePill.dataset.label = baseLabel;
+                        if (typeof sourceCount === "number") {
+                            donePill.textContent = `✓ ${baseLabel} (${sourceCount})`;
+                        } else {
+                            donePill.textContent = `✓ ${baseLabel}`;
+                        }
+                    }
+                }
+            }
         }
 
         function setLoading(ui, loading) {
-            ui.loadingEl.style.display = loading ? 'block' : 'none';
-            ui.searchBtn.disabled = loading;
-            ui.searchBtn.textContent = loading ? 'Suche laeuft...' : 'Suchen';
+            if (loading) {
+                ui.searchBtn.disabled = true;
+                if (ui.loadingEl) ui.loadingEl.style.display = "none";
+                if (ui.progressCard) {
+                    ui.progressCard.style.display = "block";
+                    if (ui.searchProgressStages) {
+                        ui.searchProgressStages.querySelectorAll(".stage-pill").forEach(p => {
+                            p.classList.remove("is-active", "is-done");
+                            if (!p.dataset.label) p.dataset.label = p.textContent.trim().replace(/^✓\s*/, "").replace(/\s*\(\d+\)$/, "");
+                            p.textContent = p.dataset.label;
+                        });
+                    }
+                }
+                setSearchProgress(ui, { percent: 5, stage: "Verbindung zu Portalen wird hergestellt...", found: 0 });
+            } else {
+                ui.searchBtn.disabled = false;
+                if (ui.btnBar) ui.btnBar.style.width = "0%";
+                if (ui.btnLabel) ui.btnLabel.textContent = "Suchen";
+                if (ui.loadingEl) ui.loadingEl.style.display = "none";
+                setTimeout(() => {
+                    if (ui.progressCard) ui.progressCard.style.display = "none";
+                }, 3500);
+            }
         }
 
         function renderResults(ui, data) {
@@ -563,9 +810,62 @@
             ui.errorEl.style.display = 'none';
             ui.lastJobs = Array.isArray(data.jobs) ? data.jobs : [];
 
-            const total = Number(data.total || 0);
+            const total = Number(data.total || ui.lastJobs.length || 0);
             const publishedSince = publishedSinceLabel(data.published_since || 'all');
-            ui.metaEl.textContent = `${total} Stellen gefunden | Veroeffentlicht seit: ${publishedSince}`;
+            let metaText = `${total} passende Stellen gefunden | Veröffentlicht seit: ${publishedSince}`;
+            if (data.audit && data.audit.raw_total) {
+                metaText = `${total} passende Stellen aus ${data.audit.raw_total} geprüften Angeboten | Veröffentlicht seit: ${publishedSince}`;
+            }
+            ui.metaEl.textContent = metaText;
+
+            // Audit banner
+            let auditBanner = ui.resultsBox.querySelector(".search-audit-banner");
+            if (data.audit && data.audit.raw_total) {
+                const a = data.audit;
+                if (!auditBanner) {
+                    auditBanner = document.createElement("div");
+                    auditBanner.className = "search-audit-banner";
+                    ui.resultsBox.insertBefore(auditBanner, ui.listEl);
+                }
+                const perSource = a.exclusions_by_source || {};
+                const srcRows = Object.entries(perSource).map(([src, s]) => {
+                    let note = [];
+                    if (s.rejected_location) note.push(`${s.rejected_location} überregional`);
+                    if (s.rejected_profession) note.push(`${s.rejected_profession} anderes Berufsfeld`);
+                    if (s.rejected_date) note.push(`${s.rejected_date} veraltet`);
+                    if (s.rejected_duplicate) note.push(`${s.rejected_duplicate} Dubletten`);
+                    const noteStr = note.length ? `(${note.join(", ")})` : "";
+                    return `<div style="display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px solid #f1f5f9;">
+                        <span><strong>${escapeHtml(src)}:</strong> ${s.valid || 0} Treffer <small style="color:#64748b;">aus ${s.raw || 0} Angeboten</small></span>
+                        <span style="color:#64748b; font-size:12px;">${escapeHtml(noteStr)}</span>
+                    </div>`;
+                }).join("");
+
+                auditBanner.style.cssText = "background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 14px; margin:10px 0; font-size:13px; color:#334155;";
+                auditBanner.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" class="audit-header">
+                        <span><strong>📊 Such-Audit:</strong> ${a.filtered_total} passende Stellen aus ${a.raw_total} Angeboten &bull; <span style="color:#64748b;">${a.exclusions_total} herausgefiltert</span></span>
+                        <button type="button" style="background:none; border:none; color:#2563eb; cursor:pointer; font-size:12px; font-weight:600;">Details anzeigen ▾</button>
+                    </div>
+                    <div class="audit-details" style="display:none; margin-top:8px; padding-top:8px; border-top:1px solid #e2e8f0;">
+                        <div style="margin-bottom:6px; font-weight:600; color:#1e293b;">Aufteilung nach Portal & Filtergründen:</div>
+                        ${srcRows}
+                    </div>
+                `;
+                const hdr = auditBanner.querySelector(".audit-header");
+                const det = auditBanner.querySelector(".audit-details");
+                if (hdr && det) {
+                    hdr.onclick = () => {
+                        const isOpen = det.style.display !== "none";
+                        det.style.display = isOpen ? "none" : "block";
+                        const btn = hdr.querySelector("button");
+                        if (btn) btn.textContent = isOpen ? "Details anzeigen ▾" : "Details verbergen ▴";
+                    };
+                }
+            } else if (auditBanner) {
+                auditBanner.remove();
+            }
+
             const jobs = ui.lastJobs;
             if (!jobs.length) {
                 ui.listEl.innerHTML = '<div class="job-item">Keine Stellen für diese Suche gefunden.</div>';
@@ -759,30 +1059,110 @@
             const keyword = ui.keywordEl.value.trim();
             const location = ui.locationEl.value.trim();
             const publishedSince = ui.publishedSinceEl.value;
+            const source = ui.sourceEl ? ui.sourceEl.value : 'all';
+            const modeInput = ui.form ? ui.form.querySelector('input[name="mode"]:checked') : document.querySelector('input[name="mode"]:checked');
+            const mode = modeInput ? modeInput.value : 'ausbildung';
+            const radiusEl = ui.form ? ui.form.querySelector('[name="radius"]') : document.getElementById('search_radius');
+            const radius = radiusEl ? radiusEl.value.trim() : '';
 
             if (!keyword) {
                 showError(ui, 'Bitte ein Stichwort eingeben.');
                 return;
             }
 
+            if (ui.currentEventSource) {
+                try {
+                    ui.currentEventSource.close();
+                } catch (_) {}
+                ui.currentEventSource = null;
+            }
+            const currentGen = (ui.searchGeneration = (ui.searchGeneration || 0) + 1);
+
             saveIndexState();
             setLoading(ui, true);
+
+            const params = new URLSearchParams({
+                keyword,
+                location,
+                published_since: publishedSince,
+                source,
+                mode,
+                radius,
+            });
+
+            let searchCompleted = false;
             try {
-                const params = new URLSearchParams({
-                    keyword,
-                    location,
-                    published_since: publishedSince
+                const streamUrl = `/api/search/stream?${params.toString()}`;
+                const evtSource = new EventSource(streamUrl);
+                ui.currentEventSource = evtSource;
+
+                await new Promise((resolve, reject) => {
+                    const timer = setTimeout(() => {
+                        evtSource.close();
+                        if (ui.currentEventSource === evtSource) ui.currentEventSource = null;
+                        if (!searchCompleted) reject(new Error("Timeout"));
+                    }, 45000);
+
+                    evtSource.addEventListener("progress", (e) => {
+                        if (ui.searchGeneration !== currentGen) return;
+                        try {
+                            const data = JSON.parse(e.data);
+                            setSearchProgress(ui, data);
+                        } catch (_) {}
+                    });
+
+                    evtSource.addEventListener("complete", (e) => {
+                        clearTimeout(timer);
+                        if (ui.searchGeneration !== currentGen) {
+                            evtSource.close();
+                            if (ui.currentEventSource === evtSource) ui.currentEventSource = null;
+                            return;
+                        }
+                        try {
+                            const data = JSON.parse(e.data);
+                            evtSource.close();
+                            if (ui.currentEventSource === evtSource) ui.currentEventSource = null;
+                            searchCompleted = true;
+                            setSearchProgress(ui, { percent: 100, stage: `Fertig: ${data.total || 0} Stellen gefunden!`, found: data.total || 0 });
+                            renderResults(ui, data);
+                            resolve();
+                        } catch (err) {
+                            evtSource.close();
+                            if (ui.currentEventSource === evtSource) ui.currentEventSource = null;
+                            reject(err);
+                        }
+                    });
+
+                    evtSource.addEventListener("error", () => {
+                        clearTimeout(timer);
+                        evtSource.close();
+                        if (ui.currentEventSource === evtSource) ui.currentEventSource = null;
+                        if (!searchCompleted) reject(new Error("Stream error"));
+                    });
                 });
-                const response = await fetch(`/api/search?${params.toString()}`);
-                const data = await response.json();
-                if (!response.ok || data.status !== 'success') {
-                    throw new Error(data.message || 'Suche fehlgeschlagen');
+            } catch (_) {
+                if (ui.searchGeneration !== currentGen) return;
+                if (!searchCompleted) {
+                    try {
+                        const response = await fetch(`/api/search?${params.toString()}`);
+                        const data = await response.json();
+                        if (ui.searchGeneration !== currentGen) return;
+                        if (!response.ok || data.status !== 'success') {
+                            throw new Error(data.message || 'Suche fehlgeschlagen');
+                        }
+                        searchCompleted = true;
+                        setSearchProgress(ui, { percent: 100, stage: `Fertig: ${data.total || 0} Stellen gefunden!`, found: data.total || 0 });
+                        renderResults(ui, data);
+                    } catch (error) {
+                        if (ui.searchGeneration === currentGen) {
+                            showError(ui, error.message || 'Suche fehlgeschlagen');
+                        }
+                    }
                 }
-                renderResults(ui, data);
-            } catch (error) {
-                showError(ui, error.message || 'Suche fehlgeschlagen');
             } finally {
-                setLoading(ui, false);
+                if (ui.searchGeneration === currentGen) {
+                    setLoading(ui, false);
+                }
             }
         }
 
@@ -791,7 +1171,17 @@
             keywordEl: document.getElementById('keyword'),
             locationEl: document.getElementById('location'),
             publishedSinceEl: document.getElementById('published_since'),
+            sourceEl: document.getElementById('search_source_1'),
             searchBtn: document.getElementById('search_btn_1'),
+            btnBar: document.getElementById('search_btn_bar_1'),
+            btnLabel: document.getElementById('search_btn_label_1'),
+            progressCard: document.getElementById('search_progress_card_1'),
+            progressTitle: document.getElementById('search_progress_title_1'),
+            progressCounter: document.getElementById('search_progress_counter_1'),
+            searchProgressFill: document.getElementById('search_progress_fill_1'),
+            searchProgressPct: document.getElementById('search_progress_pct_1'),
+            searchProgressStatus: document.getElementById('search_progress_status_1'),
+            searchProgressStages: document.getElementById('search_progress_stages_1'),
             loadingEl: document.getElementById('loading_1'),
             resultsBox: document.getElementById('results_1'),
             metaEl: document.getElementById('results_meta_1'),
@@ -815,12 +1205,23 @@
             pollTimer: null
         };
 
-        const searchUi2 = {
-            form: document.getElementById('search_form_2'),
+        const formTwoEl = document.getElementById('search_form_2');
+        const searchUi2 = formTwoEl ? {
+            form: formTwoEl,
             keywordEl: document.getElementById('keyword_2'),
             locationEl: document.getElementById('location_2'),
             publishedSinceEl: document.getElementById('published_since_2'),
+            sourceEl: document.getElementById('search_source_2'),
             searchBtn: document.getElementById('search_btn_2'),
+            btnBar: document.getElementById('search_btn_bar_2'),
+            btnLabel: document.getElementById('search_btn_label_2'),
+            progressCard: document.getElementById('search_progress_card_2'),
+            progressTitle: document.getElementById('search_progress_title_2'),
+            progressCounter: document.getElementById('search_progress_counter_2'),
+            searchProgressFill: document.getElementById('search_progress_fill_2'),
+            searchProgressPct: document.getElementById('search_progress_pct_2'),
+            searchProgressStatus: document.getElementById('search_progress_status_2'),
+            searchProgressStages: document.getElementById('search_progress_stages_2'),
             loadingEl: document.getElementById('loading_2'),
             resultsBox: document.getElementById('results_2'),
             metaEl: document.getElementById('results_meta_2'),
@@ -842,50 +1243,32 @@
             lastJobs: [],
             autoJobId: '',
             pollTimer: null
-        };
+        } : null;
 
         searchUi1.form.addEventListener('submit', async (event) => {
             event.preventDefault();
             await runInlineSearch(searchUi1);
         });
 
-        searchUi2.form.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            await runInlineSearch(searchUi2);
-        });
-
         searchUi1.autoBtn.addEventListener('click', async () => {
             await startAutoExtraction(searchUi1);
-        });
-
-        searchUi2.autoBtn.addEventListener('click', async () => {
-            await startAutoExtraction(searchUi2);
         });
 
         searchUi1.continueBtn.addEventListener('click', async () => {
             await continueAutoExtraction(searchUi1);
         });
-        searchUi2.continueBtn.addEventListener('click', async () => {
-            await continueAutoExtraction(searchUi2);
-        });
+
         searchUi1.stopBtn.addEventListener('click', async () => {
             await stopAndDownloadAuto(searchUi1);
         });
-        searchUi2.stopBtn.addEventListener('click', async () => {
-            await stopAndDownloadAuto(searchUi2);
-        });
+
         searchUi1.downloadBtn.addEventListener('click', () => {
             if (!searchUi1.autoJobId) {
                 return;
             }
             window.location.href = `/api/inline/auto-jobs/download/${encodeURIComponent(searchUi1.autoJobId)}`;
         });
-        searchUi2.downloadBtn.addEventListener('click', () => {
-            if (!searchUi2.autoJobId) {
-                return;
-            }
-            window.location.href = `/api/inline/auto-jobs/download/${encodeURIComponent(searchUi2.autoJobId)}`;
-        });
+
         searchUi1.anschreibenBtn.addEventListener('click', async () => {
             if (!searchUi1.autoJobId) {
                 return;
@@ -896,15 +1279,77 @@
                 window.location.href = data.redirect_url || '/create-anschreibens?autoload=auto';
             }
         });
-        searchUi2.anschreibenBtn.addEventListener('click', async () => {
-            if (!searchUi2.autoJobId) {
-                return;
-            }
-            const response = await fetch(`/api/inline/auto-jobs/use-for-anschreiben/${encodeURIComponent(searchUi2.autoJobId)}`, { method: 'POST' });
-            const data = await response.json().catch(() => ({}));
-            if (response.ok && data.success) {
-                window.location.href = data.redirect_url || '/create-anschreibens?autoload=auto';
-            }
+
+        if (searchUi2) {
+            searchUi2.form.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                await runInlineSearch(searchUi2);
+            });
+
+            searchUi2.autoBtn.addEventListener('click', async () => {
+                await startAutoExtraction(searchUi2);
+            });
+
+            searchUi2.continueBtn.addEventListener('click', async () => {
+                await continueAutoExtraction(searchUi2);
+            });
+
+            searchUi2.stopBtn.addEventListener('click', async () => {
+                await stopAndDownloadAuto(searchUi2);
+            });
+
+            searchUi2.downloadBtn.addEventListener('click', () => {
+                if (!searchUi2.autoJobId) {
+                    return;
+                }
+                window.location.href = `/api/inline/auto-jobs/download/${encodeURIComponent(searchUi2.autoJobId)}`;
+            });
+
+            searchUi2.anschreibenBtn.addEventListener('click', async () => {
+                if (!searchUi2.autoJobId) {
+                    return;
+                }
+                const response = await fetch(`/api/inline/auto-jobs/use-for-anschreiben/${encodeURIComponent(searchUi2.autoJobId)}`, { method: 'POST' });
+                const data = await response.json().catch(() => ({}));
+                if (response.ok && data.success) {
+                    window.location.href = data.redirect_url || '/create-anschreibens?autoload=auto';
+                }
+            });
+        }
+
+        // Mode switch
+        const modeRadios = document.querySelectorAll('input[name="mode"]');
+        modeRadios.forEach((radio) => {
+            radio.addEventListener('change', (e) => {
+                const val = e.target.value;
+                const kwInput = document.getElementById('keyword');
+                const hint = document.getElementById('keyword_hint');
+                if (val === 'arbeit') {
+                    if (kwInput) kwInput.placeholder = 'z. B. Softwareentwickler, Projektmanager, Elektroniker';
+                    if (hint) hint.textContent = 'Geben Sie die Berufsbezeichnung ein — findet Arbeitgeber und direkte E-Mail-Kontakte.';
+                } else {
+                    if (kwInput) kwInput.placeholder = 'z. B. Fachinformatiker, Koch, Softwareentwickler';
+                    if (hint) hint.textContent = 'Geben Sie einfach die Berufsbezeichnung ein — Suche passt sich automatisch an.';
+                }
+                saveIndexState();
+            });
+        });
+
+        // Advanced filters toggle
+        const filterToggle = document.getElementById('advanced_filters_toggle');
+        const filterContent = document.getElementById('advanced_filters_content');
+        const filterIcon = document.getElementById('advanced_filters_icon');
+        if (filterToggle && filterContent) {
+            filterToggle.addEventListener('click', () => {
+                const isOpen = filterContent.style.display !== 'none';
+                filterContent.style.display = isOpen ? 'none' : 'block';
+                if (filterIcon) filterIcon.textContent = isOpen ? '▾' : '▴';
+            });
+        }
+
+        ['search_source_1', 'published_since', 'search_radius'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', updateFilterSummaryBadge);
         });
 
         restoreIndexState();

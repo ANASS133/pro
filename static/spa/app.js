@@ -37,7 +37,7 @@
         money: "Arbeitsagentur Scraper | Money",
         ausbildungen: "Arbeitsagentur Scraper | Ausbildungen",
         "create-anschreibens": "Arbeitsagentur Scraper | Anschreiben",
-        "send-emails": "Arbeitsagentur Scraper | E-Mails senden",
+        "send-emails": "JobScout | Send Emails",
         "google-maps": "Arbeitsagentur Scraper | Google Maps",
         autofill: "Arbeitsagentur Scraper | Autofill Hub",
     };
@@ -254,128 +254,6 @@
 
     checkActiveJobs();
     setInterval(checkActiveJobs, 15000);
-
-    // ---------------------------------------------------------------------------
-    // Candidate Profile & AI Memory Hub Controller
-    // ---------------------------------------------------------------------------
-    const profileBtn = document.getElementById("sidebar-profile-btn");
-    const profileModal = document.getElementById("profileHubModal");
-    const closeProfileBtn = document.getElementById("closeProfileModalBtn");
-    const profileSummaryInput = document.getElementById("profileSummaryInput");
-    const saveProfileBtn = document.getElementById("saveProfileBtn");
-    const profileSaveStatus = document.getElementById("profileSaveStatus");
-    const profileSkillsCloud = document.getElementById("profileSkillsCloud");
-
-    function openProfileHub() {
-        if (!profileModal) return;
-        profileModal.hidden = false;
-        fetchProfileData();
-    }
-
-    function closeProfileHub() {
-        if (profileModal) profileModal.hidden = true;
-    }
-
-    async function fetchProfileData() {
-        try {
-            const resp = await fetch("/api/profile/anass_sibbi");
-            if (!resp.ok) return;
-            const data = await resp.json();
-            const applicant = data.applicant || {};
-            const personal = applicant.personal || {};
-            const prof = applicant.professional_profile || {};
-            const skills = applicant.skills || {};
-
-            const profileNameEl = document.getElementById("profileName");
-            const profileRoleEl = document.getElementById("profileRole");
-            if (profileNameEl && personal.full_name) {
-                profileNameEl.textContent = personal.full_name;
-            }
-            if (profileRoleEl && prof.current_title) {
-                profileRoleEl.textContent = prof.alternative_title
-                    ? `${prof.current_title} | ${prof.alternative_title}`
-                    : prof.current_title;
-            }
-
-            if (profileSummaryInput) {
-                profileSummaryInput.value = prof.summary_de || prof.summary_en || "";
-            }
-
-            if (profileSkillsCloud) {
-                profileSkillsCloud.innerHTML = "";
-                const categories = [
-                    { label: "Sprachen", list: skills.programming_languages || [] },
-                    { label: "Backend", list: skills.backend || [] },
-                    { label: "Frontend", list: skills.frontend || [] },
-                    { label: "Tools & Cloud", list: skills.tools || [] },
-                ];
-                categories.forEach((cat) => {
-                    if (!cat.list.length) return;
-                    cat.list.forEach((skill) => {
-                        const pill = document.createElement("span");
-                        pill.className = "profile-skill-tag";
-                        pill.textContent = skill;
-                        profileSkillsCloud.appendChild(pill);
-                    });
-                });
-            }
-        } catch (_) {}
-    }
-
-    async function saveProfileData() {
-        if (!profileSummaryInput || !saveProfileBtn) return;
-        saveProfileBtn.disabled = true;
-        try {
-            const updatedSummary = profileSummaryInput.value.trim();
-            const resp = await fetch("/api/profile/anass_sibbi", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    professional_profile: {
-                        summary_de: updatedSummary,
-                    },
-                }),
-            });
-            if (resp.ok) {
-                if (profileSaveStatus) {
-                    profileSaveStatus.hidden = false;
-                    setTimeout(() => {
-                        if (profileSaveStatus) profileSaveStatus.hidden = true;
-                    }, 2500);
-                }
-            }
-        } catch (_) {} finally {
-            saveProfileBtn.disabled = false;
-        }
-    }
-
-    if (profileBtn) {
-        profileBtn.addEventListener("click", (e) => {
-            e.preventDefault();
-            openProfileHub();
-        });
-    }
-
-    if (closeProfileBtn) {
-        closeProfileBtn.addEventListener("click", closeProfileHub);
-    }
-
-    if (saveProfileBtn) {
-        saveProfileBtn.addEventListener("click", saveProfileData);
-    }
-
-    if (profileModal) {
-        profileModal.addEventListener("click", (e) => {
-            if (e.target === profileModal) {
-                closeProfileHub();
-            }
-        });
-    }
-
-    window.addEventListener("keydown", (e) => {
-        if (e.key === "Escape" && profileModal && !profileModal.hidden) {
-            closeProfileHub();
-        }
-    });
 })();
+
 

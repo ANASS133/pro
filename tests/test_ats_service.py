@@ -81,7 +81,23 @@ class TestATSService(unittest.TestCase):
         self.assertIn('matched', data)
         self.assertIn('bridge_tip', data)
 
+    def test_batch_ats_eval_route(self):
+        client = flask_app.app.test_client()
+        resp = client.post('/api/pdf/batch-ats-eval', json={
+            'jobs': [
+                {'company': 'Company A', 'title': 'Python Developer', 'requirements': 'Python, SQL'},
+                {'company': 'Company B', 'title': 'Flutter Developer', 'requirements': 'Dart, Flutter'}
+            ]
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertTrue(data.get('success'))
+        self.assertEqual(len(data.get('jobs', [])), 2)
+        # Verify sorted descending
+        self.assertGreaterEqual(data['jobs'][0]['ats_score'], data['jobs'][1]['ats_score'])
+
 
 if __name__ == '__main__':
     unittest.main()
+
 

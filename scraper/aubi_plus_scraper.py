@@ -100,6 +100,7 @@ class AubiPlusScraper:
                     if len(all_jobs) >= max_jobs:
                         break
 
+
                 logger.info(
                     "AUBI-plus page %s: found %s cards, added %s new (total=%s)",
                     page,
@@ -184,16 +185,19 @@ class AubiPlusScraper:
                     elif s.lower().startswith("ab sofort"):
                         start_date = "Ab sofort"
 
+                from .search_filter_engine import clean_extracted_location
+                loc_meta = clean_extracted_location(location, city)
+
                 parsed.append(
                     {
                         "title": title,
                         "company": company,
-                        "location": location,
-                        "city": city,
-                        "postal_code": postal_code,
+                        "location": loc_meta["location"],
+                        "city": loc_meta["city"],
+                        "postal_code": loc_meta["postal_code"] if loc_meta["postal_code"] != "N/A" else postal_code,
                         "reference": ref,
                         "job_type": "Ausbildung",
-                        "published_date": now_str[:10],
+                        "published_date": "k. A.",
                         "start_date": start_date,
                         "vacancies": "1 Platz",
                         "hauptberuf": title,

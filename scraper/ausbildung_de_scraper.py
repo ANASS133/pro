@@ -99,28 +99,16 @@ class AusbildungDeScraper:
                 page_jobs = self._parse_cards(cards)
                 new_jobs_count = 0
 
-                # Extract key search tokens (excluding generic terms like 'ausbildung', 'zum', 'fuer')
-                kw_tokens = []
-                if search_keyword:
-                    raw_tokens = re.findall(r"\b[a-zA-ZäöüÄÖÜß]{4,}\b", search_keyword.lower())
-                    kw_tokens = [w for w in raw_tokens if w not in {"ausbildung", "lehre", "stelle", "platz"}]
-
                 for job in page_jobs:
                     ref = job.get("reference") or job.get("url")
                     if ref in seen_refs:
                         continue
-
-                    # Relevance guard: filter out unrelated sponsored ad cards
-                    if kw_tokens:
-                        job_text = f"{job.get('title', '')} {job.get('hauptberuf', '')}".lower()
-                        if not any(token in job_text for token in kw_tokens):
-                            continue
-
                     seen_refs.add(ref)
                     all_jobs.append(job)
                     new_jobs_count += 1
                     if len(all_jobs) >= max_jobs:
                         break
+
 
                 logger.info(
                     "Page %s -> found %s cards, added %s new (total=%s)",
@@ -204,16 +192,19 @@ class AusbildungDeScraper:
                     else:
                         ref = f"ausbildung_de_{abs(hash(relative_url)) % 100000000}"
 
+                from .search_filter_engine import clean_extracted_location
+                loc_meta = clean_extracted_location(loc_clean, city)
+
                 parsed.append(
                     {
                         "title": title,
                         "company": company,
-                        "location": loc_clean or city,
-                        "city": city,
-                        "postal_code": postal_code,
+                        "location": loc_meta["location"],
+                        "city": loc_meta["city"],
+                        "postal_code": loc_meta["postal_code"] if loc_meta["postal_code"] != "N/A" else postal_code,
                         "reference": ref,
                         "job_type": "Ausbildung",
-                        "published_date": now_str[:10],
+                        "published_date": "k. A.",
                         "start_date": start_date,
                         "vacancies": vacancies,
                         "hauptberuf": title,

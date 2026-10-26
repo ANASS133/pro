@@ -194,9 +194,9 @@
                     <div class="stat-number" style="font-size: 18px;">
                         {% if published_since == 'today' %}Heute
                         {% elif published_since == 'yesterday' %}Gestern
-                        {% elif published_since == '1week' %}1 Woche
-                        {% elif published_since == '2weeks' %}2 Wochen
-                        {% elif published_since == '4weeks' %}4 Wochen
+                        {% elif published_since == '7days' or published_since == '1week' %}7 Tage
+                        {% elif published_since == '14days' or published_since == '2weeks' %}14 Tage
+                        {% elif published_since == '30days' or published_since == '4weeks' %}30 Tage
                         {% else %}Alle anzeigen
                         {% endif %}
                     </div>
@@ -207,19 +207,43 @@
 
         <div class="search-again">
             <form action="{{ url_for('search') }}" method="POST" class="search-row">
-                <input type="text" name="keyword" value="{{ keyword }}" placeholder="Stellentitel" class="keyword" required>
-                <input type="text" name="location" value="{{ location }}" placeholder="Ort" class="location">
+                <input type="hidden" name="mode" value="{{ mode or 'ausbildung' }}">
+                <input type="hidden" name="source" value="{{ source or 'all' }}">
+                <input type="hidden" name="radius" value="{{ radius or '' }}">
+                <input type="text" name="keyword" value="{{ keyword }}" placeholder="Beruf oder Stichwort" class="keyword" required>
+                <input type="text" name="location" value="{{ location }}" placeholder="Stadt oder PLZ (optional)" class="location">
                 <select name="published_since" class="location">
+                    <option value="30days" {% if published_since == '30days' %}selected{% endif %}>30 Tage</option>
+                    <option value="14days" {% if published_since == '14days' %}selected{% endif %}>14 Tage</option>
+                    <option value="7days" {% if published_since == '7days' %}selected{% endif %}>7 Tage</option>
                     <option value="all" {% if published_since == 'all' %}selected{% endif %}>Alle anzeigen</option>
-                    <option value="today" {% if published_since == 'today' %}selected{% endif %}>Heute</option>
-                    <option value="yesterday" {% if published_since == 'yesterday' %}selected{% endif %}>Gestern</option>
-                    <option value="1week" {% if published_since == '1week' %}selected{% endif %}>1 Woche</option>
-                    <option value="2weeks" {% if published_since == '2weeks' %}selected{% endif %}>2 Wochen</option>
-                    <option value="4weeks" {% if published_since == '4weeks' %}selected{% endif %}>4 Wochen</option>
                 </select>
-                <button type="submit">Suchen</button>
+                <button type="submit">Suche starten</button>
             </form>
         </div>
+
+        {% if audit and audit.raw_total %}
+        <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <div style="font-weight: 700; color: #1e293b; margin-bottom: 6px;">
+                📊 Such-Audit: {{ audit.filtered_total }} passende Stellen aus {{ audit.raw_total }} geprüften Angeboten ({{ audit.exclusions_total }} herausgefiltert)
+            </div>
+            <div style="font-size: 13px; color: #64748b;">
+                {% for src, s in (audit.exclusions_by_source or {}).items() %}
+                <div style="padding: 2px 0;">
+                    <strong>{{ src }}:</strong> {{ s.valid }} Treffer von {{ s.raw }} Angeboten
+                    {% if s.rejected_location or s.rejected_profession or s.rejected_date or s.rejected_duplicate %}
+                    <span style="color: #94a3b8;">(
+                        {%- if s.rejected_location %}{{ s.rejected_location }} überregional {% endif -%}
+                        {%- if s.rejected_profession %}{{ s.rejected_profession }} anderes Berufsfeld {% endif -%}
+                        {%- if s.rejected_date %}{{ s.rejected_date }} veraltet {% endif -%}
+                        {%- if s.rejected_duplicate %}{{ s.rejected_duplicate }} Dubletten{% endif -%}
+                    )</span>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
 
         {% if jobs %}
         <div style="margin-top: 20px; text-align: center; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
@@ -233,6 +257,9 @@
                     Auto-Extraktion (TrueCAPTCHA API)
                 </button>
             </form>
+            <a href="/api/search/download?filter=all" class="job-link" style="background: #10b981; color: #fff; text-decoration: none;">
+                📊 Als Excel herunterladen
+            </a>
         </div>
         <div style="margin-top: 10px; text-align: center;">
             <p style="color: #666; margin-top: 10px;">

@@ -9,6 +9,7 @@ import threading
 import time
 import json
 import smtplib
+import queue
 import re
 import shutil
 import uuid
@@ -26,6 +27,7 @@ import pandas as pd
 from dotenv import load_dotenv
 from flask import (
     Flask,
+    Response,
     flash,
     jsonify,
     redirect,
@@ -34,6 +36,7 @@ from flask import (
     send_file,
     send_from_directory,
     session,
+    stream_with_context,
     url_for,
 )
 from werkzeug.utils import secure_filename
@@ -46,6 +49,12 @@ from scraper.aubi_plus_scraper import AubiPlusScraper
 from scraper.ihk_scraper import IhkScraper
 from scraper.google_maps_scraper import GoogleMapsBusinessScraper
 from scraper.working_email_extractor import WorkingEmailExtractor
+from scraper.application_form_discovery import (
+    EXCEL_COLUMNS,
+    ApplicationFormDiscovery,
+    classify_application_method,
+    normalize_job_opportunity_row,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -55,7 +64,7 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "change-me-local")
 
-from routes import autofill_bp, enhancements_bp, health_bp, jobs_bp, pdf_bp
+from routes import autofill_bp, enhancements_bp, health_bp, jobs_bp, pdf_bp, campaigns_bp
 from services.job_store import job_store
 
 app.register_blueprint(health_bp)
@@ -63,6 +72,7 @@ app.register_blueprint(jobs_bp)
 app.register_blueprint(pdf_bp)
 app.register_blueprint(enhancements_bp)
 app.register_blueprint(autofill_bp)
+app.register_blueprint(campaigns_bp)
 
 # Reset any uncompleted jobs from previous server run
 try:
@@ -424,23 +434,58 @@ def _write_spreadsheet_records(file_path: Path, records: List[Dict]) -> None:
     raise ValueError(f"Unsupported spreadsheet type: {file_path.suffix}")
 
 
-def _merge_records_by_email(existing_rows: List[Dict], new_rows: List[Dict]) -> List[Dict]:
+def _build_job_dedupe_key(job: Dict) -> str:
+    """Builds a unique deduplication key for job opportunities without dropping unique vacancies."""
+    if not isinstance(job, dict):
+        return f"invalid:{id(job)}"
+
+    # 1. Prefer source-specific job reference ID
+    for id_field in ("refnr", "job_id", "reference", "id", "external_id"):
+        val = job.get(id_field)
+        if val:
+            source = str(job.get("source") or "").strip().lower()
+            return f"ref:{source}:{str(val).strip().lower()}"
+
+    # 2. Distinct vacancy tuple: company + title + location + start_date
+    company = str(job.get("company") or "").strip().lower()
+    title = str(job.get("title") or "").strip().lower()
+    loc = str(job.get("city") or job.get("location") or "").strip().lower()
+    start = str(job.get("start_date") or "").strip().lower()
+
+    if company and title:
+        return f"tuple:{company}|{title}|{loc}|{start}"
+
+    # 3. Fallback to apply_url or url
+    url = str(job.get("apply_url") or job.get("form_link") or job.get("url") or "").strip().lower()
+    if url:
+        return f"url:{url}"
+
+    return f"obj:{id(job)}"
+
+
+def _merge_job_records(existing_rows: List[Dict], new_rows: List[Dict]) -> List[Dict]:
+    """
+    Merges job opportunities while preserving ALL records regardless of email.
+    Excludes only genuine duplicate job opportunities.
+    """
     merged: List[Dict] = []
-    seen_emails: Set[str] = set()
+    seen_keys: Set[str] = set()
 
     for source_rows in (existing_rows or [], new_rows or []):
         for row in source_rows:
-            email = _normalize_email((row or {}).get("email"))
-            if not _is_valid_email(email):
+            if not isinstance(row, dict):
                 continue
-            if email in seen_emails:
+            key = _build_job_dedupe_key(row)
+            if key in seen_keys:
                 continue
-            seen_emails.add(email)
-            normalized_row = dict(row or {})
-            normalized_row["email"] = email
+            seen_keys.add(key)
+            normalized_row = normalize_job_opportunity_row(row)
             merged.append(normalized_row)
 
     return merged
+
+
+_merge_records_by_email = _merge_job_records
 
 
 def _get_running_ausbildungen_update_for_file(filename: str) -> Optional[Dict]:
@@ -606,6 +651,9 @@ PUBLISHED_SINCE_MAP = {
     "1week": 7,
     "2weeks": 14,
     "4weeks": 28,
+    "7days": 7,
+    "14days": 14,
+    "30days": 30,
 }
 PLACEHOLDER_PATTERN = re.compile(r"{{\s*([^{}]+?)\s*}}")
 NAME_PATTERN = r"[A-ZÄÖÜ][A-Za-zÄÖÜäöüß'.-]+"
@@ -1595,47 +1643,55 @@ def _build_anrede(arbeitsgeber: str) -> str:
     return "Sehr geehrte Damen und Herren"
 
 
-def _prepare_download_jobs(jobs: Iterable[Dict], emails_only: bool = False) -> List[Dict]:
+def _prepare_download_jobs(
+    jobs: Iterable[Dict],
+    emails_only: bool = False,
+    filter_mode: Optional[str] = None,
+) -> List[Dict]:
+    """
+    Prepares job opportunities for download or export.
+    Preserves ALL discovered opportunities regardless of email existence.
+    Deduplicates only genuine duplicates and enforces the exact 21-column schema.
+    """
     filtered: List[Dict] = []
     seen_identifiers: Set[str] = set()
 
     for job in jobs:
-        row = dict(job or {})
-        raw_email = row.get("email")
-        normalized_email = _normalize_email(raw_email)
-        has_valid_email = _is_valid_email(normalized_email)
-
-        apply_url = str(row.get("apply_url") or row.get("form_link") or row.get("url") or "").strip()
-
-        if emails_only and not has_valid_email:
+        if not isinstance(job, dict):
             continue
 
-        if not has_valid_email and not apply_url:
-            continue
-
-        dedupe_key = normalized_email if has_valid_email else apply_url
+        row = normalize_job_opportunity_row(job)
+        dedupe_key = _build_job_dedupe_key(row)
         if dedupe_key in seen_identifiers:
             continue
         seen_identifiers.add(dedupe_key)
 
-        row["email"] = normalized_email if has_valid_email else ""
-        row["apply_url"] = apply_url
-        row["form_link"] = apply_url
-        row["bewerbung_art"] = "E-Mail" if has_valid_email else "Online-Formular"
-        row["bewerbung_link"] = apply_url if not has_valid_email else (apply_url or normalized_email)
+        # Never classify a Google Maps company as an active Ausbildung provider without verifying a matching advertisement
+        src = str(job.get("source") or "").lower()
+        if ("maps" in src or "google" in src) and job.get("is_verified_vacancy") is False:
+            continue
 
-        arbeitsgeber = str(row.get("arbeitsgeber") or "").strip()
-        if not arbeitsgeber:
-            arbeitsgeber = _extract_arbeitsgeber_from_text(str(row.get("company") or ""))
-        arbeitsgeber = _normalize_arbeitsgeber_value(arbeitsgeber)
-        row["arbeitsgeber"] = arbeitsgeber
-        row["anrede"] = _build_anrede(arbeitsgeber)
-        cleaned_row = {
-            key: value
-            for key, value in row.items()
-            if _normalize_field_name(key) not in EXCLUDED_DOWNLOAD_FIELDS
-        }
-        filtered.append(cleaned_row)
+        has_valid_email = bool(row.get("email") and "@" in str(row.get("email")))
+        has_verified_form = bool(row.get("has_form"))
+        app_method = str(row.get("application_method") or "unknown").lower()
+
+        # Respect explicit emails_only request
+        if emails_only and not has_valid_email:
+            continue
+
+        # Respect UI filter modes: 'all' (default), 'email', 'form', 'both', 'missing'
+        if filter_mode:
+            f = str(filter_mode).lower().strip()
+            if f in {"email", "emails"} and not (app_method == "email" or (has_valid_email and not has_verified_form)):
+                continue
+            elif f in {"form", "online", "online-formular"} and not (app_method == "form" or (has_verified_form and not has_valid_email)):
+                continue
+            elif f in {"both", "beide"} and not (app_method == "both" or (has_valid_email and has_verified_form)):
+                continue
+            elif f in {"missing", "unknown", "none", "ohne"} and not (app_method == "unknown" or (not has_valid_email and not has_verified_form)):
+                continue
+
+        filtered.append(row)
 
     return filtered
 
@@ -2223,20 +2279,25 @@ def run_email_extraction():
 
                 email, phone, arbeitsgeber = extractor.extract_contact_info()
                 arbeitsgeber = _normalize_arbeitsgeber_value(arbeitsgeber)
+                apply_url = extractor.extract_application_link(fallback_url=job.get("url", ""))
                 normalized_email = _normalize_email(email)
-                if normalized_email and normalized_email in seen_emails:
-                    job["email"] = "DUPLICATE_EMAIL_SKIPPED"
-                    job["phone"] = phone
-                    job["arbeitsgeber"] = arbeitsgeber
-                    job["email_extracted"] = False
-                    continue
+                has_valid_email = bool(normalized_email and "@" in normalized_email)
 
-                job["email"] = email
+                job["email"] = email if has_valid_email else ""
                 job["phone"] = phone
                 job["arbeitsgeber"] = arbeitsgeber
-                job["email_extracted"] = True
-                if normalized_email:
-                    seen_emails.add(normalized_email)
+                job["apply_url"] = apply_url or job.get("url", "")
+                job["email_extracted"] = has_valid_email
+
+                discovery = extractor.form_discovery.discover_application_form(
+                    job, driver=getattr(extractor, "driver", None)
+                )
+                jobs[i] = normalize_job_opportunity_row(job, discovery_result=discovery)
+
+                if has_valid_email:
+                    if normalized_email not in seen_emails:
+                        seen_emails.add(normalized_email)
+                        extractor.stats["emails_found"] += 1
 
                 if i % 10 == 0:
                     extractor.save_progress(jobs, i, base_name="extraction_progress")
@@ -2298,7 +2359,10 @@ def run_auto_extraction():
                 auto_extraction_status["current_index"] = i
 
             failed_before = extractor.stats["failed"]
-            jobs[i] = extractor.process_job(jobs[i])
+            jobs[i] = extractor.process_job(
+                jobs[i],
+                profession_keyword=str(auto_extraction_status.get("keyword") or "")
+            )
             failed_after = extractor.stats["failed"]
 
             _set_auto_status(
@@ -2438,7 +2502,10 @@ def _run_auto_extraction_job(job_id: str):
                 job["updated_at"] = datetime.now().isoformat()
 
             failed_before = int(extractor.stats.get("failed") or 0)
-            jobs[i] = extractor.process_job(jobs[i])
+            jobs[i] = extractor.process_job(
+                jobs[i],
+                profession_keyword=str(job.get("keyword") or "")
+            )
             failed_after = int(extractor.stats.get("failed") or 0)
 
             _set_auto_job_status(
@@ -2566,19 +2633,25 @@ def _run_ausbildungen_update_job(job_id: str):
 
                 email, phone, arbeitsgeber = extractor.extract_contact_info()
                 arbeitsgeber = _normalize_arbeitsgeber_value(arbeitsgeber)
+                apply_url = extractor.extract_application_link(fallback_url=job_row.get("url", ""))
                 normalized_email = _normalize_email(email)
-                if normalized_email and normalized_email in existing_emails:
-                    job_row["email"] = "DUPLICATE_EMAIL_SKIPPED"
-                    job_row["phone"] = phone
-                    job_row["arbeitsgeber"] = arbeitsgeber
-                    job_row["email_extracted"] = False
-                    duplicate_emails += 1
-                else:
-                    job_row["email"] = email
-                    job_row["phone"] = phone
-                    job_row["arbeitsgeber"] = arbeitsgeber
-                    job_row["email_extracted"] = bool(normalized_email)
-                    if normalized_email:
+                has_valid_email = bool(normalized_email and "@" in normalized_email)
+
+                job_row["email"] = email if has_valid_email else ""
+                job_row["phone"] = phone
+                job_row["arbeitsgeber"] = arbeitsgeber
+                job_row["apply_url"] = apply_url or job_row.get("url", "")
+                job_row["email_extracted"] = has_valid_email
+
+                discovery = extractor.form_discovery.discover_application_form(
+                    job_row, driver=getattr(extractor, "driver", None)
+                )
+                job_row = normalize_job_opportunity_row(job_row, discovery_result=discovery)
+
+                if has_valid_email:
+                    if normalized_email in existing_emails:
+                        duplicate_emails += 1
+                    else:
                         existing_emails.add(normalized_email)
                         extractor.stats["emails_found"] += 1
 
@@ -4812,6 +4885,117 @@ def stop_bulk_email_job(job_id: str):
     return jsonify({"success": True, "message": "Speichern und Stoppen angefordert"})
 
 
+@app.route("/api/send-bulk/preview-file", methods=["POST"])
+def preview_bulk_upload_file():
+    try:
+        data_file = request.files.get("data_file")
+        if not data_file or not data_file.filename:
+            return jsonify({"success": False, "message": "Bitte wählen Sie eine CSV- oder Excel-Datei aus."}), 400
+
+        rows = _load_bulk_rows_from_upload(data_file)
+        if not rows:
+            return jsonify({"success": False, "message": "Die Datei enthält keine Datenzeilen."}), 400
+
+        columns = []
+        for r in rows:
+            for k in r.keys():
+                if k not in columns:
+                    columns.append(k)
+
+        detected_col = ""
+        email_keywords = ["email", "e-mail", "mail", "empfaenger", "recipient", "kontakt"]
+        for col in columns:
+            normalized = _normalize_field_name(col)
+            if any(kw in normalized for kw in email_keywords):
+                detected_col = col
+                break
+
+        if not detected_col:
+            for col in columns:
+                valid_count = sum(1 for r in rows[:20] if _is_valid_email(r.get(col, "")))
+                if valid_count > 0:
+                    detected_col = col
+                    break
+        if not detected_col and columns:
+            detected_col = columns[0]
+
+        seen_emails = set()
+        duplicate_count = 0
+        valid_email_count = 0
+        for r in rows:
+            val = _normalize_email(r.get(detected_col, ""))
+            if _is_valid_email(val):
+                valid_email_count += 1
+                if val in seen_emails:
+                    duplicate_count += 1
+                else:
+                    seen_emails.add(val)
+
+        preview_rows = rows[:10]
+
+        return jsonify({
+            "success": True,
+            "filename": Path(data_file.filename).name,
+            "total_rows": len(rows),
+            "columns": columns,
+            "detected_recipient_column": detected_col,
+            "valid_email_count": valid_email_count,
+            "duplicate_count": duplicate_count,
+            "preview_rows": preview_rows,
+        })
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Fehler bei der Dateianalyse: {exc}"}), 500
+
+
+@app.route("/api/send-bulk/test-email", methods=["POST"])
+def send_test_email():
+    try:
+        sender_email = (request.form.get("sender_email") or "").strip()
+        app_password = (request.form.get("app_password") or "").strip()
+        test_recipient = (request.form.get("test_recipient") or sender_email).strip()
+        subject = (request.form.get("subject_template") or "JobScout Test-E-Mail").strip()
+        body = (request.form.get("body_template") or "Dies ist eine Test-E-Mail von JobScout.").strip()
+        full_name = (request.form.get("full_name") or "").strip()
+
+        if not sender_email:
+            return jsonify({"success": False, "message": "Bitte Absender-E-Mail angeben."}), 400
+        if not app_password:
+            return jsonify({"success": False, "message": "Bitte Gmail App-Passwort angeben."}), 400
+        if not test_recipient:
+            return jsonify({"success": False, "message": "Bitte Test-Empfänger angeben."}), 400
+        if not _is_valid_email(test_recipient):
+            return jsonify({"success": False, "message": "Ungültige Test-Empfänger-E-Mail-Adresse."}), 400
+
+        sample_context = {
+            "email": test_recipient,
+            "company": "JobScout Musterfirma GmbH",
+            "Unternehmen": "JobScout Musterfirma GmbH",
+            "person": full_name or "Max Mustermann",
+            "name": full_name or "Max Mustermann",
+            "city": "Köln",
+            "Stadt": "Köln",
+        }
+        rendered_subject = _render_email_template_with_row(subject, sample_context)
+        rendered_body = _render_email_template_with_row(body, sample_context)
+
+        sender = _get_email_sender_instance(sender_email, app_password)
+        uploaded_attachments = _parse_uploaded_attachments(request.files.getlist("attachments"))
+        ok, msg = sender.send(test_recipient, rendered_subject, rendered_body, attachments=uploaded_attachments, validate=False)
+        if not ok:
+            return jsonify({"success": False, "message": f"Versand fehlgeschlagen: {msg}"}), 400
+
+        return jsonify({
+            "success": True,
+            "message": f"Test-E-Mail wurde erfolgreich an {test_recipient} gesendet!"
+        })
+    except ValueError as exc:
+        return jsonify({"success": False, "message": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"success": False, "message": f"Fehler beim Senden der Test-E-Mail: {exc}"}), 500
+
+
 def _sanitize_export_slug(value: str, fallback: str = "export") -> str:
     raw = (value or "").strip().lower()
     sanitized = re.sub(r"[^a-z0-9]+", "_", raw).strip("_")
@@ -4830,6 +5014,7 @@ def _save_auto_extraction_export_records(
     keyword: str,
     fallback_slug: str,
     suffix: str = "",
+    unconfirmed_records: Optional[List[Dict]] = None,
 ) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     slug = _sanitize_export_slug(keyword, fallback=fallback_slug)
@@ -4839,7 +5024,72 @@ def _save_auto_extraction_export_records(
         file_stem = f"{file_stem}_{normalized_suffix}"
 
     file_path = AUTO_EXTRACTION_EXPORT_DIR / f"{file_stem}.xlsx"
-    pd.DataFrame(records).to_excel(file_path, index=False)
+
+    confirmed_rows: List[Dict] = []
+    unconfirmed_rows: List[Dict] = list(unconfirmed_records or [])
+
+    # Fallback to search_cache unconfirmed if not explicitly passed
+    if not unconfirmed_rows:
+        unconfirmed_rows = list(search_cache.get("unconfirmed_maps_companies") or [])
+
+    for r in (records or []):
+        src = str(r.get("source") or "").lower()
+        is_maps = "maps" in src or "google" in src or bool(r.get("maps_url"))
+
+        if is_maps:
+            if r.get("is_verified_vacancy") is True:
+                confirmed_rows.append(normalize_job_opportunity_row(r))
+            else:
+                emails_val = r.get("email") or (
+                    ", ".join(r.get("emails", [])) if isinstance(r.get("emails"), list) else ""
+                )
+                unconfirmed_rows.append({
+                    "Unternehmen": r.get("company") or r.get("name") or "",
+                    "Adresse": r.get("location") or r.get("address") or "",
+                    "Stadt": r.get("city") or "",
+                    "Website": r.get("website") or r.get("url") or "",
+                    "E-Mail": emails_val,
+                    "Telefon": r.get("phone") or "",
+                    "Quelle": "Google Maps",
+                    "Status": r.get("status") or "Unbestätigt: Keine verifizierte Ausschreibung",
+                    "Verifizierungs-Notiz": r.get("verification_notes") or "Keine passende Ausbildung auf Website gefunden",
+                    "Google Maps URL": r.get("maps_url") or "",
+                })
+        else:
+            confirmed_rows.append(normalize_job_opportunity_row(r))
+
+    df_confirmed = pd.DataFrame(confirmed_rows)
+    existing_cols = [c for c in EXCEL_COLUMNS if c in df_confirmed.columns]
+    if existing_cols:
+        df_confirmed = df_confirmed[existing_cols]
+
+    with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
+        df_confirmed.to_excel(writer, sheet_name="Ausbildungsplätze", index=False)
+        if unconfirmed_rows:
+            seen_unconfirmed = set()
+            deduped_unconfirmed = []
+            for item in unconfirmed_rows:
+                key = (
+                    str(item.get("Unternehmen") or item.get("company") or "").lower(),
+                    str(item.get("Website") or item.get("website") or "").lower(),
+                )
+                if key not in seen_unconfirmed:
+                    seen_unconfirmed.add(key)
+                    deduped_unconfirmed.append({
+                        "Unternehmen": item.get("Unternehmen") or item.get("company") or "",
+                        "Adresse": item.get("Adresse") or item.get("location") or item.get("address") or "",
+                        "Stadt": item.get("Stadt") or item.get("city") or "",
+                        "Website": item.get("Website") or item.get("website") or item.get("url") or "",
+                        "E-Mail": item.get("E-Mail") or item.get("email") or "",
+                        "Telefon": item.get("Telefon") or item.get("phone") or "",
+                        "Quelle": "Google Maps",
+                        "Status": item.get("Status") or item.get("status") or "Unbestätigt: Keine verifizierte Ausschreibung",
+                        "Verifizierungs-Notiz": item.get("Verifizierungs-Notiz") or item.get("verification_notes") or "Keine passende Ausbildung auf Website gefunden",
+                        "Google Maps URL": item.get("Google Maps URL") or item.get("maps_url") or "",
+                    })
+            df_unconfirmed = pd.DataFrame(deduped_unconfirmed)
+            df_unconfirmed.to_excel(writer, sheet_name="Unbestätigte Betriebe (Maps)", index=False)
+
     return file_path
 
 
@@ -5278,39 +5528,131 @@ def _fetch_combined_jobs(
     keyword: str,
     location: str,
     source: str = "all",
+    mode: str = "ausbildung",
+    radius: Optional[Union[int, str]] = None,
     max_jobs: int = DEFAULT_MAX_JOBS,
     published_since_days: Optional[int] = None,
-) -> List[Dict]:
-    """Fetches jobs from Arbeitsagentur, Ausbildung.de, or both depending on source."""
+    progress_callback: Optional[Any] = None,
+    return_audit: bool = False,
+) -> Union[List[Dict], Tuple[List[Dict], Dict[str, Any]]]:
+    """Fetches jobs from enabled scrapers, tracking verified matches and audit metrics throughout."""
+    from scraper.search_filter_engine import (
+        filter_and_deduplicate_jobs,
+        filter_and_deduplicate_jobs_with_audit,
+    )
+
+    mode_clean = str(mode or "ausbildung").strip().lower()
+    if mode_clean not in {"ausbildung", "arbeit"}:
+        mode_clean = "ausbildung"
+
+    radius_val: Optional[int] = None
+    if radius:
+        try:
+            radius_val = int(str(radius).strip())
+        except (ValueError, TypeError):
+            radius_val = None
+
     source_clean = str(source or "all").lower().strip()
+    is_all = source_clean in {"all", "all_with_maps", "all_sources"}
+    has_portals = is_all or source_clean in {"job_portals", "jobboersen", "jobbörsen", "portals"}
+    has_gmaps = is_all or source_clean in {"google_maps", "google-maps", "maps"}
+
     jobs: List[Dict] = []
     seen_refs = set()
 
+    def report_progress(data: Dict):
+        if callable(progress_callback):
+            try:
+                progress_callback(data)
+            except Exception as e:
+                logger.debug("progress_callback error: %s", e)
+
+    def _calc_valid_counts():
+        if not jobs:
+            return 0, {}
+        valid_now = filter_and_deduplicate_jobs(
+            jobs,
+            keyword=keyword,
+            location=location,
+            published_since_days=published_since_days,
+            mode=mode_clean,
+        )
+        counts = {}
+        for vj in valid_now:
+            v_src = str(vj.get("source") or "").lower()
+            counts[v_src] = counts.get(v_src, 0) + 1
+        return len(valid_now), counts
+
     # 1. Arbeitsagentur
-    if source_clean in {"all", "arbeitsagentur", "arbeitsagentur.de"}:
+    if has_portals or source_clean in {"arbeitsagentur", "arbeitsagentur.de"}:
+        aa_label = "Arbeitsstellen" if mode_clean == "arbeit" else "Jobbörse / Ausbildung"
+        report_progress({
+            "source": "arbeitsagentur",
+            "stage": f"Arbeitsagentur ({aa_label}) wird durchsucht...",
+            "percent": 15 if is_all else 20,
+            "found": len(jobs),
+            "status": "running",
+        })
         try:
             aa_scraper = EnhancedJobScraper()
-            aa_limit = max_jobs if source_clean != "all" else max(15, max_jobs // 2)
+            aa_limit = max_jobs if not is_all and not has_portals else max(15, max_jobs // 2)
+            aa_angebotsart = 1 if mode_clean == "arbeit" else 4
             aa_jobs = aa_scraper.fetch_all_jobs(
                 keyword,
                 location,
                 max_jobs=aa_limit,
                 published_since_days=published_since_days,
+                angebotsart=aa_angebotsart,
+                umkreis=radius_val,
             )
             for j in aa_jobs:
                 j.setdefault("source", "Arbeitsagentur")
-                ref = j.get("reference") or j.get("url")
+                ref = j.get("reference") or j.get("url") or j.get("apply_url") or j.get("refnr") or f"{j.get('company')}_{j.get('title')}"
                 if ref and ref not in seen_refs:
                     seen_refs.add(ref)
                     jobs.append(j)
+
+            valid_total, valid_by_src = _calc_valid_counts()
+            aa_valid = sum(c for k, c in valid_by_src.items() if "arbeitsagentur" in k)
+            report_progress({
+                "source": "arbeitsagentur",
+                "finished_source": "arbeitsagentur",
+                "stage": f"Arbeitsagentur: {len(aa_jobs)} geprüft ({aa_valid} passende Treffer)",
+                "percent": 25 if is_all else 100,
+                "found": valid_total,
+                "raw_found": len(jobs),
+                "source_count": aa_valid,
+                "source_raw_count": len(aa_jobs),
+                "status": "source_done",
+            })
         except Exception as exc:
             logger.warning("Arbeitsagentur search failed: %s", exc)
+            valid_total, _ = _calc_valid_counts()
+            report_progress({
+                "source": "arbeitsagentur",
+                "finished_source": "arbeitsagentur",
+                "stage": f"Arbeitsagentur Suche fehlgeschlagen: {exc}",
+                "percent": 25 if is_all else 100,
+                "found": valid_total,
+                "raw_found": len(jobs),
+                "source_count": 0,
+                "status": "source_error",
+            })
 
     # 2. Ausbildung.de
-    if source_clean in {"all", "ausbildung_de", "ausbildung.de"}:
+    if has_portals or source_clean in {"ausbildung_de", "ausbildung.de"}:
+        valid_total, _ = _calc_valid_counts()
+        report_progress({
+            "source": "ausbildung_de",
+            "stage": "Ausbildung.de wird durchsucht...",
+            "percent": 35 if is_all else 20,
+            "found": valid_total,
+            "raw_found": len(jobs),
+            "status": "running",
+        })
         try:
             adb_scraper = AusbildungDeScraper()
-            adb_limit = max_jobs if source_clean != "all" else max(15, max_jobs // 3)
+            adb_limit = max_jobs if not is_all and not has_portals else max(15, max_jobs // 3)
             adb_jobs = adb_scraper.fetch_jobs(
                 keyword=keyword,
                 location=location,
@@ -5323,14 +5665,48 @@ def _fetch_combined_jobs(
                 if ref and ref not in seen_refs:
                     seen_refs.add(ref)
                     jobs.append(j)
+
+            valid_total, valid_by_src = _calc_valid_counts()
+            adb_valid = sum(c for k, c in valid_by_src.items() if "ausbildung" in k)
+            report_progress({
+                "source": "ausbildung_de",
+                "finished_source": "ausbildung_de",
+                "stage": f"Ausbildung.de: {len(adb_jobs)} geprüft ({adb_valid} passende Treffer)",
+                "percent": 50 if is_all else 100,
+                "found": valid_total,
+                "raw_found": len(jobs),
+                "source_count": adb_valid,
+                "source_raw_count": len(adb_jobs),
+                "status": "source_done",
+            })
         except Exception as exc:
             logger.warning("Ausbildung.de search failed: %s", exc)
+            valid_total, _ = _calc_valid_counts()
+            report_progress({
+                "source": "ausbildung_de",
+                "finished_source": "ausbildung_de",
+                "stage": f"Ausbildung.de fehlgeschlagen: {exc}",
+                "percent": 50 if is_all else 100,
+                "found": valid_total,
+                "raw_found": len(jobs),
+                "source_count": 0,
+                "status": "source_error",
+            })
 
     # 3. Azubiyo.de
-    if source_clean in {"all", "azubiyo", "azubiyo.de"}:
+    if has_portals or source_clean in {"azubiyo", "azubiyo.de"}:
+        valid_total, _ = _calc_valid_counts()
+        report_progress({
+            "source": "azubiyo",
+            "stage": "Azubiyo (azubiyo.de) wird durchsucht...",
+            "percent": 55 if is_all else 20,
+            "found": valid_total,
+            "raw_found": len(jobs),
+            "status": "running",
+        })
         try:
             azubiyo_scraper = AzubiyoScraper()
-            az_limit = max_jobs if source_clean != "all" else max(12, max_jobs // 4)
+            az_limit = max_jobs if not is_all and not has_portals else max(12, max_jobs // 4)
             az_jobs = azubiyo_scraper.fetch_jobs(
                 keyword=keyword,
                 location=location,
@@ -5342,14 +5718,48 @@ def _fetch_combined_jobs(
                 if ref and ref not in seen_refs:
                     seen_refs.add(ref)
                     jobs.append(j)
+
+            valid_total, valid_by_src = _calc_valid_counts()
+            az_valid = sum(c for k, c in valid_by_src.items() if "azubiyo" in k)
+            report_progress({
+                "source": "azubiyo",
+                "finished_source": "azubiyo",
+                "stage": f"Azubiyo: {len(az_jobs)} geprüft ({az_valid} passende Treffer)",
+                "percent": 70 if is_all else 100,
+                "found": valid_total,
+                "raw_found": len(jobs),
+                "source_count": az_valid,
+                "source_raw_count": len(az_jobs),
+                "status": "source_done",
+            })
         except Exception as exc:
             logger.warning("Azubiyo search failed: %s", exc)
+            valid_total, _ = _calc_valid_counts()
+            report_progress({
+                "source": "azubiyo",
+                "finished_source": "azubiyo",
+                "stage": f"Azubiyo fehlgeschlagen: {exc}",
+                "percent": 70 if is_all else 100,
+                "found": valid_total,
+                "raw_found": len(jobs),
+                "source_count": 0,
+                "status": "source_error",
+            })
 
     # 4. AUBI-plus
-    if source_clean in {"all", "aubi_plus", "aubi-plus", "aubi_plus.de"}:
+    if has_portals or source_clean in {"aubi_plus", "aubi-plus", "aubi_plus.de"}:
+        valid_total, _ = _calc_valid_counts()
+        report_progress({
+            "source": "aubi_plus",
+            "stage": "AUBI-plus (aubi-plus.de) wird durchsucht...",
+            "percent": 75 if is_all else 20,
+            "found": valid_total,
+            "raw_found": len(jobs),
+            "status": "running",
+        })
         try:
             aubi_scraper = AubiPlusScraper()
-            aubi_limit = max_jobs if source_clean != "all" else max(12, max_jobs // 4)
+            aubi_limit = max_jobs if not is_all and not has_portals else max(12, max_jobs // 4)
             aubi_jobs = aubi_scraper.fetch_jobs(
                 keyword=keyword,
                 location=location,
@@ -5361,14 +5771,48 @@ def _fetch_combined_jobs(
                 if ref and ref not in seen_refs:
                     seen_refs.add(ref)
                     jobs.append(j)
+
+            valid_total, valid_by_src = _calc_valid_counts()
+            aubi_valid = sum(c for k, c in valid_by_src.items() if "aubi" in k)
+            report_progress({
+                "source": "aubi_plus",
+                "finished_source": "aubi_plus",
+                "stage": f"AUBI-plus: {len(aubi_jobs)} geprüft ({aubi_valid} passende Treffer)",
+                "percent": 85 if is_all else 100,
+                "found": valid_total,
+                "raw_found": len(jobs),
+                "source_count": aubi_valid,
+                "source_raw_count": len(aubi_jobs),
+                "status": "source_done",
+            })
         except Exception as exc:
             logger.warning("AUBI-plus search failed: %s", exc)
+            valid_total, _ = _calc_valid_counts()
+            report_progress({
+                "source": "aubi_plus",
+                "finished_source": "aubi_plus",
+                "stage": f"AUBI-plus fehlgeschlagen: {exc}",
+                "percent": 85 if is_all else 100,
+                "found": valid_total,
+                "raw_found": len(jobs),
+                "source_count": 0,
+                "status": "source_error",
+            })
 
     # 5. IHK Lehrstellenbörse
-    if source_clean in {"all", "ihk", "ihk.de", "ihk_lehrstellenboerse"}:
+    if has_portals or source_clean in {"ihk", "ihk.de", "ihk_lehrstellenboerse"}:
+        valid_total, _ = _calc_valid_counts()
+        report_progress({
+            "source": "ihk",
+            "stage": "IHK Lehrstellenbörse (ihk.de) wird durchsucht...",
+            "percent": 90 if is_all else 20,
+            "found": valid_total,
+            "raw_found": len(jobs),
+            "status": "running",
+        })
         try:
             ihk_scraper = IhkScraper()
-            ihk_limit = max_jobs if source_clean != "all" else max(12, max_jobs // 4)
+            ihk_limit = max_jobs if not is_all and not has_portals else max(12, max_jobs // 4)
             ihk_jobs = ihk_scraper.fetch_jobs(
                 keyword=keyword,
                 location=location,
@@ -5380,10 +5824,132 @@ def _fetch_combined_jobs(
                 if ref and ref not in seen_refs:
                     seen_refs.add(ref)
                     jobs.append(j)
+
+            valid_total, valid_by_src = _calc_valid_counts()
+            ihk_valid = sum(c for k, c in valid_by_src.items() if "ihk" in k)
+            report_progress({
+                "source": "ihk",
+                "finished_source": "ihk",
+                "stage": f"IHK: {len(ihk_jobs)} geprüft ({ihk_valid} passende Treffer)",
+                "percent": 98 if is_all else 100,
+                "found": valid_total,
+                "raw_found": len(jobs),
+                "source_count": ihk_valid,
+                "source_raw_count": len(ihk_jobs),
+                "status": "source_done",
+            })
         except Exception as exc:
             logger.warning("IHK search failed: %s", exc)
+            valid_total, _ = _calc_valid_counts()
+            report_progress({
+                "source": "ihk",
+                "finished_source": "ihk",
+                "stage": f"IHK fehlgeschlagen: {exc}",
+                "percent": 98 if is_all else 100,
+                "found": valid_total,
+                "raw_found": len(jobs),
+                "source_count": 0,
+                "status": "source_error",
+            })
 
-    return jobs
+    # 6. Google Maps (when selected explicitly or as part of all sources)
+    if has_gmaps:
+        valid_total, _ = _calc_valid_counts()
+        gmaps_label = "Unternehmen & Websites" if mode_clean == "arbeit" else "Lokale Betriebe & Ausbildungs-Websites"
+        report_progress({
+            "source": "google_maps",
+            "stage": f"Google Maps ({gmaps_label}) wird durchsucht...",
+            "percent": 95 if is_all else 20,
+            "found": valid_total,
+            "raw_found": len(jobs),
+            "status": "running",
+        })
+        try:
+            from scraper.google_maps_ausbildung_verifier import GoogleMapsAusbildungVerifier
+            from scraper.overpass_scraper import OverpassBusinessScraper
+
+            verifier = GoogleMapsAusbildungVerifier()
+            unconfirmed_maps_companies = []
+            
+            # Fast discovery of local businesses in the location
+            overpass_scraper = OverpassBusinessScraper()
+            city_query = location or "Deutschland"
+            local_businesses = overpass_scraper.search_businesses(city=city_query, category=keyword)
+            
+            verified_count = 0
+            if mode_clean == "arbeit":
+                for biz in local_businesses[:15]:
+                    verified_biz = verifier.verify_business_for_arbeit(biz, profession_keyword=keyword)
+                    ref = verified_biz.get("apply_url") or verified_biz.get("website") or verified_biz.get("name")
+                    if ref and ref not in seen_refs:
+                        seen_refs.add(ref)
+                        jobs.append(verified_biz)
+                        verified_count += 1
+            else:
+                for biz in local_businesses[:12]:
+                    verified_biz = verifier.verify_business(biz, profession_keyword=keyword)
+                    if verified_biz.get("is_verified_vacancy"):
+                        ref = verified_biz.get("apply_url") or verified_biz.get("website")
+                        if ref and ref not in seen_refs:
+                            seen_refs.add(ref)
+                            jobs.append(verified_biz)
+                            verified_count += 1
+                    else:
+                        unconfirmed_maps_companies.append(verified_biz)
+
+            search_cache["unconfirmed_maps_companies"] = unconfirmed_maps_companies
+
+            valid_total, _ = _calc_valid_counts()
+            success_stage = f"Google Maps: {verified_count} Unternehmen erfasst" if mode_clean == "arbeit" else f"Google Maps: {verified_count} bestätigte Ausbildungsstellen"
+            report_progress({
+                "source": "google_maps",
+                "finished_source": "google_maps",
+                "stage": success_stage,
+                "percent": 99 if is_all else 100,
+                "found": valid_total,
+                "raw_found": len(jobs),
+                "source_count": verified_count,
+                "status": "source_done",
+            })
+        except Exception as exc:
+            logger.warning("Google Maps search failed: %s", exc)
+            valid_total, _ = _calc_valid_counts()
+            report_progress({
+                "source": "google_maps",
+                "finished_source": "google_maps",
+                "stage": f"Google Maps fehlgeschlagen: {exc}",
+                "percent": 99 if is_all else 100,
+                "found": valid_total,
+                "raw_found": len(jobs),
+                "source_count": 0,
+                "status": "source_error",
+            })
+
+    # Apply shared relevance validation, location filtering, publication date filtering and deduplication
+    final_jobs, audit = filter_and_deduplicate_jobs_with_audit(
+        jobs,
+        keyword=keyword,
+        location=location,
+        published_since_days=published_since_days,
+        mode=mode_clean,
+    )
+    search_cache["last_search_audit"] = audit
+    search_cache["mode"] = mode_clean
+
+    report_progress({
+        "source": "all",
+        "stage": f"Suche fertig: {len(final_jobs)} passende Stellen gefunden (von {len(jobs)} Angeboten)",
+        "percent": 100,
+        "found": len(final_jobs),
+        "raw_found": len(jobs),
+        "audit": audit,
+        "status": "complete",
+    })
+
+    if return_audit:
+        return final_jobs, audit
+    return final_jobs
+
 
 
 @app.route("/search", methods=["POST"])
@@ -5391,27 +5957,42 @@ def search():
     keyword = request.form.get("keyword", "").strip()
     location = request.form.get("location", "").strip()
     source = request.form.get("source", "all").strip().lower()
+    mode = request.form.get("mode", "ausbildung").strip().lower()
+    radius = request.form.get("radius", "").strip()
     published_since = _normalize_published_since(request.form.get("published_since", "all"))
 
     try:
-        jobs = _fetch_combined_jobs(
+        fetch_res = _fetch_combined_jobs(
             keyword,
             location,
             source=source,
+            mode=mode,
+            radius=radius,
             max_jobs=DEFAULT_MAX_JOBS,
             published_since_days=_published_since_to_days(published_since),
+            return_audit=True,
         )
+        if isinstance(fetch_res, tuple) and len(fetch_res) == 2:
+            jobs, audit = fetch_res
+        else:
+            jobs = fetch_res
+            audit = search_cache.get("last_search_audit") or {}
 
         search_cache["jobs"] = jobs
         search_cache["keyword"] = keyword
         search_cache["location"] = location
         search_cache["source"] = source
+        search_cache["mode"] = mode
+        search_cache["radius"] = radius
         search_cache["published_since"] = published_since
+        search_cache["last_search_audit"] = audit
         _save_search_cache_to_disk(jobs, keyword, location, published_since)
         session["last_search_meta"] = {
             "keyword": keyword,
             "location": location,
             "source": source,
+            "mode": mode,
+            "radius": radius,
             "published_since": published_since,
             "total": len(jobs),
         }
@@ -5422,8 +6003,11 @@ def search():
             keyword=keyword,
             location=location,
             source=source,
+            mode=mode,
+            radius=radius,
             published_since=published_since,
             total=len(jobs),
+            audit=audit,
         )
     except Exception as exc:
         return render_template("error.html", error=str(exc))
@@ -5434,22 +6018,35 @@ def api_search():
     keyword = request.args.get("keyword", "").strip()
     location = request.args.get("location", "").strip()
     source = request.args.get("source", "all").strip().lower()
+    mode = request.args.get("mode", "ausbildung").strip().lower()
+    radius = request.args.get("radius", "").strip()
     published_since = _normalize_published_since(request.args.get("published_since", "all"))
     max_jobs = int(request.args.get("max_jobs", DEFAULT_MAX_JOBS))
 
-    jobs = _fetch_combined_jobs(
+    fetch_res = _fetch_combined_jobs(
         keyword,
         location,
         source=source,
+        mode=mode,
+        radius=radius,
         max_jobs=max_jobs,
         published_since_days=_published_since_to_days(published_since),
+        return_audit=True,
     )
+    if isinstance(fetch_res, tuple) and len(fetch_res) == 2:
+        jobs, audit = fetch_res
+    else:
+        jobs = fetch_res
+        audit = search_cache.get("last_search_audit") or {}
 
     search_cache["jobs"] = jobs
     search_cache["keyword"] = keyword
     search_cache["location"] = location
     search_cache["source"] = source
+    search_cache["mode"] = mode
+    search_cache["radius"] = radius
     search_cache["published_since"] = published_since
+    search_cache["last_search_audit"] = audit
     _save_search_cache_to_disk(jobs, keyword, location, published_since)
 
     return jsonify(
@@ -5457,10 +6054,117 @@ def api_search():
             "status": "success",
             "total": len(jobs),
             "source": source,
+            "mode": mode,
+            "radius": radius,
             "published_since": published_since,
             "jobs": jobs,
+            "audit": audit,
         }
     )
+
+
+@app.route("/api/search/audit", methods=["GET"])
+def api_search_audit():
+    """Returns the multi-stage diagnostic and exclusion audit from the most recent search."""
+    audit = search_cache.get("last_search_audit") or {}
+    return jsonify({
+        "success": True,
+        "audit": audit,
+    })
+
+
+@app.route("/api/search/stream", methods=["GET"])
+def api_search_stream():
+    keyword = request.args.get("keyword", "").strip()
+    location = request.args.get("location", "").strip()
+    source = request.args.get("source", "all").strip().lower()
+    mode = request.args.get("mode", "ausbildung").strip().lower()
+    radius = request.args.get("radius", "").strip()
+    published_since = _normalize_published_since(request.args.get("published_since", "all"))
+    max_jobs = int(request.args.get("max_jobs", DEFAULT_MAX_JOBS))
+    days = _published_since_to_days(published_since)
+
+    if not keyword:
+        return jsonify({"status": "error", "message": "Bitte ein Stichwort eingeben"}), 400
+
+    @stream_with_context
+    def generate_events():
+        q = queue.Queue()
+
+        def progress_cb(data):
+            q.put(("progress", data))
+
+        def worker():
+            try:
+                fetch_res = _fetch_combined_jobs(
+                    keyword=keyword,
+                    location=location,
+                    source=source,
+                    mode=mode,
+                    radius=radius,
+                    max_jobs=max_jobs,
+                    published_since_days=days,
+                    progress_callback=progress_cb,
+                    return_audit=True,
+                )
+                if isinstance(fetch_res, tuple) and len(fetch_res) == 2:
+                    jobs, audit = fetch_res
+                else:
+                    jobs = fetch_res
+                    audit = search_cache.get("last_search_audit") or {}
+                search_cache["jobs"] = jobs
+                search_cache["keyword"] = keyword
+                search_cache["location"] = location
+                search_cache["source"] = source
+                search_cache["mode"] = mode
+                search_cache["radius"] = radius
+                search_cache["published_since"] = published_since
+                search_cache["last_search_audit"] = audit
+                _save_search_cache_to_disk(jobs, keyword, location, published_since)
+
+                q.put(("complete", {
+                    "status": "success",
+                    "total": len(jobs),
+                    "source": source,
+                    "mode": mode,
+                    "radius": radius,
+                    "published_since": published_since,
+                    "jobs": jobs,
+                    "audit": audit,
+                }))
+            except Exception as exc:
+                logger.exception("Search stream error: %s", exc)
+                q.put(("error", {"status": "error", "message": str(exc)}))
+            finally:
+                q.put(("done", None))
+
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
+
+        yield f"event: start\ndata: {json.dumps({'message': 'Suche gestartet', 'keyword': keyword, 'source': source})}\n\n"
+
+        while True:
+            try:
+                msg_type, payload = q.get(timeout=25.0)
+            except queue.Empty:
+                yield ": keepalive\n\n"
+                continue
+
+            if msg_type == "done":
+                break
+            elif msg_type == "progress":
+                yield f"event: progress\ndata: {json.dumps(payload)}\n\n"
+            elif msg_type == "complete":
+                yield f"event: complete\ndata: {json.dumps(payload)}\n\n"
+            elif msg_type == "error":
+                yield f"event: error\ndata: {json.dumps(payload)}\n\n"
+                break
+
+    response = Response(generate_events(), mimetype="text/event-stream")
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Accel-Buffering"] = "no"
+    response.headers["Connection"] = "keep-alive"
+    return response
 
 
 @app.route("/api/ausbildung-de/search", methods=["GET"])
@@ -5640,14 +6344,19 @@ def api_inline_download_auto_job(job_id: str):
         jobs = list(job.get("jobs") or [])
         keyword = str(job.get("keyword") or "")
 
-    prepared_jobs = _prepare_download_jobs(jobs)
+    filter_mode = request.args.get("filter", "all")
+    prepared_jobs = _prepare_download_jobs(jobs, filter_mode=filter_mode)
     if not prepared_jobs:
-        return jsonify({"success": False, "message": "Keine Stellen mit E-Mail oder Bewerbungsformular verfügbar"}), 400
+        return jsonify({"success": False, "message": "Keine Stellenangebote verfügbar"}), 400
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     slug = _sanitize_export_slug(keyword, fallback=f"auto_{job_id[:8]}")
     file_path = AUTO_EXTRACTION_EXPORT_DIR / f"{timestamp}_{slug}_{job_id[:8]}.xlsx"
-    pd.DataFrame(prepared_jobs).to_excel(file_path, index=False)
+    df = pd.DataFrame(prepared_jobs)
+    existing_cols = [c for c in EXCEL_COLUMNS if c in df.columns]
+    if existing_cols:
+        df = df[existing_cols]
+    df.to_excel(file_path, index=False)
     return send_file(file_path, as_attachment=True, download_name=file_path.name)
 
 
@@ -5824,6 +6533,74 @@ def pdf_upload_design_pdf():
         _pdf_sessions[session_id]["design_pdf_path"] = str(filepath)
         _persist_linked_campaign_anschreiben(str(session_id))
         return jsonify({"success": True, "filename": filepath.name})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/pdf-background-templates", methods=["GET"])
+def pdf_list_background_templates():
+    try:
+        from pdf_generator.services.background_templates import BACKGROUND_TEMPLATES, ensure_templates_generated
+        ensure_templates_generated()
+        return jsonify({"success": True, "templates": BACKGROUND_TEMPLATES})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/pdf-background-templates/<template_id>/pdf", methods=["GET"])
+def pdf_get_background_template_pdf(template_id):
+    try:
+        from pdf_generator.services.background_templates import get_template_pdf_path
+        path = get_template_pdf_path(template_id)
+        if not path or not path.exists():
+            return jsonify({"error": "Template not found"}), 404
+        return send_file(str(path), mimetype="application/pdf", as_attachment=False, download_name=f"{template_id}.pdf")
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/set-background-template", methods=["POST"])
+def pdf_set_background_template():
+    try:
+        import shutil
+        from pdf_generator.services.background_templates import get_template_by_id, get_template_pdf_path
+        data = request.get_json(silent=True) or {}
+        session_id = data.get("session_id")
+        template_id = str(data.get("template_id") or "").strip()
+
+        if not session_id or session_id not in _pdf_sessions:
+            return jsonify({"error": "Session not found"}), 404
+
+        old_path = _pdf_sessions[session_id].get("design_pdf_path")
+        if old_path and os.path.exists(old_path):
+            try:
+                os.remove(old_path)
+            except OSError:
+                pass
+
+        if not template_id or template_id in ("none", "null", "clear"):
+            _pdf_sessions[session_id]["design_pdf_path"] = ""
+            _persist_linked_campaign_anschreiben(str(session_id))
+            return jsonify({"success": True, "cleared": True, "filename": ""})
+
+        meta = get_template_by_id(template_id)
+        source_path = get_template_pdf_path(template_id)
+        if not meta or not source_path or not source_path.exists():
+            return jsonify({"error": f"Template '{template_id}' not found"}), 404
+
+        filename = secure_filename(f"{session_id}_design.pdf")
+        target_path = PDF_GENERATOR_UPLOAD_DIR / filename
+        shutil.copyfile(str(source_path), str(target_path))
+
+        _pdf_sessions[session_id]["design_pdf_path"] = str(target_path)
+        _persist_linked_campaign_anschreiben(str(session_id))
+
+        return jsonify({
+            "success": True,
+            "filename": f"Vorlage: {meta['name']}",
+            "template": meta,
+            "recommendedMargins": meta.get("recommendedMargins")
+        })
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
@@ -6433,14 +7210,17 @@ def continue_auto_extraction():
 def download_results():
     with status_lock:
         jobs = list(extraction_status.get("jobs", []))
+    if not jobs:
+        jobs = list(search_cache.get("jobs", []))
     keyword = str(search_cache.get("keyword") or "").strip()
 
     if not jobs:
         return jsonify({"error": "Keine Extraktionsergebnisse verfügbar."}), 400
 
-    jobs = _prepare_download_jobs(jobs)
+    filter_mode = request.args.get("filter", "all")
+    jobs = _prepare_download_jobs(jobs, filter_mode=filter_mode)
     if not jobs:
-        return jsonify({"error": "Keine Stellen mit gültiger E-Mail zum Download verfügbar."}), 400
+        return jsonify({"error": "Keine passenden Stellenangebote zum Download verfügbar."}), 400
 
     temp_file = _save_auto_extraction_export_records(
         jobs,
@@ -6451,7 +7231,7 @@ def download_results():
     return send_file(
         temp_file,
         as_attachment=True,
-        download_name=_build_download_filename(keyword, fallback="jobs_with_emails"),
+        download_name=_build_download_filename(keyword, fallback="stellenangebote"),
     )
 
 
@@ -6459,14 +7239,17 @@ def download_results():
 def download_auto_results():
     with status_lock:
         jobs = list(auto_extraction_status.get("jobs", []))
+    if not jobs:
+        jobs = list(search_cache.get("jobs", []))
     keyword = str(search_cache.get("keyword") or "").strip()
 
     if not jobs:
         return jsonify({"error": "Keine Auto-Extraktionsergebnisse verfügbar."}), 400
 
-    jobs = _prepare_download_jobs(jobs)
+    filter_mode = request.args.get("filter", "all")
+    jobs = _prepare_download_jobs(jobs, filter_mode=filter_mode)
     if not jobs:
-        return jsonify({"error": "Keine Stellen mit gültiger E-Mail zum Download verfügbar."}), 400
+        return jsonify({"error": "Keine passenden Stellenangebote zum Download verfügbar."}), 400
 
     temp_file = _save_auto_extraction_export_records(
         jobs,
@@ -6477,7 +7260,35 @@ def download_auto_results():
     return send_file(
         temp_file,
         as_attachment=True,
-        download_name=_build_download_filename(keyword, fallback="jobs_with_emails_auto"),
+        download_name=_build_download_filename(keyword, fallback="stellenangebote_auto"),
+    )
+
+
+@app.route("/api/search/download", methods=["GET"])
+def api_search_download():
+    """Direct Excel export of the matching search results using the exact 21-column schema."""
+    jobs = list(search_cache.get("jobs", []))
+    if not jobs:
+        persisted = _load_search_cache_from_disk()
+        jobs = persisted.get("jobs", [])
+    if not jobs:
+        return jsonify({"error": "Keine Suchergebnisse zum Download vorhanden."}), 400
+
+    keyword = str(search_cache.get("keyword") or "").strip()
+    filter_mode = request.args.get("filter", "all")
+    prepared_jobs = _prepare_download_jobs(jobs, filter_mode=filter_mode)
+    if not prepared_jobs:
+        return jsonify({"error": "Keine passenden Stellenangebote zum Download verfügbar."}), 400
+
+    temp_file = _save_auto_extraction_export_records(
+        prepared_jobs,
+        keyword,
+        fallback_slug="suchergebnisse",
+    )
+    return send_file(
+        temp_file,
+        as_attachment=True,
+        download_name=_build_download_filename(keyword, fallback="suchergebnisse"),
     )
 
 

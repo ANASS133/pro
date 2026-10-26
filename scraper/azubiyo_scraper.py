@@ -50,6 +50,10 @@ class AzubiyoScraper:
         "mechatroniker": "mechatroniker",
         "kfz": "kfz-mechatroniker",
         "logistik": "fachkraft-lagerlogistik",
+        "koch": "koch",
+        "köchin": "koch",
+        "bäcker": "baecker",
+        "verkäufer": "verkaeufer",
     }
 
     def __init__(self, session: Optional[requests.Session] = None):
@@ -74,6 +78,19 @@ class AzubiyoScraper:
     def _resolve_profession_slug(self, keyword: str) -> str:
         """Resolves free-form keyword into best Azubiyo profession slug."""
         clean = keyword.lower().strip()
+        # Strip generic stopwords to isolate profession
+        from .search_filter_engine import extract_profession_tokens
+        token_info = extract_profession_tokens(clean)
+        core_tokens = list(token_info.get("core_tokens", []))
+        if core_tokens:
+            primary_token = core_tokens[0]
+            if primary_token in self.PROFESSION_SLUG_MAP:
+                return self.PROFESSION_SLUG_MAP[primary_token]
+            for key, slug in self.PROFESSION_SLUG_MAP.items():
+                if key in primary_token or primary_token in key:
+                    return slug
+            return slugify_german(primary_token)
+
         if clean in self.PROFESSION_SLUG_MAP:
             return self.PROFESSION_SLUG_MAP[clean]
         for key, slug in self.PROFESSION_SLUG_MAP.items():
@@ -93,16 +110,17 @@ class AzubiyoScraper:
             urls.append(f"https://www.azubiyo.de/ausbildung/{loc_slug}/{kw_slug}/")
             urls.append(f"https://www.azubiyo.de/ausbildung/{kw_slug}/{loc_slug}/")
 
-        # 2. Location only
-        if loc_slug:
-            urls.append(f"https://www.azubiyo.de/ausbildung/{loc_slug}/")
-
-        # 3. Profession only
+        # 2. Profession only
         if kw_slug:
             urls.append(f"https://www.azubiyo.de/ausbildung/{kw_slug}/")
 
-        # 4. Fallback: general current vacancies
-        urls.append("https://www.azubiyo.de/ausbildung/aktuelle-ausbildungsplaetze/")
+        # 3. Location only (ONLY if no keyword specified, to prevent returning unrelated jobs)
+        if loc_slug and not kw_slug:
+            urls.append(f"https://www.azubiyo.de/ausbildung/{loc_slug}/")
+
+        # 4. Fallback: general current vacancies (only if nothing specific)
+        if not kw_slug:
+            urls.append("https://www.azubiyo.de/ausbildung/aktuelle-ausbildungsplaetze/")
 
         return urls
 
@@ -115,13 +133,16 @@ class AzubiyoScraper:
         """
         Fetches apprenticeship positions from Azubiyo.de.
         Extracts titles, companies, locations, start dates, salaries, and application links.
+        Applies relevance validation to avoid returning unrelated professions or distant locations.
         """
+        from .search_filter_engine import is_profession_relevant, is_location_relevant
+
         candidate_urls = self.build_candidate_urls(keyword, location)
         all_jobs: List[Dict] = []
         seen_refs = set()
 
-        search_kw = str(keyword or "").strip().lower()
-        search_loc = str(location or "").strip().lower()
+        search_kw = str(keyword or "").strip()
+        search_loc = str(location or "").strip()
 
         logger.info(
             "Azubiyo fetch start: keyword='%s', location='%s', max_jobs=%s",
@@ -146,7 +167,6 @@ class AzubiyoScraper:
                 soup = bs4.BeautifulSoup(resp.text, "html.parser")
                 cards = soup.find_all("div", class_=lambda c: c and "job-offer-teaser" in c)
                 if not cards:
-                    # Alternative selector if class names vary
                     cards = soup.find_all(
                         "div",
                         class_=lambda c: c and ("card" in c and any("job" in x.lower() for x in c)),
@@ -163,10 +183,9 @@ class AzubiyoScraper:
                     if not ref or ref in seen_refs:
                         continue
 
-                    # If we used a broad fallback URL, apply gentle keyword/location matching
+                    # If broad fallback URL was used, apply gentle check
                     if search_kw and target_url.endswith("/aktuelle-ausbildungsplaetze/"):
-                        title_lower = job.get("title", "").lower()
-                        if not any(w in title_lower for w in search_kw.split()):
+                        if not is_profession_relevant(job.get("title", ""), job.get("hauptberuf", ""), search_kw):
                             continue
 
                     seen_refs.add(ref)
@@ -176,8 +195,7 @@ class AzubiyoScraper:
 
                 logger.info("Found %s total valid jobs from %s", len(all_jobs), target_url)
 
-                # If primary specific URL succeeded with good results, we don't need fallback
-                if len(all_jobs) > 0 and not target_url.endswith("/aktuelle-ausbildungsplaetze/"):
+                if len(all_jobs) >= max_jobs or (len(all_jobs) > 0 and not target_url.endswith("/aktuelle-ausbildungsplaetze/")):
                     break
 
             except Exception as exc:
@@ -190,6 +208,8 @@ class AzubiyoScraper:
 
     def _parse_cards(self, cards: List[bs4.Tag]) -> List[Dict]:
         """Parses Azubiyo job card DOM tags into standard job dictionaries."""
+        from .search_filter_engine import clean_extracted_location
+
         parsed: List[Dict] = []
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -223,8 +243,8 @@ class AzubiyoScraper:
                 # 4. Details list (Start date, location, salary)
                 ul = card.find("ul")
                 start_date = "nach Absprache"
-                location = "Deutschland"
-                city = "Deutschland"
+                location = "k. A."
+                city = "k. A."
                 postal_code = "N/A"
                 salary = None
 
@@ -239,18 +259,13 @@ class AzubiyoScraper:
                         # Salary check: e.g. 1.250 € pro Monat
                         elif any(s in txt for s in ["€", "EUR", "pro Monat", "Vergütung"]):
                             salary = txt
-                        # Location check
+                        # Location check (ignoring badges like 'Video', 'Online', 'Duales Studium')
                         elif len(txt) > 2:
-                            clean_loc = re.sub(r"\(u\.a\.\)", "", txt).strip()
-                            plz_match = re.search(r"(\d{5})\s+(.+)", clean_loc)
-                            if plz_match:
-                                postal_code = plz_match.group(1)
-                                city = plz_match.group(2).strip()
-                                location = f"{postal_code} {city}"
-                            else:
-                                location = clean_loc
-                                if "standort" not in clean_loc.lower():
-                                    city = clean_loc
+                            loc_meta = clean_extracted_location(txt)
+                            if loc_meta["city"] != "k. A." or loc_meta["location"] != "k. A.":
+                                location = loc_meta["location"]
+                                city = loc_meta["city"]
+                                postal_code = loc_meta["postal_code"]
 
                 parsed.append(
                     {
@@ -261,7 +276,7 @@ class AzubiyoScraper:
                         "postal_code": postal_code,
                         "reference": ref,
                         "job_type": "Ausbildung",
-                        "published_date": now_str[:10],
+                        "published_date": "k. A.",
                         "start_date": start_date,
                         "vacancies": "1 Platz",
                         "salary": salary,
@@ -278,3 +293,4 @@ class AzubiyoScraper:
                 logger.debug("Failed parsing Azubiyo card: %s", exc)
 
         return parsed
+

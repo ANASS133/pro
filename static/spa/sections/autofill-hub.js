@@ -16,13 +16,13 @@
         const btnNewProfile = document.getElementById("autofill-btn-new-profile");
         const btnSaveProfile = document.getElementById("autofill-btn-save-profile");
         const statusBar = document.getElementById("autofill-status-bar");
-        const summaryBar = document.getElementById("candidate-summary-bar");
+        const unsavedBadge = document.getElementById("autofill-unsaved-badge");
         const avatarEl = document.getElementById("candidate-avatar");
         const displayNameEl = document.getElementById("candidate-display-name");
         const displayMetaEl = document.getElementById("candidate-display-meta");
         const docCountEl = document.getElementById("candidate-doc-count");
-        const tabBtns = Array.from(root.querySelectorAll(".hub-tab-btn"));
-        const tabPanes = Array.from(root.querySelectorAll(".hub-tab-pane"));
+        const tabBtns = Array.from(root.querySelectorAll(".af-tab-btn, .hub-tab-btn"));
+        const tabPanes = Array.from(root.querySelectorAll(".af-tab-pane, .hub-tab-pane"));
 
         // Form Fields
         const fProfileId = document.getElementById("af-profile-id");
@@ -60,11 +60,15 @@
         const rawJsonEl = document.getElementById("af-raw-json");
 
         // Sandbox Elements
+        const sandboxCard = document.getElementById("af-sandbox-card");
+        const btnExpandSandbox = document.getElementById("btn-expand-sandbox");
         const btnLoadDeForm = document.getElementById("btn-load-de-form");
         const btnLoadFrForm = document.getElementById("btn-load-fr-form");
         const btnRefreshSandbox = document.getElementById("btn-refresh-sandbox");
         const linkOpenSandboxTab = document.getElementById("link-open-sandbox-tab");
         const sandboxIframe = document.getElementById("autofill-sandbox-iframe");
+        const sandboxUrlPill = document.getElementById("af-current-sandbox-url");
+        const browserAddressText = document.getElementById("af-browser-address-text");
 
         // History
         const btnRefreshHistory = document.getElementById("autofill-refresh-history");
@@ -74,6 +78,27 @@
         let currentProfileData = null;
         let cachedProfiles = [];
         let isSaving = false;
+        let isDirty = false;
+
+        function markDirty(dirty) {
+            isDirty = Boolean(dirty);
+            if (unsavedBadge) {
+                unsavedBadge.hidden = !isDirty;
+            }
+        }
+
+        // Listen for input changes across all form fields
+        const allFormInputs = [
+            fLanguage, fFirstName, fLastName, fFullName, fDob, fPob, fNationality, fGender,
+            fEmail, fPhone, fStreet, fHouseNo, fPostal, fCity, fCountry, fCountryCode,
+            fLinkedin, fPortfolio, fGithub,
+            fCurrentTitle, fHeadline, fSummary, fPrimaryFields, rawJsonEl
+        ].filter(Boolean);
+
+        allFormInputs.forEach(input => {
+            input.addEventListener("input", () => markDirty(true));
+            input.addEventListener("change", () => markDirty(true));
+        });
 
         function setStatus(msg, isError) {
             if (!statusBar) return;
@@ -120,19 +145,47 @@
             });
         });
 
+        // --- Sandbox Expand / Fullscreen Toggle ---
+        if (btnExpandSandbox && sandboxCard) {
+            const expandIcon = btnExpandSandbox.querySelector(".expand-icon");
+            const shrinkIcon = btnExpandSandbox.querySelector(".shrink-icon");
+
+            btnExpandSandbox.addEventListener("click", () => {
+                const isExpanded = sandboxCard.classList.toggle("is-expanded");
+                if (expandIcon) expandIcon.hidden = isExpanded;
+                if (shrinkIcon) shrinkIcon.hidden = !isExpanded;
+            });
+
+            document.addEventListener("keydown", (e) => {
+                if (e.key === "Escape" && sandboxCard.classList.contains("is-expanded")) {
+                    sandboxCard.classList.remove("is-expanded");
+                    if (expandIcon) expandIcon.hidden = false;
+                    if (shrinkIcon) shrinkIcon.hidden = true;
+                }
+            });
+        }
+
         // --- Sandbox Handlers ---
         if (btnLoadDeForm && btnLoadFrForm && sandboxIframe) {
             btnLoadDeForm.addEventListener("click", () => {
                 btnLoadDeForm.classList.add("is-active");
+                btnLoadDeForm.setAttribute("aria-selected", "true");
                 btnLoadFrForm.classList.remove("is-active");
+                btnLoadFrForm.setAttribute("aria-selected", "false");
                 sandboxIframe.src = "/test-form";
+                if (sandboxUrlPill) sandboxUrlPill.textContent = "/test-form";
+                if (browserAddressText) browserAddressText.textContent = "http://localhost:5000/test-form";
                 if (linkOpenSandboxTab) linkOpenSandboxTab.href = "/test-form";
             });
 
             btnLoadFrForm.addEventListener("click", () => {
                 btnLoadFrForm.classList.add("is-active");
+                btnLoadFrForm.setAttribute("aria-selected", "true");
                 btnLoadDeForm.classList.remove("is-active");
+                btnLoadDeForm.setAttribute("aria-selected", "false");
                 sandboxIframe.src = "/french-form";
+                if (sandboxUrlPill) sandboxUrlPill.textContent = "/french-form";
+                if (browserAddressText) browserAddressText.textContent = "http://localhost:5000/french-form";
                 if (linkOpenSandboxTab) linkOpenSandboxTab.href = "/french-form";
             });
 
@@ -185,6 +238,7 @@
                 const data = await res.json();
                 currentProfileData = data;
                 renderProfileForm(data);
+                markDirty(false);
                 setStatus("");
                 await Promise.all([
                     loadDocuments(profileId),
@@ -197,6 +251,13 @@
         }
 
         profileSelector?.addEventListener("change", (e) => {
+            if (isDirty) {
+                const proceed = confirm("Es gibt ungespeicherte Änderungen am aktuellen Profil. Möchten Sie wirklich wechseln und die Änderungen verwerfen?");
+                if (!proceed) {
+                    profileSelector.value = currentProfileId;
+                    return;
+                }
+            }
             selectProfile(e.target.value);
         });
 
@@ -348,6 +409,7 @@
 
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const result = await res.json();
+                markDirty(false);
                 setStatus("✓ Profil erfolgreich gespeichert!");
                 await loadProfilesList(result.profileId || profileId);
             } catch (err) {
@@ -361,6 +423,10 @@
 
         // --- New Profile ---
         btnNewProfile?.addEventListener("click", () => {
+            if (isDirty) {
+                const proceed = confirm("Es gibt ungespeicherte Änderungen. Möchten Sie wirklich ein neues Profil erstellen und die Änderungen verwerfen?");
+                if (!proceed) return;
+            }
             const newId = prompt("Bitte Profil-ID / Kürzel eingeben (z. B. max_mustermann):");
             if (!newId) return;
             const cleanId = newId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_");
@@ -379,6 +445,7 @@
             fProfileId.value = cleanId;
             fProfileId.readOnly = false;
             renderProfileForm(currentProfileData);
+            markDirty(true);
             documentListEl.innerHTML = '<div class="doc-empty-state">Neues Profil. Bitte Unterlagen hochladen.</div>';
             setStatus(`Neues Profil "${cleanId}" vorbereitet. Daten ausfüllen und "Profil speichern" klicken.`);
         });
@@ -395,7 +462,7 @@
                 if (docCountEl) docCountEl.textContent = `${docs.length} Dokument${docs.length === 1 ? "" : "e"}`;
 
                 if (!docs.length) {
-                    documentListEl.innerHTML = '<div class="doc-empty-state">Keine Dokumente für dieses Profil hinterlegt. Lade ein Dokument oben hoch.</div>';
+                    documentListEl.innerHTML = '<div class="doc-empty-state">Keine Dokumente für dieses Profil hinterlegt. Laden Sie ein Dokument oben hoch.</div>';
                     return;
                 }
 
@@ -403,7 +470,7 @@
                     const ext = (doc.extension || "").toUpperCase();
                     const sizeKb = Math.round((doc.size || 0) / 1024);
                     return `
-                        <div class="hub-doc-row" data-filename="${escapeHtml(doc.fileName)}">
+                        <div class="af-doc-row" data-filename="${escapeHtml(doc.fileName)}">
                             <div class="doc-info">
                                 <span class="doc-ext-badge ${ext.toLowerCase()}">${escapeHtml(ext)}</span>
                                 <div class="doc-text">
@@ -479,7 +546,7 @@
                 const list = data.corrections || [];
 
                 if (!list.length) {
-                    correctionsListEl.innerHTML = '<div class="doc-empty-state">Noch keine erlernten Feld-Korrekturen gespeichert. Wenn Du in der Extension ein Feld anpasst, wird es hier erfasst.</div>';
+                    correctionsListEl.innerHTML = '<div class="doc-empty-state">Noch keine erlernten Feld-Korrekturen gespeichert. Wenn Sie in der Extension ein Feld anpassen, wird es hier erfasst.</div>';
                     return;
                 }
 
@@ -492,7 +559,7 @@
                         <div class="corr-val">
                             Wert: <strong>${escapeHtml(c.correctedValue || "")}</strong>
                         </div>
-                        <button type="button" class="corr-del-btn" data-del-corr="${escapeHtml(c.id || "")}">✕</button>
+                        <button type="button" class="corr-del-btn" data-del-corr="${escapeHtml(c.id || "")}" title="Löschen">✕</button>
                     </div>
                 `).join("");
 
@@ -531,7 +598,7 @@
                 const apps = data.applications || [];
 
                 if (!apps.length) {
-                    historyBody.innerHTML = '<tr><td colspan="6" class="history-empty">Noch keine Bewerbungen über Autofill erfasst. Klicke bei einer Stelle auf "⚡ Open & Autofill", um direkt zu starten!</td></tr>';
+                    historyBody.innerHTML = '<tr><td colspan="6" class="af-history-empty">Noch keine Bewerbungen über Autofill erfasst. Klicke bei einer Stelle auf "⚡ Open & Autofill", um direkt zu starten!</td></tr>';
                     return;
                 }
 
@@ -547,17 +614,17 @@
                         <tr>
                             <td><strong>${title}</strong></td>
                             <td>${company}</td>
-                            <td><span class="hub-pill">${profile}</span></td>
-                            <td><span class="hub-pill pill-success">${fields} Felder</span></td>
+                            <td><span class="hub-pill af-history-pill">${profile}</span></td>
+                            <td><span class="hub-pill af-history-pill pill-success">${fields} Felder</span></td>
                             <td><small>${date}</small></td>
-                            <td>
+                            <td style="text-align: right;">
                                 <a href="${url}" target="_blank" rel="noopener noreferrer" class="history-action-btn">Öffnen ↗</a>
                             </td>
                         </tr>
                     `;
                 }).join("");
             } catch (err) {
-                historyBody.innerHTML = '<tr><td colspan="6" class="history-empty">Verlauf konnte nicht geladen werden.</td></tr>';
+                historyBody.innerHTML = '<tr><td colspan="6" class="af-history-empty">Verlauf konnte nicht geladen werden.</td></tr>';
             }
         }
 

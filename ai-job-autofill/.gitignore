@@ -5,6 +5,7 @@ node_modules/
 server/profile.json
 server/profiles/*.json
 !server/profiles/template.json
+!server/profiles/anass_sibbi.json
 server/profiles/*/*
 profils/
 *.log

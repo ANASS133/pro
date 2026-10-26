@@ -13,15 +13,16 @@ from selenium.webdriver.common.by import By
 
 from .browser_driver import find_browser, new_options, start_driver
 from .true_captcha_solver import TrueCaptchaSolver
+from .application_form_discovery import (
+    ApplicationFormDiscovery,
+    classify_application_method,
+    normalize_job_opportunity_row,
+)
 
 logger = logging.getLogger(__name__)
-NAME_PATTERN = r"[A-ZÃ„Ã–Ãœ][A-Za-zÃ„Ã–ÃœÃ¤Ã¶Ã¼ÃŸ'.-]+"
+NAME_PATTERN = r"[A-ZÄÖÜ][A-Za-zÄÖÜäöüß'.-]+"
 ARBEITGEBER_PATTERN = re.compile(
-    rf"\b(?:Frau|Herr|Herrn)\s+{NAME_PATTERN}(?:\s+{NAME_PATTERN}){{0,3}}\b"
-)
-ARBEITGEBER_NAME_TOKEN_PATTERN = r"[^\W\d_][\w'.-]*"
-ARBEITGEBER_PATTERN = re.compile(
-    rf"\b(?:Frau|Herr|Herrn)\s+{ARBEITGEBER_NAME_TOKEN_PATTERN}\b",
+    rf"\b(?:Frau|Herr|Herrn)\s+(?:(?:Dr|Prof)\.?\s+)?{NAME_PATTERN}(?:\s+{NAME_PATTERN}){{0,3}}\b",
     re.IGNORECASE,
 )
 PROGRESS_DIR = Path("data") / "progress"
@@ -50,6 +51,7 @@ class WorkingEmailExtractor:
         self.captcha_solver = TrueCaptchaSolver(captcha_userid, captcha_apikey)
         self.setup_driver(headless)
         self.known_emails = {self._normalize_email(e) for e in (known_emails or set()) if e}
+        self.form_discovery = ApplicationFormDiscovery()
         self.stats = {
             "processed": 0,
             "emails_found": 0,
@@ -117,7 +119,7 @@ class WorkingEmailExtractor:
             "kein roboter",
             "captcha",
             "unusual traffic",
-            "ungewÃ¶hnlicher verkehr",
+            "ungewöhnlicher verkehr",
         ]
         return any(ind in text for ind in indicators)
 
@@ -302,7 +304,70 @@ class WorkingEmailExtractor:
         if delay_seconds > 0:
             time.sleep(delay_seconds)
 
-    def process_job(self, job: Dict, delay_seconds: float = 3.0) -> Dict:
+    def process_job(
+        self,
+        job: Dict,
+        delay_seconds: float = 3.0,
+        profession_keyword: str = "",
+    ) -> Dict:
+        """
+        Processes a job or employer opportunity following source-specific rules:
+
+        Job portals: Email first; if missing, inspect website & discover application form.
+        Google Maps: Mandatory website inspection to verify an active matching Ausbildung advertisement,
+                     regardless of email availability.
+        """
+        source = str(job.get("source") or "").strip().lower()
+        is_google_maps = (
+            "maps" in source
+            or "google" in source
+            or bool(job.get("maps_url"))
+            or job.get("category")
+        )
+
+        # ----------------------------------------------------------------------
+        # 1. Google Maps — Mandatory Exception
+        # ----------------------------------------------------------------------
+        if is_google_maps:
+            from .google_maps_ausbildung_verifier import GoogleMapsAusbildungVerifier
+
+            search_kw = profession_keyword or str(
+                job.get("hauptberuf") or job.get("keyword") or job.get("title") or ""
+            ).strip()
+
+            verifier = GoogleMapsAusbildungVerifier(
+                session=getattr(self.form_discovery, "session", None)
+            )
+            try:
+                verified_job = verifier.verify_business(
+                    job,
+                    profession_keyword=search_kw,
+                    driver=getattr(self, "driver", None),
+                )
+                self.stats["processed"] += 1
+                if verified_job.get("is_verified_vacancy"):
+                    normalized = normalize_job_opportunity_row(verified_job)
+                    normalized_email = self._normalize_email(normalized.get("email"))
+                    if normalized_email and "@" in normalized_email:
+                        if normalized_email not in self.known_emails:
+                            self.stats["emails_found"] += 1
+                            self.known_emails.add(normalized_email)
+                    return normalized
+                else:
+                    # Retain as unconfirmed potential employer
+                    return verified_job
+            except Exception as exc:
+                logger.error("Error verifying Google Maps business %s: %s", job.get("company") or job.get("name"), exc)
+                job["is_verified_vacancy"] = False
+                job["verification_status"] = "error"
+                job["verification_notes"] = f"Fehler bei Website-Prüfung: {exc}"
+                job["status"] = "Verifizierung fehlgeschlagen (Fehler)"
+                self.stats["failed"] += 1
+                return job
+
+        # ----------------------------------------------------------------------
+        # 2. All Job Portals (Arbeitsagentur, Ausbildung.de, Azubiyo, AUBI-plus, IHK)
+        # ----------------------------------------------------------------------
         try:
             self.open_job(job, delay_seconds=delay_seconds)
 
@@ -315,37 +380,40 @@ class WorkingEmailExtractor:
                     job["phone"] = None
                     job["email_extracted"] = False
                     self.stats["failed"] += 1
-                    return job
+                    return normalize_job_opportunity_row(job)
 
             email, phone, arbeitsgeber = self.extract_contact_info()
             apply_url = self.extract_application_link(fallback_url=job.get("url", ""))
 
             normalized_email = self._normalize_email(email)
-            if normalized_email and normalized_email in self.known_emails:
-                job["email"] = "DUPLICATE_EMAIL_SKIPPED"
-                job["phone"] = phone
-                job["arbeitsgeber"] = arbeitsgeber
-                job["email_extracted"] = False
-                job["apply_url"] = apply_url
-                job["form_link"] = apply_url
-                job["has_form"] = bool(apply_url)
-                job["application_method"] = "form"
-                self.stats["processed"] += 1
-                return job
+            has_valid_email = bool(normalized_email and "@" in normalized_email)
 
-            job["email"] = email
+            job["email"] = email if has_valid_email else ""
             job["phone"] = phone
             job["arbeitsgeber"] = arbeitsgeber
-            job["email_extracted"] = bool(normalized_email)
-            job["apply_url"] = apply_url
-            job["form_link"] = apply_url
-            job["has_form"] = bool(apply_url)
-            job["application_method"] = "email" if normalized_email else "form"
+            job["email_extracted"] = has_valid_email
+            job["apply_url"] = apply_url or job.get("url", "")
+
+            # Job portals: Email first; if missing, discover the application form.
+            if has_valid_email:
+                # Valid email exists -> save alongside job info immediately
+                job["has_form"] = False
+                job["form_link"] = ""
+                job["bewerbung_link"] = apply_url or job.get("url", "")
+                job = normalize_job_opportunity_row(job, discovery_result=None)
+            else:
+                # If no email exists, inspect original job ad & company website for application form
+                discovery = self.form_discovery.discover_application_form(
+                    job,
+                    driver=getattr(self, "driver", None),
+                )
+                job = normalize_job_opportunity_row(job, discovery_result=discovery)
 
             self.stats["processed"] += 1
-            if normalized_email:
-                self.stats["emails_found"] += 1
-                self.known_emails.add(normalized_email)
+            if has_valid_email:
+                if normalized_email not in self.known_emails:
+                    self.stats["emails_found"] += 1
+                    self.known_emails.add(normalized_email)
 
         except Exception as exc:
             logger.error("Error processing job: %s", exc)
@@ -354,9 +422,7 @@ class WorkingEmailExtractor:
             job["arbeitsgeber"] = None
             job["email_extracted"] = False
             job["apply_url"] = job.get("url", "")
-            job["form_link"] = job.get("url", "")
-            job["has_form"] = bool(job.get("url"))
-            job["application_method"] = "form"
+            job = normalize_job_opportunity_row(job)
             self.stats["failed"] += 1
 
         return job

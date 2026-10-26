@@ -1,6 +1,7 @@
 import logging
 import re
 import time
+from datetime import datetime
 from typing import Dict, List, Optional
 
 import requests
@@ -41,6 +42,8 @@ class EnhancedJobScraper:
         location: str = "",
         max_jobs: int = 8000,
         published_since_days: Optional[int] = None,
+        angebotsart: int = 4,
+        umkreis: Optional[int] = None,
     ) -> List[Dict]:
         """Fetch all available jobs until max_jobs or no more results."""
         all_jobs: List[Dict] = []
@@ -49,11 +52,18 @@ class EnhancedJobScraper:
         size = 25
 
         search_keyword = self.normalize_keyword(keyword)
-        logger.info("Start fetch: keyword=%s location=%s max_jobs=%s", search_keyword, location, max_jobs)
+        logger.info(
+            "Start fetch: keyword=%s location=%s max_jobs=%s angebotsart=%s umkreis=%s",
+            search_keyword,
+            location,
+            max_jobs,
+            angebotsart,
+            umkreis,
+        )
 
         while len(all_jobs) < max_jobs:
             params = {
-                "angebotsart": 4,
+                "angebotsart": int(angebotsart),
                 "was": search_keyword,
                 "page": page,
                 "size": size,
@@ -62,6 +72,8 @@ class EnhancedJobScraper:
             }
             if location.strip():
                 params["wo"] = location.strip()
+                if umkreis is not None and int(umkreis) > 0:
+                    params["umkreis"] = int(umkreis)
             if published_since_days is not None:
                 params["veroeffentlichtseit"] = int(published_since_days)
 
@@ -107,35 +119,44 @@ class EnhancedJobScraper:
 
     def parse_jobs(self, jobs_list: List[Dict]) -> List[Dict]:
         """Parse raw API jobs into clean format."""
+        from .search_filter_engine import clean_extracted_location
+
         parsed: List[Dict] = []
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         for job in jobs_list:
             try:
-                city = "N/A"
+                city = "k. A."
                 postal_code = "N/A"
-                location = "N/A"
+                location = "k. A."
 
                 if job.get("stellenlokationen"):
                     addr = job["stellenlokationen"][0].get("adresse", {})
-                    city = addr.get("ort", "N/A")
+                    city = addr.get("ort", "k. A.")
                     postal_code = addr.get("plz", "N/A")
-                    location = f"{postal_code} {city}".strip()
+                    location = f"{postal_code} {city}".strip() if postal_code != "N/A" else city
+
+                loc_meta = clean_extracted_location(location, city)
 
                 reference = job.get("referenznummer", "")
+                raw_pub_date = job.get("veroeffentlichungszeitraum", {}).get("von", "")
+                pub_date = str(raw_pub_date)[:10] if raw_pub_date else "k. A."
 
                 parsed.append(
                     {
                         "title": job.get("stellenangebotsTitel", "N/A"),
                         "company": job.get("firma", "N/A"),
-                        "location": location,
-                        "city": city,
-                        "postal_code": postal_code,
+                        "location": loc_meta["location"],
+                        "city": loc_meta["city"],
+                        "postal_code": loc_meta["postal_code"] if loc_meta["postal_code"] != "N/A" else postal_code,
                         "reference": reference or "N/A",
                         "job_type": "Vollzeit" if job.get("arbeitszeitVollzeit") else "Teilzeit",
-                        "published_date": job.get("veroeffentlichungszeitraum", {}).get("von", "N/A"),
-                        "start_date": job.get("eintrittszeitraum", {}).get("von", "N/A"),
+                        "published_date": pub_date,
+                        "start_date": job.get("eintrittszeitraum", {}).get("von", "nach Absprache"),
                         "hauptberuf": job.get("hauptberuf", "N/A"),
                         "url": f"https://www.arbeitsagentur.de/jobsuche/jobdetail/{reference}" if reference else "",
+                        "source": "Arbeitsagentur",
+                        "scraped_at": now_str,
                         "email_extracted": False,
                         "email": None,
                         "phone": None,
@@ -145,3 +166,4 @@ class EnhancedJobScraper:
                 logger.error("Error parsing job: %s", exc)
 
         return parsed
+

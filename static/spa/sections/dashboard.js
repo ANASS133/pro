@@ -152,52 +152,6 @@
             cardsRoot.innerHTML = items.map(renderCampaignCard).join("");
         }
 
-        async function loadAutofillDashboard() {
-            const listEl = document.getElementById("dashboard-autofill-list");
-            const totalEl = document.getElementById("dash-af-total");
-            const domainsEl = document.getElementById("dash-af-domains");
-            const fieldsEl = document.getElementById("dash-af-fields");
-            if (!listEl) return;
-
-            try {
-                const res = await fetch("/api/autofill/applications");
-                if (!res.ok) return;
-                const data = await res.json();
-                const apps = data.applications || [];
-
-                if (totalEl) totalEl.textContent = String(apps.length);
-                const domains = new Set(apps.map(a => a.domain || "").filter(Boolean));
-                if (domainsEl) domainsEl.textContent = String(domains.size);
-                const totalFields = apps.reduce((sum, a) => sum + (Number(a.fieldsFilled || a.fields_filled || 0)), 0);
-                if (fieldsEl) fieldsEl.textContent = String(totalFields);
-
-                if (!apps.length) {
-                    listEl.innerHTML = '<div class="empty-state">Noch keine Autofill-Bewerbungen erfasst. Starte eine Bewerbung über "⚡ Open & Autofill"!</div>';
-                    return;
-                }
-
-                listEl.innerHTML = apps.slice(0, 6).map(app => {
-                    const title = escapeHtml(app.title || "Job Application");
-                    const company = escapeHtml(app.company || app.domain || "Unternehmen");
-                    const date = escapeHtml(app.date || app.created_at || "");
-                    const fields = Number(app.fieldsFilled || app.fields_filled || 0);
-                    const url = escapeHtml(app.url || "#");
-                    return `
-                        <div class="dash-af-item">
-                            <div class="dash-af-main">
-                                <strong>${title}</strong>
-                                <span class="dash-af-sub">${company} &bull; ${date}</span>
-                            </div>
-                            <div class="dash-af-badge">
-                                <span class="hub-pill pill-success">${fields} Felder</span>
-                                ${url !== "#" ? `<a href="${url}" target="_blank" rel="noopener noreferrer" class="dash-af-link">Öffnen ↗</a>` : ""}
-                            </div>
-                        </div>
-                    `;
-                }).join("");
-            } catch (e) {}
-        }
-
         async function loadDashboard() {
             if (isLoading) {
                 return;
@@ -205,10 +159,7 @@
 
             isLoading = true;
             try {
-                const [payload] = await Promise.all([
-                    fetchJson("/api/dashboard/campaigns"),
-                    loadAutofillDashboard()
-                ]);
+                const payload = await fetchJson("/api/dashboard/campaigns");
                 if (!payload.success || !Array.isArray(payload.campaigns)) {
                     throw new Error(payload.message || "Dashboard-Daten konnten nicht geladen werden");
                 }

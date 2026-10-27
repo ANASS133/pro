@@ -103,6 +103,8 @@
         const dDeleteBtn = document.getElementById("sp-d-delete-btn");
         const copyEmailBtn = document.getElementById("sp-copy-email");
         const copyWhatsappBtn = document.getElementById("sp-copy-whatsapp");
+        const dOnboardContainer = document.getElementById("sp-d-onboard-container");
+        const dOnboardBtn = document.getElementById("sp-d-onboard-btn");
 
         const APPLICATION_STORAGE_PREFIX = "create-anschreibens:application:";
         const LAST_APPLICATION_KEY = "create-anschreibens:last-application";
@@ -118,6 +120,8 @@
         const signedDocumentCache = new Map();
         const selectedIds = new Set();
         let activeApplicant = null;
+        let onboardingRecords = {};
+        const importingIds = new Set();
 
         // User Preferences with Defaults
         const defaultPreferences = {
@@ -240,6 +244,35 @@
                 .replace(/^\d{10,14}[_-]?/, "");
 
             return stripped || "Dokument.pdf";
+        }
+
+        function renderOnboardingAction(app, isCompact = false) {
+            if (importingIds.has(app.id)) {
+                return `
+                    <button type="button" class="sp-btn-action-onboard is-loading" disabled>
+                        <span class="sp-spin-inline">&#9696;</span> <span>Importiere...</span>
+                    </button>
+                `;
+            }
+            if (!app.is_payed) {
+                return `<button type="button" class="sp-onboard-pill is-pending" data-action="details" data-app-id="${escapeHtml(app.id)}" title="Zahlung muss vor dem Import verifiziert werden (Klicken für Details)" style="cursor: pointer; background: #f1f5f9; border: 1px dashed #cbd5e1;">Zahlung ausstehend</button>`;
+            }
+
+            const rec = onboardingRecords[app.id];
+            if (rec && (rec.status === "READY" || rec.status === "PROFILE_REVIEW_REQUIRED" || rec.jobscout_client_id)) {
+                const clientId = escapeHtml(rec.jobscout_client_id || "");
+                return `
+                    <span class="sp-onboard-badge is-imported" title="Bewerber-Profil existiert">&#10003; Bewerber importiert</span>
+                    <button type="button" class="sp-btn-link-profile" data-action="open-candidate" data-client-id="${clientId}" title="In Autofill Hub öffnen">Profil öffnen &rarr;</button>
+                `;
+            }
+
+            const label = (rec && rec.status === "IMPORT_FAILED") ? "Erneut importieren" : "Als Bewerber importieren";
+            return `
+                <button type="button" class="sp-btn-action-onboard" data-action="onboard" data-app-id="${escapeHtml(app.id)}" title="Automatisches Onboarding in JobScout starten">
+                    <span>${label}</span>
+                </button>
+            `;
         }
 
         function normalizeDocumentPaths(value) {
@@ -480,7 +513,7 @@
                     <span>${escapeHtml(c.label)}</span>
                     <button type="button" class="sp-chip-remove" data-chip-idx="${i}" title="Filter entfernen">&times;</button>
                 </span>
-            `).join("") + '<button type="button" id="sp-chip-clear-all" class="sp-btn-link-sm">Alle Filter löschen</button>';
+            `).join("") + '<button type="button" id="sp-chip-clear-all" class="sp-btn-link-sm">Clear all filters</button>';
 
             activeFilterChips.querySelectorAll("[data-chip-idx]").forEach(btn => {
                 btn.addEventListener("click", () => {
@@ -620,9 +653,10 @@
                             ` : ""}
                         </div>
 
-                        <div class="sp-card-actions" onclick="event.stopPropagation()">
+                        <div class="sp-card-actions">
                             <button type="button" class="sp-btn-action-ghost" data-action="details" data-app-id="${escapeHtml(app.id)}">Details</button>
                             <button type="button" class="sp-btn-action-primary" data-action="next-step" data-app-id="${escapeHtml(app.id)}">Next step</button>
+                            ${renderOnboardingAction(app)}
                             ${!app.is_payed ? `
                                 <button type="button" class="sp-btn-action-ghost" data-action="pay" data-app-id="${escapeHtml(app.id)}" title="Als bezahlt markieren">✓ Bezahlt</button>
                             ` : ""}
@@ -631,9 +665,10 @@
                 `;
             }).join("");
 
-            // Click card opens drawer
+            // Click card opens drawer (unless clicked on action buttons)
             cardsView.querySelectorAll(".sp-card").forEach(card => {
-                card.addEventListener("click", () => {
+                card.addEventListener("click", (e) => {
+                    if (e.target.closest("[data-action]") || e.target.closest(".sp-card-actions")) return;
                     const id = card.dataset.appId;
                     openDetailsDrawer(id);
                 });
@@ -669,8 +704,12 @@
                             ${vis.date ? `<span class="sp-compact-sub">${escapeHtml(app.created_at_display)}</span>` : ""}
                         </div>
 
-                        <div class="sp-compact-right" onclick="event.stopPropagation()">
+                        <div class="sp-compact-right">
                             ${vis.status ? statusBadge : ""}
+                            ${renderOnboardingAction(app, true)}
+                            ${!app.is_payed ? `
+                                <button type="button" class="sp-btn-action-ghost" data-action="pay" data-app-id="${escapeHtml(app.id)}" title="Als bezahlt markieren">✓ Bezahlt</button>
+                            ` : ""}
                             <button type="button" class="sp-btn-action-ghost" data-action="details" data-app-id="${escapeHtml(app.id)}">Details</button>
                             <button type="button" class="sp-btn-action-primary" data-action="next-step" data-app-id="${escapeHtml(app.id)}">Next step</button>
                         </div>
@@ -679,7 +718,8 @@
             }).join("");
 
             compactView.querySelectorAll(".sp-compact-row").forEach(row => {
-                row.addEventListener("click", () => {
+                row.addEventListener("click", (e) => {
+                    if (e.target.closest("[data-action]") || e.target.closest(".sp-compact-right")) return;
                     const id = row.dataset.appId;
                     openDetailsDrawer(id);
                 });
@@ -707,7 +747,7 @@
 
                 return `
                     <tr class="${isSelected ? "is-selected" : ""}" data-app-id="${escapeHtml(app.id)}">
-                        <td class="td-checkbox" onclick="event.stopPropagation()">
+                        <td class="td-checkbox">
                             <input type="checkbox" class="sp-row-checkbox" data-app-id="${escapeHtml(app.id)}" ${isSelected ? "checked" : ""}>
                         </td>
                         <td>
@@ -728,8 +768,12 @@
                         <td data-col="status">${statusBadge}</td>
                         <td data-col="documents"><span class="sp-tag-pill sp-pill-doc">${app.document_count} Dok.</span></td>
                         <td data-col="date"><small>${escapeHtml(app.created_at_display)}</small></td>
-                        <td class="td-actions" onclick="event.stopPropagation()">
-                            <div style="display: flex; gap: 6px; justify-content: flex-end;">
+                        <td class="td-actions">
+                            <div style="display: flex; gap: 6px; justify-content: flex-end; align-items: center;">
+                                ${renderOnboardingAction(app, true)}
+                                ${!app.is_payed ? `
+                                    <button type="button" class="sp-btn-action-ghost" data-action="pay" data-app-id="${escapeHtml(app.id)}" title="Als bezahlt markieren">✓ Bezahlt</button>
+                                ` : ""}
                                 <button type="button" class="sp-btn-action-ghost" data-action="details" data-app-id="${escapeHtml(app.id)}">Details</button>
                                 <button type="button" class="sp-btn-action-primary" data-action="next-step" data-app-id="${escapeHtml(app.id)}">Next</button>
                             </div>
@@ -744,9 +788,10 @@
                 if (col in vis) td.hidden = !vis[col];
             });
 
-            // Row click opens drawer
+            // Row click opens drawer (unless clicked on action buttons or checkboxes)
             tableBody.querySelectorAll("tr").forEach(tr => {
-                tr.addEventListener("click", () => {
+                tr.addEventListener("click", (e) => {
+                    if (e.target.closest("[data-action]") || e.target.closest(".td-actions") || e.target.closest(".td-checkbox") || e.target.closest("input")) return;
                     const id = tr.dataset.appId;
                     openDetailsDrawer(id);
                 });
@@ -882,6 +927,9 @@
             // Lazy generate signed URLs for documents in drawer
             renderDrawerDocuments(app.documents);
 
+            // Render Onboarding Dossier Section in Drawer
+            renderDrawerOnboarding(app);
+
             if (drawerBackdrop) drawerBackdrop.hidden = false;
             if (detailsDrawer) detailsDrawer.hidden = false;
         }
@@ -889,7 +937,7 @@
         async function renderDrawerDocuments(paths) {
             if (!dDocsContainer) return;
             if (!paths.length) {
-                dDocsContainer.innerHTML = '<div class="sp-doc-empty">Keine Unterlagen für diese Bewerbung hochgeladen.</div>';
+                dDocsContainer.innerHTML = '<div class="sp-doc-empty">No documents uploaded for this application.</div>';
                 return;
             }
 
@@ -910,7 +958,7 @@
                             <div class="sp-doc-item">
                                 <div class="sp-doc-info">
                                     <span class="sp-doc-badge">DOC</span>
-                                    <span class="sp-doc-name">${escapeHtml(doc.name)} (nicht verfügbar)</span>
+                                    <span class="sp-doc-name">${escapeHtml(doc.name)} (unavailable)</span>
                                 </div>
                             </div>
                         `;
@@ -981,7 +1029,7 @@
         dPayToggleBtn?.addEventListener("click", async () => {
             if (!activeApplicant || activeApplicant.is_payed) return;
             dPayToggleBtn.disabled = true;
-            dPayToggleBtn.textContent = "Wird gespeichert...";
+            dPayToggleBtn.textContent = "Saving...";
             try {
                 await markAsPayed(activeApplicant.id);
                 openDetailsDrawer(activeApplicant.id);
@@ -1001,23 +1049,263 @@
         dDeleteBtn?.addEventListener("click", () => {
             if (activeApplicant) deleteApplication(activeApplicant.id);
         });
+        dOnboardBtn?.addEventListener("click", () => {
+            const action = dOnboardBtn.dataset.action;
+            if (action === "onboard" && activeApplicant) {
+                handleOnboardCandidate(activeApplicant.id);
+            } else if (action === "open-candidate") {
+                handleOpenCandidate(dOnboardBtn.dataset.clientId);
+            }
+        });
+
+        function renderDrawerOnboarding(app) {
+            if (!dOnboardContainer) return;
+            const rec = onboardingRecords[app.id];
+            const isImporting = importingIds.has(app.id);
+
+            let statusLabel = "Noch nicht importiert";
+            let statusPillClass = "sp-onboard-pill is-pending";
+
+            if (isImporting) {
+                statusLabel = "Import läuft...";
+                statusPillClass = "sp-btn-action-onboard is-loading";
+            } else if (!app.is_payed) {
+                statusLabel = "Zahlung ausstehend";
+                statusPillClass = "sp-onboard-pill is-pending";
+            } else if (rec) {
+                switch (rec.status) {
+                    case "READY":
+                        statusLabel = "Bereit (Profil angelegt)";
+                        statusPillClass = "sp-onboard-badge is-imported";
+                        break;
+                    case "PROFILE_REVIEW_REQUIRED":
+                        statusLabel = "Überprüfung empfohlen";
+                        statusPillClass = "sp-onboard-badge is-imported";
+                        break;
+                    case "IMPORT_FAILED":
+                        statusLabel = "Import fehlgeschlagen";
+                        statusPillClass = "sp-onboard-pill is-pending";
+                        break;
+                    case "IMPORTING":
+                        statusLabel = "Import läuft...";
+                        statusPillClass = "sp-btn-action-onboard is-loading";
+                        break;
+                    default:
+                        statusLabel = rec.status || "Bereit für Import";
+                        statusPillClass = "sp-onboard-badge";
+                }
+            }
+
+            const clientId = rec?.jobscout_client_id || "—";
+            const docCount = rec ? `${rec.document_count ?? 0} Dokument(e)` : "—";
+            const cvStatus = rec ? (rec.cv_parsed ? "Erfolgreich extrahiert" : "Keine CV-Extraktion") : "—";
+            const missing = (rec?.missing_fields && rec.missing_fields.length) ? rec.missing_fields.join(", ") : "Keine";
+            const importedAt = rec?.imported_at ? formatCreatedAt(rec.imported_at) : "—";
+
+            dOnboardContainer.innerHTML = `
+                <div class="sp-onboard-card-header">
+                    <span class="sp-onboard-card-title">Dossier-Status</span>
+                    <span class="${statusPillClass}">${escapeHtml(statusLabel)}</span>
+                </div>
+                <div class="sp-onboard-kv-grid">
+                    <div class="sp-onboard-kv-item">
+                        <span class="sp-onboard-kv-label">Client ID</span>
+                        <code class="sp-onboard-kv-value">${escapeHtml(clientId)}</code>
+                    </div>
+                    <div class="sp-onboard-kv-item">
+                        <span class="sp-onboard-kv-label">Importiert am</span>
+                        <span class="sp-onboard-kv-value">${escapeHtml(importedAt)}</span>
+                    </div>
+                    <div class="sp-onboard-kv-item">
+                        <span class="sp-onboard-kv-label">Dokumente</span>
+                        <span class="sp-onboard-kv-value">${escapeHtml(docCount)}</span>
+                    </div>
+                    <div class="sp-onboard-kv-item">
+                        <span class="sp-onboard-kv-label">CV Analyse</span>
+                        <span class="sp-onboard-kv-value">${escapeHtml(cvStatus)}</span>
+                    </div>
+                    <div class="sp-onboard-kv-item" style="grid-column: span 2;">
+                        <span class="sp-onboard-kv-label">Fehlende Angaben</span>
+                        <span class="sp-onboard-kv-value">${escapeHtml(missing)}</span>
+                    </div>
+                </div>
+                ${rec?.last_error ? `
+                    <div class="sp-onboard-error-note">
+                        <strong>Fehler:</strong> ${escapeHtml(rec.last_error)}
+                    </div>
+                ` : ""}
+            `;
+
+            if (dOnboardBtn) {
+                if (isImporting) {
+                    dOnboardBtn.disabled = true;
+                    dOnboardBtn.className = "sp-btn-action-onboard is-loading";
+                    dOnboardBtn.innerHTML = '<span class="sp-spin-inline">&#9696;</span> <span>Importiere...</span>';
+                    dOnboardBtn.dataset.action = "";
+                } else if (!app.is_payed) {
+                    dOnboardBtn.disabled = true;
+                    dOnboardBtn.className = "sp-btn-action-onboard";
+                    dOnboardBtn.textContent = "Zahlung ausstehend";
+                    dOnboardBtn.dataset.action = "";
+                } else if (rec && (rec.status === "READY" || rec.status === "PROFILE_REVIEW_REQUIRED" || rec.jobscout_client_id)) {
+                    dOnboardBtn.disabled = false;
+                    dOnboardBtn.className = "sp-btn-link-profile";
+                    dOnboardBtn.style.padding = "9px 14px";
+                    dOnboardBtn.style.fontSize = "12.5px";
+                    dOnboardBtn.innerHTML = '<span>✓ Profil in Autofill Hub öffnen &rarr;</span>';
+                    dOnboardBtn.dataset.action = "open-candidate";
+                    dOnboardBtn.dataset.clientId = rec.jobscout_client_id || "";
+                } else {
+                    dOnboardBtn.disabled = false;
+                    dOnboardBtn.className = "sp-btn-action-onboard";
+                    dOnboardBtn.style.padding = "9px 14px";
+                    dOnboardBtn.style.fontSize = "12.5px";
+                    dOnboardBtn.textContent = (rec && rec.status === "IMPORT_FAILED") ? "Erneut importieren" : "Als Bewerber importieren";
+                    dOnboardBtn.dataset.action = "onboard";
+                    dOnboardBtn.dataset.appId = app.id;
+                }
+            }
+        }
+
+        async function handleOnboardCandidate(applicationId) {
+            if (!applicationId || importingIds.has(applicationId)) return;
+
+            const app = allApplications.find(a => a.id === applicationId);
+            if (!app) return;
+
+            if (!app.is_payed) {
+                setStatus("Bewerber kann nicht importiert werden: Zahlung ist noch ausstehend.", true);
+                return;
+            }
+
+            try {
+                importingIds.add(applicationId);
+                renderView();
+                if (activeApplicant && activeApplicant.id === applicationId) {
+                    renderDrawerOnboarding(activeApplicant);
+                }
+
+                setStatus(`Starte Onboarding für "${app.full_name}"...`, false);
+
+                const response = await fetch("/api/supabase/onboard-candidate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ application_id: applicationId })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    throw new Error(data.error || data.message || `HTTP ${response.status}`);
+                }
+
+                // Update local onboarding records cache
+                const docCount = typeof data.documents_imported === "number"
+                    ? data.documents_imported
+                    : (Array.isArray(data.documents_imported) ? data.documents_imported.length : 0);
+
+                onboardingRecords[applicationId] = {
+                    supabase_application_id: applicationId,
+                    jobscout_client_id: data.client_id,
+                    status: data.onboarding_status,
+                    payment_verified: true,
+                    imported_at: new Date().toISOString(),
+                    document_count: docCount,
+                    cv_parsed: Boolean(data.cv_parsed),
+                    missing_fields: data.missing_fields || [],
+                    last_error: null
+                };
+
+                setStatus(`✓ Bewerber "${data.client_id}" erfolgreich importiert!`, false);
+
+                // Notify global client selector and SPA sections
+                window.dispatchEvent(new CustomEvent("activeClientChanged", {
+                    detail: { clientId: data.client_id }
+                }));
+
+            } catch (err) {
+                console.error("Onboarding failed:", err);
+                setStatus(`Import fehlgeschlagen: ${err.message}`, true);
+
+                onboardingRecords[applicationId] = {
+                    ...(onboardingRecords[applicationId] || {}),
+                    status: "IMPORT_FAILED",
+                    last_error: err.message
+                };
+            } finally {
+                importingIds.delete(applicationId);
+                renderView();
+                if (activeApplicant && activeApplicant.id === applicationId) {
+                    renderDrawerOnboarding(activeApplicant);
+                }
+            }
+        }
+
+        async function handleOpenCandidate(clientId) {
+            if (!clientId) return;
+
+            try {
+                sessionStorage.setItem("autofill:target-client-id", clientId);
+
+                // Make background call to set active client
+                fetch("/api/clients/active", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ client_id: clientId })
+                }).catch(() => {});
+
+                window.dispatchEvent(new CustomEvent("activeClientChanged", {
+                    detail: { clientId: clientId }
+                }));
+
+                closeDetailsDrawer();
+
+                const autofillNavLink = document.querySelector('[data-section-link="autofill"]');
+                if (autofillNavLink) {
+                    autofillNavLink.click();
+                } else {
+                    window.location.href = "/autofill";
+                }
+            } catch (err) {
+                console.error("Could not switch to Autofill Hub:", err);
+            }
+        }
 
         // --- Core Supabase Actions (Preserved) ---
         async function markAsPayed(applicationId) {
-            setStatus("Markiere als bezahlt...", false);
-            const client = await getSupabaseClient();
-            const response = await client
-                .from("applications")
-                .update({ is_payed: true })
-                .eq("id", applicationId);
+            try {
+                setStatus("Markiere als bezahlt...", false);
+                const client = await getSupabaseClient();
+                const response = await client
+                    .from("applications")
+                    .update({ is_payed: true })
+                    .eq("id", applicationId);
 
-            if (response.error) throw response.error;
+                if (response.error) throw response.error;
 
-            const app = allApplications.find(a => a.id === applicationId);
-            if (app) app.is_payed = true;
+                const app = allApplications.find(a => a.id === applicationId);
+                if (app) app.is_payed = true;
 
-            setStatus("✓ Als bezahlt markiert.", false);
-            renderView();
+                if (activeApplicant && activeApplicant.id === applicationId) {
+                    activeApplicant.is_payed = true;
+                    if (dPayToggleBtn) {
+                        dPayToggleBtn.className = "sp-btn-pay-status is-paid";
+                        dPayToggleBtn.textContent = "✓ Als bezahlt markiert";
+                        dPayToggleBtn.disabled = true;
+                    }
+                    if (dStatusPill) {
+                        dStatusPill.className = "sp-status-pill is-paid";
+                        dStatusPill.innerHTML = "&#10003; Bezahlt";
+                    }
+                    renderDrawerOnboarding(activeApplicant);
+                }
+
+                setStatus("✓ Als bezahlt markiert.", false);
+                renderView();
+            } catch (err) {
+                console.error("Mark as paid failed:", err);
+                setStatus(`Fehler beim Aktualisieren des Zahlungsstatus: ${err.message}`, true);
+            }
         }
 
         async function nextStep(applicationId) {
@@ -1066,14 +1354,14 @@
             const application = allApplications.find(a => a.id === applicationId);
             if (!application) return;
 
-            if (!confirm(`Bewerbung von "${application.full_name}" wirklich löschen? Dies kann nicht rückgängig gemacht werden.`)) {
+            if (!confirm(`Delete application for "${application.full_name}"? This cannot be undone.`)) {
                 return;
             }
 
             try {
                 pendingDeletes.add(applicationId);
                 closeDetailsDrawer();
-                setStatus("Lösche Bewerbung...", false);
+                setStatus("Deleting application...", false);
 
                 const client = await getSupabaseClient();
                 if (application.documents.length) {
@@ -1086,10 +1374,10 @@
                 allApplications = allApplications.filter(a => a.id !== applicationId);
                 selectedIds.delete(applicationId);
                 updateFilterDropdownOptions();
-                setStatus("✓ Bewerbung erfolgreich gelöscht.", false);
+                setStatus("✓ Application deleted successfully.", false);
                 renderView();
             } catch (err) {
-                setStatus("Löschen fehlgeschlagen: " + err.message, true);
+                setStatus("Delete failed: " + err.message, true);
             } finally {
                 pendingDeletes.delete(applicationId);
             }
@@ -1103,7 +1391,7 @@
                 : filtered;
 
             if (!exportData.length) {
-                setStatus("Keine Daten zum Exportieren vorhanden.", true);
+                setStatus("No data available to export.", true);
                 return;
             }
 
@@ -1169,14 +1457,22 @@
         root.addEventListener("click", e => {
             const btn = e.target.closest("[data-action]");
             if (!btn) return;
+            e.preventDefault();
             e.stopPropagation();
             const action = btn.dataset.action;
             const id = btn.dataset.appId;
+
+            if (action === "open-candidate") {
+                handleOpenCandidate(btn.dataset.clientId);
+                return;
+            }
+
             if (!id) return;
 
             if (action === "details") openDetailsDrawer(id);
             if (action === "next-step") nextStep(id);
             if (action === "pay") markAsPayed(id);
+            if (action === "onboard") handleOnboardCandidate(id);
         });
 
         // --- Event Listeners for Toolbar & Customization ---
@@ -1295,12 +1591,19 @@
 
             try {
                 const client = await getSupabaseClient();
-                const response = await client
-                    .from("applications")
-                    .select("id,created_at,pack,full_name,email,whatsapp,bank,language_level,field,documents,is_payed")
-                    .order("created_at", { ascending: false });
+                const [response, statusRes] = await Promise.all([
+                    client
+                        .from("applications")
+                        .select("id,created_at,pack,full_name,email,whatsapp,bank,language_level,field,documents,is_payed")
+                        .order("created_at", { ascending: false }),
+                    fetch("/api/supabase/onboarding-status").then(r => r.ok ? r.json() : null).catch(() => null)
+                ]);
 
                 if (response.error) throw response.error;
+
+                if (statusRes && statusRes.records) {
+                    onboardingRecords = statusRes.records;
+                }
 
                 allApplications = (response.data || []).map(normalizeApplication);
                 updateFilterDropdownOptions();

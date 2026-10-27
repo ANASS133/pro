@@ -129,7 +129,7 @@
                             data-campaign-id="${escapeHtml(campaignId)}"
                             ${hasActiveJob || pendingDeletes.has(campaignId) ? "disabled" : ""}
                         >
-                            ${pendingDeletes.has(campaignId) ? "Lösche..." : (hasActiveJob ? "Versand aktiv" : "Löschen")}
+                            ${pendingDeletes.has(campaignId) ? "Deleting..." : (hasActiveJob ? "Sending Active" : "Delete")}
                         </button>
                     </div>
 
@@ -228,7 +228,7 @@
                 return;
             }
 
-            const confirmed = window.confirm("Diese gespeicherte Vorlage löschen? Das kann nicht rückgängig gemacht werden.");
+            const confirmed = window.confirm("Delete this saved campaign template? This cannot be undone.");
             if (!confirmed) {
                 return;
             }
@@ -241,11 +241,11 @@
                     method: "POST",
                 });
                 if (!payload.success) {
-                    throw new Error(payload.message || "Kampagne konnte nicht gelöscht werden");
+                    throw new Error(payload.message || "Campaign could not be deleted");
                 }
-                setStatus("Kampagne gelöscht.", false);
+                setStatus("Campaign deleted.", false);
             } catch (error) {
-                setStatus(error.message || "Kampagne konnte nicht gelöscht werden.", true);
+                setStatus(error.message || "Campaign could not be deleted.", true);
             } finally {
                 pendingDeletes.delete(campaignId);
                 await loadDashboard();

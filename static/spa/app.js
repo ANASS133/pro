@@ -16,6 +16,8 @@
         "/google-maps": "google-maps",
         "/autofill": "autofill",
         "/autofill-hub": "autofill",
+        "/ai-settings": "ai-settings",
+        "/ki-einstellungen": "ai-settings",
     };
 
     const sectionToRoute = {
@@ -28,18 +30,20 @@
         "send-emails": "/send-emails",
         "google-maps": "/google-maps",
         autofill: "/autofill",
+        "ai-settings": "/ai-settings",
     };
 
     const titleBySection = {
-        search: "Arbeitsagentur Scraper | Suche",
-        dashboard: "Arbeitsagentur Scraper | Dashboard",
-        supabase: "Arbeitsagentur Scraper | Supabase",
-        money: "Arbeitsagentur Scraper | Money",
-        ausbildungen: "Arbeitsagentur Scraper | Ausbildungen",
-        "create-anschreibens": "Arbeitsagentur Scraper | Anschreiben",
+        search: "JobScout | Search",
+        dashboard: "JobScout | Dashboard",
+        supabase: "JobScout | Applications",
+        money: "JobScout | Revenue & Money",
+        ausbildungen: "JobScout | Apprenticeships",
+        "create-anschreibens": "JobScout | Cover Letters",
         "send-emails": "JobScout | Send Emails",
-        "google-maps": "Arbeitsagentur Scraper | Google Maps",
-        autofill: "Arbeitsagentur Scraper | Autofill Hub",
+        "google-maps": "JobScout | Google Maps",
+        autofill: "JobScout | Autofill Hub",
+        "ai-settings": "JobScout | KI-Einstellungen",
     };
 
     const sections = Array.from(document.querySelectorAll("[data-section]"));
@@ -72,6 +76,9 @@
             : { show() {}, hide() {} },
         autofill: typeof factories.createAutofillHubSection === "function"
             ? factories.createAutofillHubSection()
+            : { show() {}, hide() {} },
+        "ai-settings": typeof factories.createAISettingsSection === "function"
+            ? factories.createAISettingsSection()
             : { show() {}, hide() {} },
     };
 
@@ -269,8 +276,8 @@
 
             globalClientSelect.innerHTML = "";
             if (!clients.length) {
-                globalClientSelect.innerHTML = '<option value="">Keine Bewerber</option>';
-                if (globalClientStatus) globalClientStatus.textContent = "Kein Profil";
+                globalClientSelect.innerHTML = '<option value="">No candidates</option>';
+                if (globalClientStatus) globalClientStatus.textContent = "No profile";
                 return;
             }
 
@@ -284,7 +291,7 @@
 
             if (globalClientStatus) {
                 const activeClient = clients.find(c => c.id === activeId) || clients[0];
-                globalClientStatus.textContent = `Aktiv: ${activeClient.name}`;
+                globalClientStatus.textContent = `Active: ${activeClient.name}`;
             }
         } catch (_) {}
     }
@@ -313,7 +320,7 @@
             const file = e.target.files && e.target.files[0];
             if (!file) return;
             const originalText = btnGlobalQuickCv.textContent;
-            btnGlobalQuickCv.textContent = "Analysiere CV...";
+            btnGlobalQuickCv.textContent = "Analyzing CV...";
             btnGlobalQuickCv.disabled = true;
 
             const formData = new FormData();
@@ -326,14 +333,14 @@
                 });
                 const result = await res.json();
                 if (res.ok && result.success) {
-                    alert(`✓ Bewerber "${result.client_name}" erfolgreich aus Lebenslauf importiert und als aktiv gesetzt!`);
+                    alert(`✓ Candidate "${result.client_name}" successfully imported from CV and set to active!`);
                     await refreshGlobalClients(result.client_id);
                     window.dispatchEvent(new CustomEvent("activeClientChanged", { detail: { clientId: result.client_id } }));
                 } else {
-                    alert("Import fehlgeschlagen: " + (result.error || "Unbekannter Fehler"));
+                    alert("Import failed: " + (result.error || "Unknown error"));
                 }
             } catch (err) {
-                alert("Netzwerkfehler beim CV-Import: " + err.message);
+                alert("Network error during CV import: " + err.message);
             } finally {
                 btnGlobalQuickCv.textContent = originalText;
                 btnGlobalQuickCv.disabled = false;

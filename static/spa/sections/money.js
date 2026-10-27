@@ -211,7 +211,7 @@
                 monthly[key].total += r.money;
             });
             var months = Object.keys(monthly).sort();
-            if (!months.length) { chartBars.innerHTML = '<div class="money-chart-empty">Keine Daten.</div>'; return; }
+            if (!months.length) { chartBars.innerHTML = '<div class="money-chart-empty">No data available.</div>'; return; }
             var maxVal = 0;
             months.forEach(function(m){ if(monthly[m].total>maxVal) maxVal=monthly[m].total; });
             var html = "";
@@ -225,7 +225,7 @@
         function renderTopPayers() {
             if (!topPayers) return;
             var sorted = allRows.slice().sort(function(a,b){ return b.money - a.money; }).slice(0, 5);
-            if (!sorted.length) { topPayers.innerHTML = '<div class="money-empty-inline">Noch keine Daten.</div>'; return; }
+            if (!sorted.length) { topPayers.innerHTML = '<div class="money-empty-inline">No data yet.</div>'; return; }
             var html = "";
             sorted.forEach(function(r, i) {
                 html += '<div class="money-top-item"><span class="money-top-rank">#'+(i+1)+'</span><span class="money-top-name">'+escapeHTML(r.name||"\u2014")+'</span><strong class="money-top-amount">'+fmtMoney(r.money)+'</strong></div>';
@@ -235,7 +235,7 @@
 
         function renderTimeline() {
             var latest = allRows.slice().sort(function(a,b){ return b.sortTime - a.sortTime; }).slice(0, 10);
-            if (!latest.length) { timeline.innerHTML = '<div class="money-empty-inline">Noch keine Daten.</div>'; return; }
+            if (!latest.length) { timeline.innerHTML = '<div class="money-empty-inline">No data yet.</div>'; return; }
             var html = "";
             latest.forEach(function(r) {
                 html += '<div class="money-timeline-item"><div class="money-timeline-dot"></div><div><strong>'+escapeHTML(r.name||"\u2014")+'</strong><small>'+fmtDate(r.created_at)+'</small></div><strong class="money-timeline-amount">'+fmtMoney(r.money)+'</strong></div>';
@@ -323,7 +323,7 @@
         // ---- CSV Export ----
         function exportCSV() {
             var rows = getFilteredRows();
-            if (!rows.length) { setStatus("Keine Daten zum Exportieren.", true); return; }
+            if (!rows.length) { setStatus("No data available to export.", true); return; }
             var lines = ["Name,Amount (DH),Created At"];
             rows.forEach(function(r){ lines.push('"'+String(r.name||"").replace(/"/g,'""')+'",'+r.money+','+(r.created_at||"")); });
             var blob = new Blob([lines.join("\n")], { type:"text/csv;charset=utf-8;" });

@@ -27,18 +27,84 @@ app.use(cors());
 app.use(express.json({ limit: "15mb" }));
 app.use("/extension", express.static(path.join(__dirname, "../extension")));
 
-if (!process.env.OPENAI_API_KEY) {
-  console.error("❌ OPENAI_API_KEY is not defined in .env");
-  process.exit(1);
+const FLASK_BRIDGE_URL = process.env.FLASK_BRIDGE_URL || "http://127.0.0.1:5000/api/ai/bridge-autofill";
+
+let openai = null;
+if (process.env.OPENAI_API_KEY) {
+  openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+  });
+} else {
+  console.log("ℹ️ Node Autofill Server: Connected to JobScout Central AI Bridge at " + FLASK_BRIDGE_URL);
 }
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+/**
+ * Universal AI Caller: routes through JobScout Flask bridge or local OpenAI client
+ */
+async function callAIBridge({ prompt, systemPrompt, maxOutputTokens = 250, temperature = 0.2 }) {
+  // 1. Try Flask central AI bridge first (shares keys, cache, costs, rate limits)
+  try {
+    const res = await fetch(FLASK_BRIDGE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        prompt,
+        system_prompt: systemPrompt,
+        max_output_tokens: maxOutputTokens,
+        temperature
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.text) {
+        return {
+          success: true,
+          text: data.text,
+          model: data.model || "gpt-6-luna",
+          usage: data.usage || {}
+        };
+      }
+    }
+  } catch (err) {
+    // Flask bridge offline or unreachable
+  }
 
-// Model Pricing (per 1M tokens) for gpt-5.6-luna
-const LUNA_INPUT_PRICE_PER_M = 0.15;
-const LUNA_OUTPUT_PRICE_PER_M = 0.60;
+  // 2. Try direct local OpenAI client if configured
+  if (openai) {
+    try {
+      const model = process.env.OPENAI_MODEL || "gpt-6-luna";
+      const resp = await openai.responses.create({
+        model: model,
+        reasoning: { effort: "none" },
+        input: [
+          { role: "developer", content: systemPrompt },
+          { role: "user", content: prompt }
+        ],
+        max_output_tokens: maxOutputTokens,
+        store: false
+      });
+      return {
+        success: true,
+        text: resp.output_text || "",
+        model: model,
+        usage: {
+          prompt_tokens: resp.usage?.input_tokens || 0,
+          completion_tokens: resp.usage?.output_tokens || 0,
+          total_tokens: resp.usage?.total_tokens || 0
+        }
+      };
+    } catch (e) {
+      console.warn("Direct OpenAI call failed:", e.message);
+    }
+  }
+
+  // 3. Graceful fallback
+  return { success: false, error: "No AI provider available", model: "Local Heuristic" };
+}
+
+// Model Pricing (per 1M tokens) for GPT-6 Luna
+const LUNA_INPUT_PRICE_PER_M = 0.20;
+const LUNA_OUTPUT_PRICE_PER_M = 1.20;
 
 // Path to correction memory storage
 const CORRECTIONS_FILE = path.join(__dirname, "corrections.json");
@@ -1011,13 +1077,16 @@ app.get("/french-form", (req, res) => {
 
 app.post("/test-ai", async (req, res) => {
   try {
-    const response = await openai.responses.create({
-      model: "gpt-5.6-luna",
-      reasoning: { effort: "none" },
-      input: "You are an autofill assistant. Return ONLY the value 'Anass' for first name.",
-      store: false
+    const result = await callAIBridge({
+      systemPrompt: "You are an autofill assistant.",
+      prompt: "Respond with 'OK' to verify connectivity.",
+      maxOutputTokens: 20
     });
-    res.json({ success: true, model: "gpt-5.6-luna", answer: response.output_text });
+    if (result.success) {
+      res.json({ success: true, model: result.model, answer: result.text.trim() });
+    } else {
+      res.json({ success: true, model: "Local Heuristic", answer: "OK (Offline Heuristic Mode)" });
+    }
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -1474,83 +1543,70 @@ CRITICAL SAFETY & INTEGRITY RULES:
 5. NO JAVASCRIPT: Output only string values. Never output JavaScript or code expressions.
 6. DROPDOWN / SELECT: Propose ONLY valid option values present in the field's options.`;
 
-    const response = await openai.responses.create({
-      model: "gpt-5.6-luna",
-      reasoning: { effort: "none" },
-      input: [
-        { role: "developer", content: systemPrompt },
-        { role: "user", content: JSON.stringify(contextObject) }
-      ],
-      max_output_tokens: 250,
-      text: {
-        format: {
-          type: "json_schema",
-          name: "autofill_plan",
-          strict: true,
-          schema: {
-            type: "object",
-            properties: {
-              actions: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    field_id: { type: "string" },
-                    action: { type: "string", enum: ["fill", "skip", "review"] },
-                    proposed_value: { type: ["string", "null"] },
-                    checked: { type: ["boolean", "null"] },
-                    profile_source_path: { type: ["string", "null"] },
-                    confidence: { type: "number" },
-                    reason: { type: "string" },
-                    review_required: { type: "boolean" },
-                    is_verified_fact: { type: "boolean" }
-                  },
-                  required: [
-                    "field_id", "action", "proposed_value", "checked",
-                    "profile_source_path", "confidence", "reason",
-                    "review_required", "is_verified_fact"
-                  ],
-                  additionalProperties: false
-                }
-              }
-            },
-            required: ["actions"],
-            additionalProperties: false
-          }
-        }
-      },
-      store: false
+    let aiActions = [];
+    let promptTokens = 0;
+    let completionTokens = 0;
+    let usedModel = "Local Heuristic";
+
+    const aiResult = await callAIBridge({
+      prompt: JSON.stringify(contextObject),
+      systemPrompt: systemPrompt + "\nOutput strictly valid JSON: {\"actions\": [{\"field_id\": \"...\", \"action\": \"fill|skip|review\", \"proposed_value\": \"...\", \"checked\": null, \"profile_source_path\": \"...\", \"confidence\": 0.9, \"reason\": \"...\", \"review_required\": false, \"is_verified_fact\": true}]}",
+      maxOutputTokens: 350,
+      temperature: 0.1
     });
 
-    const parsed = JSON.parse(response.output_text);
-    const aiActions = (parsed.actions || []).map(act => {
-      // Server-side validation and sanitization
-      const cleanVal = act.proposed_value ? String(act.proposed_value).replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "") : null;
-      const confidence = typeof act.confidence === "number" ? Math.max(0, Math.min(1, act.confidence)) : 0.5;
-      const reviewRequired = act.review_required === true || confidence < 0.85;
+    if (aiResult.success && aiResult.text) {
+      try {
+        const cleanText = aiResult.text.replace(/^```(?:json)?|```$/g, "").trim();
+        const parsed = JSON.parse(cleanText);
+        usedModel = aiResult.model || "gpt-6-luna";
+        aiActions = (parsed.actions || []).map(act => {
+          const cleanVal = act.proposed_value ? String(act.proposed_value).replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "") : null;
+          const confidence = typeof act.confidence === "number" ? Math.max(0, Math.min(1, act.confidence)) : 0.5;
+          const reviewRequired = act.review_required === true || confidence < 0.85;
 
-      return {
-        field_id: act.field_id,
-        action: act.action,
-        proposed_value: cleanVal,
-        value: cleanVal,
-        checked: act.checked,
-        profile_source_path: act.profile_source_path || "ai_generated",
-        confidence: parseFloat(confidence.toFixed(2)),
-        reason: act.reason || "AI proposed mapping",
-        review_required: reviewRequired,
-        is_verified_fact: Boolean(act.is_verified_fact)
-      };
-    });
+          return {
+            field_id: act.field_id,
+            action: act.action,
+            proposed_value: cleanVal,
+            value: cleanVal,
+            checked: act.checked,
+            profile_source_path: act.profile_source_path || "ai_generated",
+            confidence: parseFloat(confidence.toFixed(2)),
+            reason: act.reason || "AI proposed mapping",
+            review_required: reviewRequired,
+            is_verified_fact: Boolean(act.is_verified_fact)
+          };
+        });
+        promptTokens = aiResult.usage?.prompt_tokens ?? 0;
+        completionTokens = aiResult.usage?.completion_tokens ?? 0;
+      } catch (err) {
+        console.warn("Failed to parse AI response JSON:", err.message);
+      }
+    }
 
-    // Token usage calculation
-    const promptTokens = response.usage?.input_tokens ?? 0;
-    const completionTokens = response.usage?.output_tokens ?? 0;
-    const totalTokens = response.usage?.total_tokens ?? (promptTokens + completionTokens);
+    if (aiActions.length === 0) {
+      // Local Heuristic Fallback
+      usedModel = "Local Heuristic";
+      aiActions = uncachedAmbiguousFields.map(f => ({
+        field_id: f.field_id,
+        action: "skip",
+        proposed_value: null,
+        value: null,
+        checked: null,
+        profile_source_path: null,
+        confidence: 0.5,
+        reason: "Local Heuristic: Keine eindeutige Zuordnung gefunden",
+        review_required: true,
+        is_verified_fact: false
+      }));
+    }
+
+    const totalTokens = promptTokens + completionTokens;
     const estimatedCost = ((promptTokens / 1_000_000) * LUNA_INPUT_PRICE_PER_M) +
                           ((completionTokens / 1_000_000) * LUNA_OUTPUT_PRICE_PER_M);
 
-    console.log(`[AI Mapping] ${uncachedAmbiguousFields.length} ambiguous fields processed. Cost: $${estimatedCost.toFixed(6)}`);
+    console.log(`[AI Mapping] ${uncachedAmbiguousFields.length} ambiguous fields processed. Model: ${usedModel}. Cost: $${estimatedCost.toFixed(6)}`);
 
     // Persist newly answered fields to cache for future 0-cost reuse
     if (!answersCache[cleanProfileId]) answersCache[cleanProfileId] = {};
@@ -1576,7 +1632,7 @@ CRITICAL SAFETY & INTEGRITY RULES:
 
     return res.json({
       success: true,
-      model: "gpt-5.6-luna",
+      model: usedModel,
       usage: {
         prompt_tokens: promptTokens,
         completion_tokens: completionTokens,
@@ -1636,21 +1692,30 @@ Verfügbare Kenntnisse: ${applicantSkills || keywords || "Teamfähigkeit, Lernbe
 Stil: Professionell, motiviert, direkt zum Punkt.
 WICHTIG: Kein Gruß, keine Anrede, kein Abschluss. Nur genau 2 Sätze. Maximal 40 Wörter.`;
 
-    const response = await openai.responses.create({
-      model: "gpt-5.6-luna",
-      reasoning: { effort: "none" },
-      input: [
-        { role: "developer", content: "Du bist ein professioneller deutscher Karriere-Assistent. Antworte präzise und extrem kurz." },
-        { role: "user", content: prompt }
-      ],
-      max_output_tokens: 100,
-      store: false
+    let snippet = "";
+    let promptTokens = 0;
+    let completionTokens = 0;
+    let usedModel = "Local Heuristic";
+
+    const aiResult = await callAIBridge({
+      prompt: prompt,
+      systemPrompt: "Du bist ein professioneller deutscher Karriere-Assistent. Antworte präzise und extrem kurz mit genau 2 Sätzen ohne Gruß.",
+      maxOutputTokens: 100,
+      temperature: 0.3
     });
 
-    const snippet = (response.output_text || "").trim().replace(/^["']|["']$/g, "");
-    const promptTokens = response.usage?.input_tokens ?? 0;
-    const completionTokens = response.usage?.output_tokens ?? 0;
-    const totalTokens = response.usage?.total_tokens ?? (promptTokens + completionTokens);
+    if (aiResult.success && aiResult.text) {
+      snippet = aiResult.text.trim().replace(/^["']|["']$/g, "");
+      usedModel = aiResult.model || "gpt-6-luna";
+      promptTokens = aiResult.usage?.prompt_tokens ?? 0;
+      completionTokens = aiResult.usage?.output_tokens ?? 0;
+    } else {
+      // Heuristic fallback
+      usedModel = "Local Heuristic";
+      snippet = `Mit großem Interesse an den technologischen Lösungen von ${companyName} bewerbe ich mich hochmotiviert als ${jobTitle}. Meine Kenntnisse möchte ich zielgerichtet und gewinnbringend in Ihr Team einbringen.`;
+    }
+
+    const totalTokens = promptTokens + completionTokens;
     const estimatedCost = ((promptTokens / 1_000_000) * LUNA_INPUT_PRICE_PER_M) +
                           ((completionTokens / 1_000_000) * LUNA_OUTPUT_PRICE_PER_M);
 
@@ -1664,7 +1729,7 @@ WICHTIG: Kein Gruß, keine Anrede, kein Abschluss. Nur genau 2 Sätze. Maximal 4
 
     return res.json({
       success: true,
-      model: "gpt-5.6-luna",
+      model: usedModel,
       snippet,
       from_cache: false,
       usage: {
@@ -1686,7 +1751,7 @@ app.listen(PORT, () => {
   console.log("");
   console.log("======================================");
   console.log("🚀 AI Job Autofill Server");
-  console.log("🤖 Model: GPT-5.6 Luna ONLY");
+  console.log("🤖 Primary AI: Official OpenAI GPT Luna / JobScout Central AI Gateway");
   console.log(`🌐 http://localhost:${PORT}`);
   console.log("======================================");
   console.log("");

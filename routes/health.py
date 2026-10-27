@@ -1,7 +1,7 @@
 import shutil
 from datetime import datetime, timezone
 from flask import Blueprint, jsonify
-from config import DATA_DIR, CAPTCHA_USERID, CAPTCHA_APIKEY, OPENROUTER_API_KEY, SUPABASE_URL
+from config import DATA_DIR, CAPTCHA_USERID, CAPTCHA_APIKEY, OPENAI_API_KEY, GEMINI_API_KEY, SUPABASE_URL
 
 health_bp = Blueprint("health", __name__)
 
@@ -17,7 +17,8 @@ def health_check():
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "services": {
             "true_captcha": bool(CAPTCHA_USERID and CAPTCHA_APIKEY),
-            "openrouter": bool(OPENROUTER_API_KEY),
+            "openai": bool(OPENAI_API_KEY),
+            "gemini": bool(GEMINI_API_KEY),
             "supabase": bool(SUPABASE_URL),
         },
         "storage": {

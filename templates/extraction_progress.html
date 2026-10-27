@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <title>Fortschritt E-Mail-Extraktion</title>
     <style>
@@ -90,7 +90,7 @@
 
     <div class="status-card">
         <h3>Status: <span id="status">Laeuft...</span></h3>
-        <p>Verarbeitet: <span id="current">0</span> / <span id="total">{{ status.total_jobs }}</span> Stellen</p>
+        <p>Processed: <span id="current">0</span> / <span id="total">{{ status.total_jobs }}</span> Stellen</p>
 
         <div class="progress-container">
             <div class="progress-bar" id="progressBar" style="width: 0%">0%</div>
@@ -106,15 +106,15 @@
 
     <div id="failurePauseAlert" class="captcha-alert" style="display: none; background:#fbeaea; border-color:#f5c2c7; color:#842029;">
         <h3>Pausiert nach Fehler</h3>
-        <p id="failureText">Eine Stelle ist fehlgeschlagen. Auf Fortsetzen klicken.</p>
-        <button data-auto-continue onclick="continueScraping()" class="button" style="background:#198754;">Fortsetzen</button>
+        <p id="failureText">Eine Stelle ist fehlgeschlagen. Auf Continue klicken.</p>
+        <button data-auto-continue onclick="continueScraping()" class="button" style="background:#198754;">Continue</button>
     </div>
 
     <div style="margin-top: 20px;">
         <a href="/" class="button">Zurueck zur Suche</a>
-        <button onclick="stopAndDownload()" class="button" style="background: #d9534f;">Stoppen + Ergebnis herunterladen</button>
-        <button onclick="downloadResults()" class="button" style="background: #2196F3;">Ergebnis herunterladen</button>
-        <button id="toAnschreibenBtn" onclick="goToAnschreiben()" class="button" style="background: #667eea; display: none;">Zu Anschreiben</button>
+        <button onclick="stopAndDownload()" class="button" style="background: #d9534f;">Stoppen + Download Results</button>
+        <button onclick="downloadResults()" class="button" style="background: #2196F3;">Download Results</button>
+        <button id="toAnschreibenBtn" onclick="goToAnschreiben()" class="button" style="background: #667eea; display: none;">To Cover Letters</button>
     </div>
 
     <script>
@@ -140,8 +140,8 @@
                         document.getElementById('captchaAlert').style.display = 'none';
                         document.getElementById('failurePauseAlert').style.display = 'block';
                         document.getElementById('failureText').textContent = data.last_error
-                            ? `Fehler: ${data.last_error}`
-                            : 'Eine Stelle ist fehlgeschlagen. Zum Fortsetzen klicken.';
+                            ? `Errors: ${data.last_error}`
+                            : 'Eine Stelle ist fehlgeschlagen. Zum Continue klicken.';
                         document.getElementById('status').textContent = 'Pausiert - Fehler';
                     } else {
                         document.getElementById('captchaAlert').style.display = 'none';

@@ -21,6 +21,7 @@ from .search_filter_engine import (
     verify_application_workflow,
 )
 from .google_maps_ausbildung_verifier import GoogleMapsAusbildungVerifier
+from .google_maps_opportunity_verifier import GoogleMapsOpportunityVerifier
 
 __all__ = [
     "EnhancedJobScraper",
@@ -44,5 +45,6 @@ __all__ = [
     "clean_extracted_location",
     "verify_application_workflow",
     "GoogleMapsAusbildungVerifier",
+    "GoogleMapsOpportunityVerifier",
 ]
 

@@ -199,6 +199,221 @@
                     sandboxIframe.src = sandboxIframe.src;
                 }
             });
+
+            const btnAutofillSandbox = document.getElementById("btn-autofill-sandbox-now");
+            btnAutofillSandbox?.addEventListener("click", autofillSandboxForm);
+
+            // Automatically populate sandbox form when iframe finishes loading
+            sandboxIframe.addEventListener("load", () => {
+                if (currentProfileData) {
+                    setTimeout(() => {
+                        try {
+                            autofillSandboxForm();
+                        } catch (err) {
+                            console.warn("[Autofill Hub] Auto-fill on load error:", err);
+                        }
+                    }, 350);
+                }
+            });
+        }
+
+        // Attach global handler so inline onclick also invokes it directly
+        window.autofillSandboxForm = autofillSandboxForm;
+
+        function autofillSandboxForm() {
+            console.log("[Autofill Hub] Triggering sandbox autofill...", { sandboxIframe, currentProfileData });
+            if (!sandboxIframe) {
+                console.warn("[Autofill Hub] sandboxIframe element not found");
+                return;
+            }
+
+            let doc;
+            try {
+                doc = sandboxIframe.contentDocument || sandboxIframe.contentWindow?.document;
+            } catch (err) {
+                console.error("[Autofill Hub] Cannot access sandbox iframe document:", err);
+            }
+
+            if (!doc || !doc.body) {
+                setStatus("Sandbox-Iframe lädt noch. Bitte kurz warten.", true);
+                return;
+            }
+
+            // Gather candidate values from inputs with fallback to loaded profile data
+            const applicant = currentProfileData?.applicant || {};
+            const pPersonal = applicant.personal || {};
+            const pContact = applicant.contact || {};
+            const pAddr = pContact.address || {};
+            const pProf = applicant.professional_profile || {};
+
+            let first = (fFirstName?.value || pPersonal.first_name || "").trim();
+            let last = (fLastName?.value || pPersonal.last_name || "").trim();
+            const full = (fFullName?.value || pPersonal.full_name || `${first} ${last}`).trim();
+
+            if (!first && full) {
+                const parts = full.split(/\s+/);
+                first = parts[0] || "";
+                last = parts.slice(1).join(" ") || "";
+            }
+
+            const email = (fEmail?.value || pContact.email || "").trim();
+            const phone = (fPhone?.value || pContact.phone_display || pContact.phone || "").trim();
+            const street = (fStreet?.value || pAddr.street || "").trim();
+            const houseNo = (fHouseNo?.value || pAddr.house_number || "").trim();
+            const fullStreet = `${street} ${houseNo}`.trim();
+            const postal = (fPostal?.value || pAddr.postal_code || "").trim();
+            const city = (fCity?.value || pAddr.city || "").trim();
+            const country = (fCountry?.value || pAddr.country || "Deutschland").trim();
+            const nationality = (fNationality?.value || pPersonal.nationality || "Moroccan").trim();
+            const dob = (fDob?.value || pPersonal.date_of_birth || "").trim();
+            const gender = (fGender?.value || pPersonal.gender || "male").toLowerCase();
+            const title = (fCurrentTitle?.value || pProf.current_title || "").trim();
+            const summary = (fSummary?.value || pProf.summary_de || pProf.summary_fr || pProf.summary_en || "").trim();
+
+            if (!first && !last && !email && !phone) {
+                setStatus("⚠️ Das aktuelle Profil enthält noch keine Daten. Bitte links eingeben oder einen vollständigen Bewerber wählen.", true);
+                return;
+            }
+
+            let filledCount = 0;
+
+            function highlightEl(el) {
+                if (!el) return;
+                const origBg = el.style.backgroundColor;
+                const origBorder = el.style.borderColor;
+                const origShadow = el.style.boxShadow;
+                el.style.transition = "all 0.3s ease";
+                el.style.backgroundColor = "#dcfce7";
+                el.style.borderColor = "#10b981";
+                el.style.boxShadow = "0 0 0 3px rgba(16, 185, 129, 0.25)";
+                setTimeout(() => {
+                    el.style.backgroundColor = origBg;
+                    el.style.borderColor = origBorder;
+                    el.style.boxShadow = origShadow;
+                }, 2500);
+            }
+
+            function setVal(selector, val) {
+                if (!val) return;
+                const els = doc.querySelectorAll(selector);
+                els.forEach(el => {
+                    if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
+                        el.value = val;
+                        el.setAttribute("value", val);
+                    } else if (el.tagName === "SELECT") {
+                        let matched = false;
+                        const sVal = val.toLowerCase();
+                        for (let i = 0; i < el.options.length; i++) {
+                            const opt = el.options[i];
+                            const oVal = (opt.value || "").toLowerCase();
+                            const oText = (opt.text || "").toLowerCase();
+                            if (oVal === sVal || oText === sVal || oText.includes(sVal) ||
+                                ((sVal.startsWith("moh") || sVal.startsWith("mar") || sVal.startsWith("mor") || sVal.includes("marok") || sVal.includes("moroc")) && (oVal === "ma" || oVal === "moroccan" || oText.includes("maroc") || oText.includes("morocc"))) ||
+                                ((sVal.startsWith("de") || sVal.includes("deutsch") || sVal.includes("germ")) && (oVal === "de" || oVal === "german" || oText.includes("allem"))) ||
+                                ((sVal.startsWith("fr") || sVal.includes("fran")) && (oVal === "fr" || oVal === "french" || oText.includes("fran")))) {
+                                el.selectedIndex = i;
+                                matched = true;
+                                break;
+                            }
+                        }
+                        if (!matched && el.options.length > 1) {
+                            el.selectedIndex = 1;
+                        }
+                    }
+
+                    // Trigger input and change events
+                    el.dispatchEvent(new Event("input", { bubbles: true }));
+                    el.dispatchEvent(new Event("change", { bubbles: true }));
+                    highlightEl(el);
+                    filledCount++;
+                });
+            }
+
+            // --- German / English fields in /test-form ---
+            setVal("#vorname, input[name='first_name']", first);
+            setVal("#nachname, input[name='last_name']", last);
+            setVal("#email, input[name='email']", email);
+            setVal("#telefon, input[name='phone']", phone);
+            setVal("#strasse, input[name='street']", fullStreet || street);
+            setVal("#plz, input[name='postal_code']", postal);
+            setVal("#stadt, input[name='city']", city);
+            setVal("#country, select[name='country']", country);
+            setVal("#expTitle, input[name='job_title']", title);
+            setVal("#motivation, textarea[name='motivation_letter']", summary);
+
+            // Experience toggle in /test-form step 2
+            if (title) {
+                const expCheck = doc.querySelector("#toggleExperience");
+                if (expCheck && !expCheck.checked) {
+                    expCheck.checked = true;
+                    expCheck.dispatchEvent(new Event("change", { bubbles: true }));
+                    const expCont = doc.querySelector("#dynamicExpContainer");
+                    if (expCont) expCont.style.display = "block";
+                    setVal("#expTitle", title);
+                }
+            }
+
+            // Gender radio
+            const isFem = (gender === "female" || gender === "weiblich" || gender === "femme" || gender === "f");
+            const isDiv = (gender === "other" || gender === "divers" || gender === "diverse" || gender === "d");
+            const targetGender = isFem ? "weiblich" : (isDiv ? "divers" : "männlich");
+            const targetGenderFr = isFem ? "femme" : "homme";
+
+            const radios = doc.querySelectorAll("input[type='radio'][name='gender'], input[type='radio'][name='civilite']");
+            radios.forEach(radio => {
+                const rVal = (radio.value || "").toLowerCase();
+                if (rVal === targetGender || rVal === targetGenderFr || (targetGender === "männlich" && (rVal === "male" || rVal === "homme" || rVal === "m"))) {
+                    radio.checked = true;
+                    radio.dispatchEvent(new Event("change", { bubbles: true }));
+                    highlightEl(radio.parentElement || radio);
+                    filledCount++;
+                }
+            });
+
+            // --- French form fields (/french-form and /test-form step 4) ---
+            setVal("#prenom, #fr_prenom", first);
+            setVal("#nom, #fr_nom", last);
+            setVal("#ville, #fr_ville", city);
+            setVal("#nationalite, #fr_nationalite, select[name='nationality']", nationality);
+            setVal("#fr_adresse", fullStreet || street);
+            setVal("#fr_email", email);
+            setVal("#fr_tel", phone);
+            setVal("#fr_code_postal", postal);
+            setVal("#fr_pays", country);
+            setVal("#ai_extra_remarks, #ai_unlabeled_remarks", summary || title);
+
+            // DOB Custom Date Picker handling
+            if (dob) {
+                let dobDisplay = dob;
+                if (/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
+                    const [y, m, d] = dob.split("-");
+                    dobDisplay = `${d}/${m}/${y}`;
+                }
+                const dateInputs = doc.querySelectorAll("#dobInput, #fr_dob, input.datepicker-input");
+                dateInputs.forEach(inp => {
+                    inp.value = dobDisplay;
+                    inp.setAttribute("value", dobDisplay);
+                    inp.dataset.acceptedDate = dobDisplay;
+                    inp.dispatchEvent(new Event("input", { bubbles: true }));
+                    inp.dispatchEvent(new Event("change", { bubbles: true }));
+                    highlightEl(inp);
+                    filledCount++;
+                });
+            }
+
+            // Button feedback
+            const btn = document.getElementById("btn-autofill-sandbox-now");
+            if (btn) {
+                const orig = btn.innerHTML;
+                btn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:4px;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg> ${filledCount} Felder ausgefüllt!</span>`;
+                btn.style.background = "#10b981";
+                setTimeout(() => {
+                    btn.innerHTML = orig;
+                    btn.style.background = "#0284c7";
+                }, 2500);
+            }
+
+            setStatus(`✓ Sandbox-Formular erfolgreich mit den Daten von "${full || first || 'Bewerber'}" ausgefüllt (${filledCount} Felder)!`, false);
         }
 
         // --- Load Profiles List ---
@@ -211,7 +426,7 @@
 
                 profileSelector.innerHTML = "";
                 if (!cachedProfiles.length) {
-                    profileSelector.innerHTML = '<option value="">Keine Profile vorhanden</option>';
+                    profileSelector.innerHTML = '<option value="">No profiles available</option>';
                     return;
                 }
 
@@ -379,7 +594,7 @@
                 try {
                     currentProfileData = JSON.parse(rawJsonEl.value);
                 } catch (e) {
-                    setStatus("Ungültiges JSON: " + e.message, true);
+                    setStatus("Invalid JSON: " + e.message, true);
                     return;
                 }
             } else {
@@ -413,7 +628,7 @@
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const result = await res.json();
                 markDirty(false);
-                setStatus("✓ Profil erfolgreich gespeichert!");
+                setStatus("✓ Profile saved successfully!");
                 await loadProfilesList(result.profileId || profileId);
             } catch (err) {
                 setStatus("Fehler beim Speichern: " + err.message, true);
@@ -430,7 +645,7 @@
                 const proceed = confirm("Es gibt ungespeicherte Änderungen. Möchten Sie wirklich ein neues Profil erstellen und die Änderungen verwerfen?");
                 if (!proceed) return;
             }
-            const newId = prompt("Bitte Profil-ID / Kürzel eingeben (z. B. max_mustermann):");
+            const newId = prompt("Enter candidate ID / slug (e.g. john_doe):");
             if (!newId) return;
             const cleanId = newId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "_");
             if (!cleanId) return;
@@ -449,8 +664,8 @@
             fProfileId.readOnly = false;
             renderProfileForm(currentProfileData);
             markDirty(true);
-            documentListEl.innerHTML = '<div class="doc-empty-state">Neues Profil. Bitte Unterlagen hochladen.</div>';
-            setStatus(`Neues Profil "${cleanId}" vorbereitet. Daten ausfüllen und "Profil speichern" klicken.`);
+            documentListEl.innerHTML = '<div class="doc-empty-state">New profile. Please upload documents.</div>';
+            setStatus(`New profile "${cleanId}" created. Fill in details and click "Save Profile".`);
         });
 
         // --- Document Management ---
@@ -484,7 +699,7 @@
                             <div class="doc-actions">
                                 <a href="${doc.previewUrl}" target="_blank" rel="noopener noreferrer" class="doc-btn-preview" title="Vorschau im Tab">Vorschau</a>
                                 <a href="${doc.downloadUrl}" download class="doc-btn-download" title="Herunterladen">Download</a>
-                                <button type="button" class="doc-btn-delete" data-doc-delete="${escapeHtml(doc.fileName)}" title="Löschen">Löschen</button>
+                                <button type="button" class="doc-btn-delete" data-doc-delete="${escapeHtml(doc.fileName)}" title="Delete">Löschen</button>
                             </div>
                         </div>
                     `;
@@ -633,7 +848,7 @@
                         <div class="corr-val">
                             Wert: <strong>${escapeHtml(c.correctedValue || "")}</strong>
                         </div>
-                        <button type="button" class="corr-del-btn" data-del-corr="${escapeHtml(c.id || "")}" title="Löschen">✕</button>
+                        <button type="button" class="corr-del-btn" data-del-corr="${escapeHtml(c.id || "")}" title="Delete">✕</button>
                     </div>
                 `).join("");
 
@@ -704,9 +919,21 @@
 
         btnRefreshHistory?.addEventListener("click", loadApplicationHistory);
 
+        window.addEventListener("activeClientChanged", (e) => {
+            if (e.detail?.clientId && root && !root.hidden) {
+                loadProfilesList(e.detail.clientId);
+            }
+        });
+
         return {
             show() {
-                loadProfilesList();
+                const targetId = window.sessionStorage?.getItem("autofill:target-client-id");
+                if (targetId) {
+                    try { window.sessionStorage.removeItem("autofill:target-client-id"); } catch (_) {}
+                    loadProfilesList(targetId);
+                } else {
+                    loadProfilesList();
+                }
                 loadCorrections();
                 loadApplicationHistory();
             },

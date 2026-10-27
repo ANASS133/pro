@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,11 +7,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='spa/app.css') }}?v=7.4">
+    <link rel="stylesheet" href="{{ url_for('static', filename='spa/app.css') }}?v=7.8">
 </head>
 <body>
     <div class="spa-shell" data-initial-section="{{ initial_section }}">
-        <aside class="shell-sidebar" id="shell-sidebar" aria-label="Hauptnavigation">
+        <aside class="shell-sidebar" id="shell-sidebar" aria-label="Main Navigation">
             <div class="sidebar-header">
                 <div class="brand-badge" id="sidebar-brand-badge" title="JobScout">
                     <svg class="brand-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
@@ -23,21 +23,21 @@
                         <span class="status-label">Online</span>
                     </span>
                 </div>
-                <button type="button" class="sidebar-toggle" id="sidebar-collapse-btn" title="Seitenleiste minimieren" aria-label="Seitenleiste minimieren">
+                <button type="button" class="sidebar-toggle" id="sidebar-collapse-btn" title="Collapse Sidebar" aria-label="Collapse Sidebar">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
                 </button>
             </div>
 
             <nav class="sidebar-nav">
                 <div class="nav-group">
-                    <span class="nav-group-label">Entdeckung</span>
-                    <a href="{{ url_for('index') }}" data-section-link="search" title="E-Mails finden">
+                    <span class="nav-group-label">Discovery</span>
+                    <a href="{{ url_for('index') }}" data-section-link="search" title="Find Emails">
                         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                        <span class="nav-text">E-Mails finden</span>
+                        <span class="nav-text">Find Emails</span>
                     </a>
-                    <a href="{{ url_for('ausbildungen') }}" data-section-link="ausbildungen" title="Ausbildungen">
+                    <a href="{{ url_for('ausbildungen') }}" data-section-link="ausbildungen" title="Apprenticeships">
                         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
-                        <span class="nav-text">Ausbildungen</span>
+                        <span class="nav-text">Apprenticeships</span>
                     </a>
                     <a href="{{ url_for('google_maps_page') }}" data-section-link="google-maps" title="Google Maps">
                         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
@@ -47,33 +47,45 @@
 
                 <div class="nav-group">
                     <span class="nav-group-label">Outreach</span>
-                    <a href="{{ url_for('create_anschreibens') }}" data-section-link="create-anschreibens" title="Anschreiben (PDF)">
+                    <a href="{{ url_for('create_anschreibens') }}" data-section-link="create-anschreibens" title="Cover Letters (PDF)">
                         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                        <span class="nav-text">Anschreiben</span>
+                        <span class="nav-text">Cover Letters</span>
                     </a>
-                    <a href="{{ url_for('send_emails') }}" data-section-link="send-emails" title="E-Mails senden">
+                    <a href="{{ url_for('send_emails') }}" data-section-link="send-emails" title="Send Emails">
                         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-                        <span class="nav-text">E-Mails senden</span>
+                        <span class="nav-text">Send Emails</span>
                     </a>
                 </div>
 
                 <div class="nav-group">
-                    <span class="nav-group-label">Verwaltung</span>
+                    <span class="nav-group-label">Management</span>
                     <a href="{{ url_for('dashboard') }}" data-section-link="dashboard" title="Dashboard">
                         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
                         <span class="nav-text">Dashboard</span>
                     </a>
-                    <a href="{{ url_for('supabase_page') }}" data-section-link="supabase" title="Supabase">
+                    <a href="{{ url_for('supabase_page') }}" data-section-link="supabase" title="Applications">
                         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
-                        <span class="nav-text">Supabase</span>
+                        <span class="nav-text">Applications</span>
                     </a>
-                    <a href="{{ url_for('money') }}" data-section-link="money" title="Money">
+                    <a href="{{ url_for('money') }}" data-section-link="money" title="Revenue & Money">
                         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                        <span class="nav-text">Money</span>
+                        <span class="nav-text">Revenue & Money</span>
                     </a>
                     <a href="{{ url_for('autofill_hub_page') }}" data-section-link="autofill" title="Autofill Hub">
                         <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
                         <span class="nav-text">Autofill Hub</span>
+                    </a>
+                </div>
+
+                <div class="nav-group">
+                    <span class="nav-group-label">Configuration</span>
+                    <a href="{{ url_for('ai_settings.ai_settings_page') }}" data-section-link="ai-settings" title="KI-Einstellungen">
+                        <svg class="nav-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M12 7v2m0 6v2m-5-5h2m6 0h2"></path>
+                        </svg>
+                        <span class="nav-text">KI-Einstellungen</span>
                     </a>
                 </div>
             </nav>
@@ -81,32 +93,32 @@
             <div class="sidebar-live-widget" id="sidebar-live-job" hidden>
                 <div class="live-widget-top">
                     <span class="live-widget-indicator"></span>
-                    <span class="live-widget-title" id="sidebar-job-title">Job läuft</span>
+                    <span class="live-widget-title" id="sidebar-job-title">Job Running</span>
                     <span class="live-widget-percent" id="sidebar-job-percent">0%</span>
                 </div>
                 <div class="live-widget-progress">
                     <div class="live-widget-bar" id="sidebar-job-fill" style="width: 0%"></div>
                 </div>
-                <div class="live-widget-meta" id="sidebar-job-meta">Verarbeite...</div>
+                <div class="live-widget-meta" id="sidebar-job-meta">Processing...</div>
             </div>
         </aside>
 
         <main class="shell-main">
             <!-- Global Active Client Bar -->
-            <header class="shell-global-header" id="shell-global-header" aria-label="Aktiver Bewerber">
+            <header class="shell-global-header" id="shell-global-header" aria-label="Active Candidate">
                 <div class="global-client-pill">
                     <span class="global-client-icon">👤</span>
-                    <span class="global-client-label">Aktiver Bewerber:</span>
-                    <select id="global-active-client-select" class="global-client-dropdown" title="Aktiven Bewerber für alle Aktionen wechseln">
-                        <option value="">Lade Bewerber...</option>
+                    <span class="global-client-label">Active Candidate:</span>
+                    <select id="global-active-client-select" class="global-client-dropdown" title="Switch active candidate for all actions">
+                        <option value="">Loading candidates...</option>
                     </select>
                 </div>
                 <div class="global-client-actions">
-                    <button type="button" class="btn-quick-import-cv" id="btn-global-quick-cv" title="Neuen Bewerber via Lebenslauf-PDF importieren">
-                        ⚡ Neuer Bewerber (CV Upload)
+                    <button type="button" class="btn-quick-import-cv" id="btn-global-quick-cv" title="Import new candidate via CV PDF">
+                        ⚡ New Candidate (CV Upload)
                     </button>
                     <input type="file" id="global-quick-cv-file" accept=".pdf" style="display:none;" />
-                    <span class="global-active-status-badge" id="global-active-client-status">Aktiv</span>
+                    <span class="global-active-status-badge" id="global-active-client-status">Active</span>
                 </div>
             </header>
             <div class="shell-content">
@@ -116,24 +128,12 @@
                     data-section="search"
                     {% if initial_section != "search" %}hidden{% endif %}
                 >
-                    <div class="section-hero">
-                        <div>
-                            <span class="section-kicker">Suche</span>
-                            <h2>Jobsuche und Auto-Extraktion</h2>
-                            <p>Suche parallel nach Stellen und starte die automatische E-Mail-Extraktion direkt aus derselben Ansicht.</p>
-                        </div>
-                        <div class="hero-actions">
-                            <a href="{{ url_for('create_anschreibens') }}" data-section-link="create-anschreibens">Zum Anschreiben-Tool</a>
-                            <a href="{{ url_for('send_emails') }}" data-section-link="send-emails">Zum Email-Sender</a>
-                        </div>
-                    </div>
-
                     <div class="unified-search-wrapper">
                         <div class="search-card unified-search-card">
                             <form id="search_form_1" action="{{ url_for('search') }}" method="POST" class="unified-search-form">
                                 <!-- Row 1: Search Mode Segmented Control -->
                                 <div class="form-row form-row-mode">
-                                    <label class="field-label" id="mode_label">Suchmodus</label>
+                                    <label class="field-label" id="mode_label">Search Mode</label>
                                     <div class="segmented-control" role="radiogroup" aria-labelledby="mode_label">
                                         <input type="radio" id="mode_ausbildung" name="mode" value="ausbildung" checked>
                                         <label for="mode_ausbildung" class="segmented-option">
@@ -164,7 +164,7 @@
                                             autocomplete="off"
                                         >
                                     </div>
-                                    <div class="field-hint" id="keyword_hint">Geben Sie einfach die Berufsbezeichnung ein — Suche passt sich automatisch an.</div>
+                                    <div class="field-hint" id="keyword_hint">Geben Sie die Berufsbezeichnung ein — Suche passt sich automatisch an.</div>
                                 </div>
 
                                 <!-- Row 3: Location -->
@@ -177,11 +177,11 @@
                                             id="location"
                                             name="location"
                                             class="form-input"
-                                            placeholder="z. B. Berlin, München, Ahaus oder 48683"
+                                            placeholder="z. B. Berlin, München oder 10115"
                                             autocomplete="off"
                                         >
                                     </div>
-                                    <div class="field-hint">Ohne Ortsangabe wird bundesweit gesucht.</div>
+                                    <div class="field-hint">Bundesweite Suche falls leer.</div>
                                 </div>
 
                                 <!-- Row 4: Collapsible Advanced Filters -->
@@ -202,7 +202,7 @@
                                                 <label for="search_source_1" class="filter-label">Suchquellen</label>
                                                 <select id="search_source_1" name="source" class="form-select">
                                                     <option value="all" selected>Alle Quellen inkl. Google Maps</option>
-                                                    <option value="job_portals">Nur Jobbörsen</option>
+                                                    <option value="job_portals">Nur Jobportale</option>
                                                     <option value="google_maps">Nur Google Maps</option>
                                                 </select>
                                                 <span class="filter-subtext">Arbeitsagentur, Ausbildung.de, Azubiyo, AUBI-plus, IHK, Maps</span>
@@ -217,12 +217,12 @@
                                                     <option value="7days">7 Tage</option>
                                                     <option value="all">Alle Anzeigen</option>
                                                 </select>
-                                                <span class="filter-subtext">Gilt für Stellenanzeigen der Jobbörsen</span>
+                                                <span class="filter-subtext">Gilt für Inserate aus Jobbörsen</span>
                                             </div>
 
                                             <!-- Filter 3: Geographic Radius -->
                                             <div class="filter-item">
-                                                <label for="search_radius" class="filter-label">Umkreis</label>
+                                                <label for="search_radius" class="filter-label">Radius</label>
                                                 <select id="search_radius" name="radius" class="form-select">
                                                     <option value="" selected>Kein Radius (Standard)</option>
                                                     <option value="5">5 km</option>
@@ -231,7 +231,7 @@
                                                     <option value="50">50 km</option>
                                                     <option value="100">100 km</option>
                                                 </select>
-                                                <span class="filter-subtext">Optionaler Radius um den angegebenen Ort</span>
+                                                <span class="filter-subtext">Optionaler Suchradius um den gewählten Ort</span>
                                             </div>
                                         </div>
                                     </div>
@@ -251,16 +251,16 @@
                                 <div class="search-progress-header">
                                     <div class="search-progress-title-wrap">
                                         <div class="search-progress-spinner"></div>
-                                        <h4 class="search-progress-title" id="search_progress_title_1">Jobsuche läuft...</h4>
+                                        <h4 class="search-progress-title" id="search_progress_title_1">Job search in progress...</h4>
                                     </div>
-                                    <span class="search-progress-counter" id="search_progress_counter_1">0 Stellen gefunden</span>
+                                    <span class="search-progress-counter" id="search_progress_counter_1">0 positions found</span>
                                 </div>
                                 <div class="search-progress-track">
                                     <div class="search-progress-fill" id="search_progress_fill_1" style="width: 0%;">
                                         <span class="search-progress-pct" id="search_progress_pct_1">0%</span>
                                     </div>
                                 </div>
-                                <div class="search-progress-status" id="search_progress_status_1">Verbindung zu Jobbörsen wird aufgebaut...</div>
+                                <div class="search-progress-status" id="search_progress_status_1">Connecting to job portals...</div>
                                 <div class="search-progress-stages" id="search_progress_stages_1">
                                     <span class="stage-pill" data-portal="arbeitsagentur">Arbeitsagentur</span>
                                     <span class="stage-pill" data-portal="ausbildung_de">Ausbildung.de</span>
@@ -273,43 +273,43 @@
 
                             <div class="loading" id="loading_1" style="display:none;">
                                 <div class="spinner"></div>
-                                <p>Stellen werden geladen, bitte warten.</p>
+                                <p>Loading positions, please wait...</p>
                             </div>
 
                             <div class="unified-search-footnote">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                                <span>Echtzeit-Aggregierung über deutsche Portale. Bitte verantwortungsvoll und gemäß den Nutzungsbedingungen der jeweiligen Jobbörsen nutzen.</span>
+                                <span>Real-time aggregation across portals. Please use responsibly in accordance with portal terms of service.</span>
                             </div>
                             <div id="results_1" class="results-box">
                                 <div id="results_meta_1" class="results-meta"></div>
                                 <div class="results-filter-bar" id="results_filter_bar_1" style="display:none;">
-                                    <button type="button" class="filter-pill active" data-filter="all">Alle Treffer <span class="filter-count" id="count_all_1">0</span></button>
-                                    <button type="button" class="filter-pill" data-filter="email">Direkte E-Mail <span class="filter-count" id="count_email_1">0</span></button>
-                                    <button type="button" class="filter-pill" data-filter="form">Online-Formular <span class="filter-count" id="count_form_1">0</span></button>
-                                    <button type="button" class="filter-pill" data-filter="both">Beide Wege <span class="filter-count" id="count_both_1">0</span></button>
-                                    <button type="button" class="filter-pill" data-filter="missing">Ohne Direktkontakt <span class="filter-count" id="count_missing_1">0</span></button>
+                                    <button type="button" class="filter-pill active" data-filter="all">All Matches <span class="filter-count" id="count_all_1">0</span></button>
+                                    <button type="button" class="filter-pill" data-filter="email">Direct Email <span class="filter-count" id="count_email_1">0</span></button>
+                                    <button type="button" class="filter-pill" data-filter="form">Online Form <span class="filter-count" id="count_form_1">0</span></button>
+                                    <button type="button" class="filter-pill" data-filter="both">Both Channels <span class="filter-count" id="count_both_1">0</span></button>
+                                    <button type="button" class="filter-pill" data-filter="missing">No Direct Contact <span class="filter-count" id="count_missing_1">0</span></button>
                                 </div>
                                 <div id="results_list_1" class="results-list"></div>
                                 <div class="results-actions" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-                                    <button id="auto_btn_1" type="button" class="auto-btn" style="display:none;">Automatisch extrahieren</button>
-                                    <a id="export_excel_btn_1" href="/api/search/download" class="progress-btn download" style="display:none; text-decoration:none; padding:10px 18px; border-radius:8px; font-weight:600; align-items:center; gap:6px;">📊 Als Excel exportieren (.xlsx)</a>
+                                    <button id="auto_btn_1" type="button" class="auto-btn" style="display:none;">Extract Automatically</button>
+                                    <a id="export_excel_btn_1" href="/api/search/download" class="progress-btn download" style="display:none; text-decoration:none; padding:10px 18px; border-radius:8px; font-weight:600; align-items:center; gap:6px;">📊 Export to Excel (.xlsx)</a>
                                 </div>
                                 <section id="progress_panel_1" class="progress-panel">
-                                    <h4 class="progress-title">Fortschritt Auto-Extraktion</h4>
+                                    <h4 class="progress-title">Auto-Extraction Progress</h4>
                                     <div class="progress-stats">
-                                        <div class="progress-stat"><span id="processed_1" class="value">0</span><span class="label">Verarbeitet</span></div>
-                                        <div class="progress-stat"><span id="emails_1" class="value">0</span><span class="label">E-Mails</span></div>
+                                        <div class="progress-stat"><span id="processed_1" class="value">0</span><span class="label">Processed</span></div>
+                                        <div class="progress-stat"><span id="emails_1" class="value">0</span><span class="label">Emails</span></div>
                                         <div class="progress-stat"><span id="captcha_1" class="value">0</span><span class="label">CAPTCHAs</span></div>
-                                        <div class="progress-stat"><span id="failed_1" class="value">0</span><span class="label">Fehler</span></div>
+                                        <div class="progress-stat"><span id="failed_1" class="value">0</span><span class="label">Errors</span></div>
                                     </div>
                                     <div class="progress-track"><div id="progress_fill_1" class="progress-fill">0%</div></div>
-                                    <div id="progress_status_1" class="progress-status">Leerlauf</div>
+                                    <div id="progress_status_1" class="progress-status">Idle</div>
                                     <div id="progress_error_1" class="progress-error"></div>
                                     <div class="progress-actions">
-                                        <button id="stop_btn_1" type="button" class="progress-btn stop">Stoppen + Ergebnis herunterladen</button>
-                                        <button data-auto-continue id="continue_btn_1" type="button" class="progress-btn continue">Fortsetzen</button>
-                                        <button id="download_btn_1" type="button" class="progress-btn download">Ergebnis herunterladen</button>
-                                        <button id="anschreiben_btn_1" type="button" class="progress-btn primary-action" style="display:none;">Zu Anschreiben</button>
+                                        <button id="stop_btn_1" type="button" class="progress-btn stop">Stop &amp; Download Results</button>
+                                        <button data-auto-continue id="continue_btn_1" type="button" class="progress-btn continue">Continue</button>
+                                        <button id="download_btn_1" type="button" class="progress-btn download">Download Results</button>
+                                        <button id="anschreiben_btn_1" type="button" class="progress-btn primary-action" style="display:none;">Go to Cover Letters</button>
                                     </div>
                                 </section>
                                 <div id="results_error_1" class="results-error" style="display:none;"></div>
@@ -327,16 +327,16 @@
                     <div class="section-hero">
                         <div>
                             <span class="section-kicker">Dashboard</span>
-                            <h2>Gespeicherte Kampagnen</h2>
-                            <p>Versandfortschritt, Pause/Continue und Anschreiben-Editor bleiben in einer laufenden Uebersicht.</p>
+                            <h2>Saved Campaigns</h2>
+                            <p>Track email delivery progress, pause/continue active runs, and manage saved campaigns.</p>
                         </div>
                         <div class="hero-actions">
-                            <a href="{{ url_for('send_emails') }}" data-section-link="send-emails">Neue Kampagne</a>
+                            <a href="{{ url_for('send_emails') }}" data-section-link="send-emails">New Campaign</a>
                         </div>
                     </div>
 
                     <div id="dashboard-status" class="section-status" hidden></div>
-                    <div id="dashboard-empty" class="empty-state" hidden>Noch keine gespeicherten Vorlagen vorhanden.</div>
+                    <div id="dashboard-empty" class="empty-state" hidden>No saved campaign templates yet.</div>
                     <div id="dashboard-cards" class="cards-grid"></div>
                 </section>
 
@@ -353,30 +353,30 @@
                                 <div class="sp-breadcrumb">
                                     <span class="sp-kicker-badge">
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path></svg>
-                                        Supabase Live Dashboard
+                                        Applications Live Dashboard
                                     </span>
                                 </div>
-                                <h2 class="sp-hero-title">Online-Bewerbungen</h2>
-                                <p class="sp-hero-desc">Verwalten Sie eingehende Kandidatenbewerbungen, prüfen Sie Dokumente und steuern Sie den Übergang in den Anschreiben-Generator.</p>
+                                <h2 class="sp-hero-title">Client Applications</h2>
+                                <p class="sp-hero-desc">Manage incoming candidate applications, inspect uploaded documents, and advance candidates into outreach.</p>
                             </div>
                             <div class="sp-hero-right">
-                                <span class="sp-status-badge" id="supabase-connection-badge" title="Supabase Cloud Realtime Status">
+                                <span class="sp-status-badge" id="supabase-connection-badge" title="Live Database Status">
                                     <span class="sp-status-pulse"></span>
-                                    <span>Supabase Verbunden</span>
+                                    <span>Database Connected</span>
                                 </span>
                                 <div class="sp-hero-actions">
-                                    <button type="button" id="supabase-refresh" class="sp-btn-secondary" title="Daten aus Supabase neu laden">
+                                    <button type="button" id="supabase-refresh" class="sp-btn-secondary" title="Reload data from database">
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                                        <span>Aktualisieren</span>
+                                        <span>Refresh</span>
                                     </button>
                                     <div class="sp-export-dropdown-wrap">
-                                        <button type="button" id="sp-export-btn" class="sp-btn-primary" title="Bewerbungen exportieren">
+                                        <button type="button" id="sp-export-btn" class="sp-btn-primary" title="Export applications">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                                            <span>Exportieren</span>
+                                            <span>Export</span>
                                         </button>
                                         <div class="sp-export-menu" id="sp-export-menu" hidden>
-                                            <button type="button" class="sp-export-item" data-export-format="csv">CSV herunterladen (.csv)</button>
-                                            <button type="button" class="sp-export-item" data-export-format="json">JSON exportieren (.json)</button>
+                                            <button type="button" class="sp-export-item" data-export-format="csv">Download CSV (.csv)</button>
+                                            <button type="button" class="sp-export-item" data-export-format="json">Export JSON (.json)</button>
                                         </div>
                                     </div>
                                 </div>
@@ -390,7 +390,7 @@
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
                                 </div>
                                 <div class="sp-metric-content">
-                                    <span class="sp-metric-label">Bewerbungen Gesamt</span>
+                                    <span class="sp-metric-label">Total Applications</span>
                                     <strong class="sp-metric-val" id="sp-metric-total">0</strong>
                                 </div>
                             </div>
@@ -399,7 +399,7 @@
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
                                 </div>
                                 <div class="sp-metric-content">
-                                    <span class="sp-metric-label">Bezahlt</span>
+                                    <span class="sp-metric-label">Paid</span>
                                     <div class="sp-metric-subrow">
                                         <strong class="sp-metric-val" id="sp-metric-paid">0</strong>
                                         <span class="sp-metric-subtext" id="sp-metric-paid-sum">0 DH</span>
@@ -411,7 +411,7 @@
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                                 </div>
                                 <div class="sp-metric-content">
-                                    <span class="sp-metric-label">Zahlung Offen</span>
+                                    <span class="sp-metric-label">Payment Pending</span>
                                     <div class="sp-metric-subrow">
                                         <strong class="sp-metric-val" id="sp-metric-open">0</strong>
                                         <span class="sp-metric-subtext" id="sp-metric-open-sum">0 DH</span>
@@ -423,7 +423,7 @@
                                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
                                 </div>
                                 <div class="sp-metric-content">
-                                    <span class="sp-metric-label">Hinterlegte Dokumente</span>
+                                    <span class="sp-metric-label">Attached Documents</span>
                                     <strong class="sp-metric-val" id="sp-metric-docs">0</strong>
                                 </div>
                             </div>
@@ -439,15 +439,15 @@
                                         type="text"
                                         id="supabase-search"
                                         class="sp-search-input"
-                                        placeholder="Suche nach Name, E-Mail, WhatsApp oder Bereich..."
+                                        placeholder="Search by name, email, WhatsApp, or field..."
                                         autocomplete="off"
                                     >
-                                    <button type="button" id="sp-search-clear" class="sp-search-clear-btn" hidden title="Suche leeren">&times;</button>
+                                    <button type="button" id="sp-search-clear" class="sp-search-clear-btn" hidden title="Clear search">&times;</button>
                                 </div>
 
                                 <!-- View Mode Switcher -->
-                                <div class="sp-view-switcher" role="tablist" aria-label="Ansicht umschalten">
-                                    <button type="button" class="sp-seg-btn is-active" id="sp-view-cards-btn" data-view="cards" title="Kartenansicht">
+                                <div class="sp-view-switcher" role="tablist" aria-label="Toggle view">
+                                    <button type="button" class="sp-seg-btn is-active" id="sp-view-cards-btn" data-view="cards" title="Card view">
                                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
                                         <span>Karten</span>
                                     </button>
@@ -455,7 +455,7 @@
                                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
                                         <span>Kompakt</span>
                                     </button>
-                                    <button type="button" class="sp-seg-btn" id="sp-view-table-btn" data-view="table" title="Tabellenansicht">
+                                    <button type="button" class="sp-seg-btn" id="sp-view-table-btn" data-view="table" title="Table view">
                                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><path d="M3 9h18"></path><path d="M3 15h18"></path><path d="M9 3v18"></path><path d="M15 3v18"></path></svg>
                                         <span>Tabelle</span>
                                     </button>
@@ -464,7 +464,7 @@
                                 <!-- Filter Drawer Toggle -->
                                 <button type="button" id="sp-filter-toggle-btn" class="sp-btn-secondary sp-btn-filter">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
-                                    <span>Filter</span>
+                                    <span>Filters</span>
                                     <span class="sp-filter-badge" id="sp-active-filter-count" hidden>0</span>
                                 </button>
                             </div>
@@ -475,7 +475,7 @@
                                     <label for="sp-sort-select" class="sp-custom-label">Sortierung:</label>
                                     <select id="sp-sort-select" class="sp-select-sm">
                                         <option value="date-desc">Neueste zuerst</option>
-                                        <option value="date-asc">Älteste zuerst</option>
+                                        <option value="date-asc">Oldest first</option>
                                         <option value="name-asc">Name (A–Z)</option>
                                         <option value="name-desc">Name (Z–A)</option>
                                         <option value="paid-first">Bezahlt zuerst</option>
@@ -504,7 +504,7 @@
                                 </div>
 
                                 <div class="sp-custom-control sp-col-visibility-wrap">
-                                    <button type="button" id="sp-col-visibility-btn" class="sp-btn-ghost-sm" title="Sichtbare Spalten &amp; Felder wählen">
+                                    <button type="button" id="sp-col-visibility-btn" class="sp-btn-ghost-sm" title="Select visible columns &amp; fields">
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                                         <span>Felder</span>
                                     </button>
@@ -520,7 +520,7 @@
                                     </div>
                                 </div>
 
-                                <button type="button" id="sp-reset-prefs-btn" class="sp-btn-link-sm" title="Ansichtseinstellungen auf Standard zurücksetzen">
+                                <button type="button" id="sp-reset-prefs-btn" class="sp-btn-link-sm" title="Reset view settings to default">
                                     Ansicht zurücksetzen
                                 </button>
                             </div>
@@ -577,7 +577,7 @@
                                 </div>
                             </div>
                             <div class="sp-filter-actions">
-                                <button type="button" id="sp-filter-clear-all" class="sp-btn-ghost-sm">Alle Filter löschen</button>
+                                <button type="button" id="sp-filter-clear-all" class="sp-btn-ghost-sm">Clear all filters</button>
                             </div>
                         </div>
 
@@ -604,9 +604,9 @@
                             <div class="sp-empty-icon">
                                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                             </div>
-                            <h3 class="sp-empty-title">Keine Bewerbungen gefunden</h3>
-                            <p class="sp-empty-desc">Für Ihre aktuellen Suchbegriffe oder Filterkriterien liegen keine Online-Bewerbungen vor.</p>
-                            <button type="button" id="sp-empty-reset-btn" class="sp-btn-secondary">Filter zurücksetzen</button>
+                            <h3 class="sp-empty-title">No applications found</h3>
+                            <p class="sp-empty-desc">No applications match your current search terms or filters.</p>
+                            <button type="button" id="sp-empty-reset-btn" class="sp-btn-secondary">Reset Filters</button>
                         </div>
 
                         <!-- 1. Card View Container -->
@@ -620,7 +620,7 @@
                             <table class="sp-table" id="sp-main-table">
                                 <thead>
                                     <tr>
-                                        <th class="th-checkbox"><input type="checkbox" id="sp-table-select-all" title="Alle auswählen"></th>
+                                        <th class="th-checkbox"><input type="checkbox" id="sp-table-select-all" title="Select all"></th>
                                         <th class="th-sortable" data-sort="name">Bewerber <span class="sort-icon"></span></th>
                                         <th data-col="email">E-Mail</th>
                                         <th data-col="whatsapp">WhatsApp</th>
@@ -641,7 +641,7 @@
                         <!-- Pagination Footer Bar -->
                         <div class="sp-pagination-bar" id="sp-pagination" hidden>
                             <div class="sp-page-size-wrap">
-                                <label for="sp-page-size-select">Einträge pro Seite:</label>
+                                <label for="sp-page-size-select">Entries per page:</label>
                                 <select id="sp-page-size-select" class="sp-select-sm">
                                     <option value="10">10</option>
                                     <option value="25" selected>25</option>
@@ -655,7 +655,7 @@
                                 <button type="button" class="sp-page-btn" id="sp-page-first" title="Erste Seite">&laquo;</button>
                                 <button type="button" class="sp-page-btn" id="sp-page-prev" title="Vorherige Seite">&lsaquo;</button>
                                 <div class="sp-page-numbers" id="sp-page-numbers"></div>
-                                <button type="button" class="sp-page-btn" id="sp-page-next" title="Nächste Seite">&rsaquo;</button>
+                                <button type="button" class="sp-page-btn" id="sp-page-next" title="Next page">&rsaquo;</button>
                                 <button type="button" class="sp-page-btn" id="sp-page-last" title="Letzte Seite">&raquo;</button>
                             </div>
                         </div>
@@ -663,32 +663,32 @@
 
                     <!-- Slide-Over Application Details Drawer -->
                     <div id="sp-drawer-backdrop" class="sp-drawer-backdrop" hidden></div>
-                    <aside id="sp-details-drawer" class="sp-drawer-panel" hidden aria-label="Bewerbungsdetails">
+                    <aside id="sp-details-drawer" class="sp-drawer-panel" hidden aria-label="Application Details">
                         <div class="sp-drawer-header">
                             <div class="sp-drawer-profile-meta">
                                 <div class="sp-drawer-avatar" id="sp-drawer-avatar">AS</div>
                                 <div>
-                                    <h3 class="sp-drawer-name" id="sp-drawer-name">Bewerber Name</h3>
+                                    <h3 class="sp-drawer-name" id="sp-drawer-name">Candidate Name</h3>
                                     <div class="sp-drawer-tags">
                                         <span class="sp-status-pill" id="sp-drawer-status-pill">Offen</span>
                                         <span class="sp-drawer-subtag" id="sp-drawer-pack-tag">Paket</span>
                                     </div>
                                 </div>
                             </div>
-                            <button type="button" id="sp-drawer-close" class="sp-drawer-close-btn" title="Schließen (Esc)">&times;</button>
+                            <button type="button" id="sp-drawer-close" class="sp-drawer-close-btn" title="Close (Esc)">&times;</button>
                         </div>
 
                         <div class="sp-drawer-body">
                             <!-- 1. Personal Information -->
                             <section class="sp-drawer-section">
-                                <h4 class="sp-drawer-section-title">1. Persönliche Informationen</h4>
+                                <h4 class="sp-drawer-section-title">1. Personal Information</h4>
                                 <div class="sp-drawer-fields-grid">
                                     <div class="sp-drawer-field">
-                                        <span class="sp-field-label">Vollständiger Name</span>
+                                        <span class="sp-field-label">Full Name</span>
                                         <strong class="sp-field-value" id="sp-d-fullname">-</strong>
                                     </div>
                                     <div class="sp-drawer-field">
-                                        <span class="sp-field-label">Bewerber-ID</span>
+                                        <span class="sp-field-label">Candidate ID</span>
                                         <code class="sp-field-code" id="sp-d-id">-</code>
                                     </div>
                                 </div>
@@ -696,7 +696,7 @@
 
                             <!-- 2. Contact Information -->
                             <section class="sp-drawer-section">
-                                <h4 class="sp-drawer-section-title">2. Kontakt &amp; Kommunikation</h4>
+                                <h4 class="sp-drawer-section-title">2. Contact &amp; Communication</h4>
                                 <div class="sp-drawer-fields-grid">
                                     <div class="sp-drawer-field">
                                         <span class="sp-field-label">E-Mail</span>
@@ -717,7 +717,7 @@
 
                             <!-- 3. Application Preferences -->
                             <section class="sp-drawer-section">
-                                <h4 class="sp-drawer-section-title">3. Bewerbungs-Präferenzen</h4>
+                                <h4 class="sp-drawer-section-title">3. Application Preferences</h4>
                                 <div class="sp-drawer-fields-grid">
                                     <div class="sp-drawer-field">
                                         <span class="sp-field-label">Bereich / Fachgebiet</span>
@@ -732,10 +732,10 @@
 
                             <!-- 4. Package and Payment -->
                             <section class="sp-drawer-section">
-                                <h4 class="sp-drawer-section-title">4. Paket &amp; Zahlung</h4>
+                                <h4 class="sp-drawer-section-title">4. Package &amp; Payment</h4>
                                 <div class="sp-drawer-fields-grid">
                                     <div class="sp-drawer-field">
-                                        <span class="sp-field-label">Gewähltes Paket</span>
+                                        <span class="sp-field-label">Selected Package</span>
                                         <strong class="sp-field-value" id="sp-d-pack">-</strong>
                                     </div>
                                     <div class="sp-drawer-field">
@@ -758,7 +758,7 @@
                             <!-- 5. Uploaded Documents -->
                             <section class="sp-drawer-section">
                                 <div class="sp-drawer-section-head">
-                                    <h4 class="sp-drawer-section-title">5. Hochgeladene Unterlagen</h4>
+                                    <h4 class="sp-drawer-section-title">5. Uploaded Documents</h4>
                                     <span class="sp-doc-counter-badge" id="sp-d-doc-count">0 Dokumente</span>
                                 </div>
                                 <div class="sp-drawer-docs-list" id="sp-d-docs-container">
@@ -768,7 +768,7 @@
 
                             <!-- 6. Submission Information -->
                             <section class="sp-drawer-section">
-                                <h4 class="sp-drawer-section-title">6. Einreichung &amp; System</h4>
+                                <h4 class="sp-drawer-section-title">6. Submission &amp; System Details</h4>
                                 <div class="sp-drawer-fields-grid">
                                     <div class="sp-drawer-field">
                                         <span class="sp-field-label">Eingereicht am</span>
@@ -780,19 +780,30 @@
                                     </div>
                                 </div>
                             </section>
+
+                            <!-- 7. JobScout Onboarding Dossier -->
+                            <section class="sp-drawer-section" id="sp-d-onboard-section">
+                                <h4 class="sp-drawer-section-title">7. JobScout Candidate Dossier</h4>
+                                <div id="sp-d-onboard-container" class="sp-drawer-onboard-card">
+                                    <div class="sp-doc-empty">Lade Onboarding-Status...</div>
+                                </div>
+                            </section>
                         </div>
 
                         <!-- Drawer Footer Actions -->
                         <div class="sp-drawer-footer">
+                            <button type="button" id="sp-d-onboard-btn" class="sp-btn-action-onboard" style="padding: 8px 14px; font-size: 12.5px;">
+                                <span>Als Bewerber importieren</span>
+                            </button>
                             <button type="button" id="sp-d-next-step-btn" class="sp-btn-primary">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                                <span>Next Step (Anschreiben)</span>
+                                <span>Next Step (Cover Letter)</span>
                             </button>
                             <button type="button" id="sp-d-edit-btn" class="sp-btn-secondary">
-                                <span>Bearbeiten</span>
+                                <span>Edit</span>
                             </button>
                             <button type="button" id="sp-d-delete-btn" class="sp-btn-danger">
-                                <span>Löschen</span>
+                                <span>Delete</span>
                             </button>
                         </div>
                     </aside>
@@ -879,7 +890,7 @@
                         <!-- Filters & Search -->
                         <div class="money-controls">
                             <div class="money-search-wrap">
-                                <input type="text" id="money-search" class="money-search" placeholder="Nach Name suchen...">
+                                <input type="text" id="money-search" class="money-search" placeholder="Search by name...">
                             </div>
                             <select id="money-sort" class="money-sort">
                                 <option value="date-desc">Neueste zuerst</option>
@@ -958,7 +969,7 @@
                     <!-- Empty State -->
                     <div id="money-empty" class="money-empty" hidden>
                         <div class="money-empty-icon">&#128184;</div>
-                        <h3>Keine Zahlungen vorhanden</h3>
+                        <h3>No payment records found</h3>
                         <p>Sobald Zahlungen in der Supabase-Tabelle &quot;payed&quot; erscheinen, werden sie hier angezeigt.</p>
                     </div>
 
@@ -976,9 +987,9 @@
                 >
                     <div class="section-hero">
                         <div>
-                            <span class="section-kicker">Ausbildungen • Exportdateien &amp; Updates</span>
-                            <h2>Ausbildungsplätze &amp; Lehrstellen</h2>
-                            <p>Verwalte deine gescrapten Ausbildungsstellen, führe automatische E-Mail-Updates durch und exportiere Datensätze für deine Bewerbungskampagnen.</p>
+                            <span class="section-kicker">Apprenticeships • Lead Datasets &amp; Candidate Matching</span>
+                            <h2>Apprenticeship Datasets &amp; Exports</h2>
+                            <p>Organize, preview, deduplicate, and merge lead lists. Automatically filtered for the active candidate.</p>
                         </div>
                         <div class="hero-actions">
                             <a href="{{ url_for('index') }}" data-section-link="search" class="hub-btn-secondary" style="font-size: 13px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
@@ -988,11 +999,120 @@
                         </div>
                     </div>
 
+                    <!-- Statistics Summary Strip -->
+                    <div class="ab-stats-strip">
+                        <div class="ab-stat-card">
+                            <span class="ab-stat-label">Datasets</span>
+                            <strong class="ab-stat-value" id="ab-stat-total-files">0</strong>
+                        </div>
+                        <div class="ab-stat-card">
+                            <span class="ab-stat-label">Total Leads</span>
+                            <strong class="ab-stat-value" id="ab-stat-total-rows">0</strong>
+                        </div>
+                        <div class="ab-stat-card">
+                            <span class="ab-stat-label">Total Size</span>
+                            <strong class="ab-stat-value" id="ab-stat-total-size">0 KB</strong>
+                        </div>
+                        <div class="ab-stat-card ab-stat-candidate" id="ab-stat-candidate-box">
+                            <span class="ab-stat-label">Active Candidate</span>
+                            <div class="ab-candidate-pill">
+                                <span class="ab-candidate-star">⭐</span>
+                                <strong id="ab-stat-candidate-name">Loading...</strong>
+                                <span class="ab-candidate-title" id="ab-stat-candidate-role"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filter Toolbar: Search, Candidate Relevance Toggle, Topic Chips -->
+                    <div class="ab-toolbar">
+                        <div class="ab-search-wrap">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                            <input type="text" id="ausbildung-search-input" placeholder="Search datasets by profession, keyword or filename...">
+                            <button type="button" id="ausbildung-search-clear" class="ab-clear-btn" hidden>&times;</button>
+                        </div>
+                        <div class="ab-filter-controls">
+                            <button type="button" id="btn-toggle-candidate-filter" class="ab-filter-pill is-active" title="Filter datasets matching active candidate">
+                                <span class="pill-dot"></span>
+                                <span id="candidate-filter-label">⭐ Active Candidate Only</span>
+                                <span class="ab-badge-count" id="candidate-match-count">0</span>
+                            </button>
+                            <div class="ab-topic-chips" id="ab-topic-chips">
+                                <button type="button" class="ab-chip is-active" data-topic="all">All</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Batch Actions Bar (Shows when files selected) -->
+                    <div id="ab-batch-bar" class="ab-batch-bar" hidden>
+                        <div class="ab-batch-left">
+                            <label class="ab-checkbox-label">
+                                <input type="checkbox" id="ab-select-all-checkbox">
+                                <span>Select All Visible</span>
+                            </label>
+                            <span class="ab-batch-sep">|</span>
+                            <span class="ab-batch-count-text" id="ab-batch-selected-count">0 files selected</span>
+                            <span class="ab-batch-sub" id="ab-batch-rows-preview">(~0 leads)</span>
+                        </div>
+                        <div class="ab-batch-actions">
+                            <label class="ab-delete-sources-toggle" title="Delete small files after successful merge">
+                                <input type="checkbox" id="ab-delete-sources-checkbox" checked>
+                                <span>Delete source files after merge</span>
+                            </label>
+                            <button type="button" id="btn-batch-merge" class="ab-btn-merge">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path></svg>
+                                <span>Merge &amp; Deduplicate</span>
+                            </button>
+                            <button type="button" id="btn-clear-selection" class="ab-btn-text">Deselect</button>
+                        </div>
+                    </div>
+
                     <!-- Export Files Grid & Updates Panel -->
                     <div id="panel-ausbildung-files" class="ausbildung-panel is-active">
                         <div id="ausbildungen-status" class="section-status" hidden></div>
-                        <div id="ausbildungen-empty" class="empty-state" hidden>Keine exportierten Ausbildungsdateien gefunden.</div>
+                        <div id="ausbildungen-empty" class="empty-state" hidden>No exported apprenticeship files match the current filter.</div>
                         <div id="ausbildungen-files" class="files-grid"></div>
+                    </div>
+
+                    <!-- Lead Preview Modal -->
+                    <div id="ausbildung-preview-modal" class="ab-modal-backdrop" hidden>
+                        <div class="ab-modal-dialog">
+                            <div class="ab-modal-header">
+                                <div class="ab-modal-title-group">
+                                    <div class="ab-modal-icon">📊</div>
+                                    <div>
+                                        <h3 id="ab-preview-title">Dataset Preview</h3>
+                                        <div class="ab-modal-meta">
+                                            <span id="ab-preview-filename">filename.xlsx</span>
+                                            <span class="ab-meta-dot">•</span>
+                                            <span id="ab-preview-stats">0 Rows • 0 Emails</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="ab-modal-header-actions">
+                                    <a id="ab-preview-download-btn" href="#" class="ab-btn-secondary-sm" download>
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                        <span>Download</span>
+                                    </a>
+                                    <button type="button" id="ab-preview-close-btn" class="ab-modal-close" aria-label="Close modal">&times;</button>
+                                </div>
+                            </div>
+                            <div class="ab-modal-filter-row">
+                                <input type="text" id="ab-preview-search" class="ab-modal-search" placeholder="Filter rows inside preview (company, title, email)...">
+                                <span class="ab-preview-row-counter" id="ab-preview-counter">Showing 0 rows</span>
+                            </div>
+                            <div class="ab-modal-body">
+                                <div class="ab-preview-table-wrap">
+                                    <table class="ab-preview-table" id="ab-preview-table">
+                                        <thead id="ab-preview-thead"></thead>
+                                        <tbody id="ab-preview-tbody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="ab-modal-footer">
+                                <span class="ab-footer-note" id="ab-preview-note">Preview shows up to 100 entries. Full dataset available via Download.</span>
+                                <button type="button" id="ab-preview-footer-close" class="ab-btn-subtle">Close</button>
+                            </div>
+                        </div>
                     </div>
                 </section>
 
@@ -1018,7 +1138,7 @@
                                     <span class="as-stat-sep">•</span>
                                     <span id="create-anschreibens-summaryWhatsapp">+49 ...</span>
                                     <span class="as-stat-sep">•</span>
-                                    <span id="create-anschreibens-summaryBewerbungen">0 Bewerbungen</span>
+                                    <span id="create-anschreibens-summaryBewerbungen">0 Applications</span>
                                     <span class="as-stat-sep">•</span>
                                     <span id="create-anschreibens-summaryDocuments">0 Dokumente</span>
                                 </div>
@@ -1045,7 +1165,7 @@
 
                                 <!-- Display Mode Switcher (Segmented Control) -->
                                 <div class="as-mode-switcher" role="radiogroup" aria-label="Ansichtsmodus">
-                                    <button type="button" class="as-mode-btn" data-mode="editor" title="Volle Editor-Breite für fokussiertes Schreiben">
+                                    <button type="button" class="as-mode-btn" data-mode="editor" title="Full editor width for focused writing">
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
                                         <span>Editor</span>
                                     </button>
@@ -1068,10 +1188,10 @@
                                         <label for="create-anschreibens-exportSelect">Datenquelle:</label>
                                     </div>
                                     <select id="create-anschreibens-exportSelect" class="as-source-select">
-                                        <option value="">Bitte Domain/Export wählen...</option>
+                                        <option value="">Please select export file...</option>
                                     </select>
                                     <button id="create-anschreibens-loadExportBtn" class="as-btn-load" type="button">
-                                        <span>Laden</span>
+                                        <span>Load</span>
                                     </button>
 
                                     <!-- Active File Info Pill -->
@@ -1090,7 +1210,7 @@
                                             <span>Spalten & Daten</span>
                                         </summary>
                                         <div class="as-drawer-panel">
-                                            <div class="as-drawer-panel-head">Verfügbare Datenspalten</div>
+                                            <div class="as-drawer-panel-head">Available Data Columns</div>
                                             <div id="create-anschreibens-columnList" class="anschreiben-column-list-compact"></div>
                                             <div id="create-anschreibens-dataPreview" class="anschreiben-data-preview-compact" hidden>
                                                 <div id="create-anschreibens-previewTable" class="anschreiben-preview-table-compact"></div>
@@ -1105,7 +1225,7 @@
                                             <span id="create-anschreibens-documentViewerTitle" class="as-active-doc-badge"></span>
                                         </summary>
                                         <div class="as-drawer-panel as-doc-panel">
-                                            <div id="create-anschreibens-sourcePrompt" class="drawer-empty-text">Noch kein Quelldokument ausgewählt.</div>
+                                            <div id="create-anschreibens-sourcePrompt" class="drawer-empty-text">No source document selected yet.</div>
                                             <div id="create-anschreibens-pdfContainer" class="anschreiben-viewer-compact" hidden>
                                                 <div class="anschreiben-viewer-subbar">
                                                     <div id="create-anschreibens-documentList" class="anschreiben-document-list-compact"></div>
@@ -1127,11 +1247,11 @@
                             <div class="as-tool-group">
                                 <span class="as-group-title">KI-Assistent</span>
                                 <div class="as-group-items">
-                                    <button id="create-anschreibens-aiTemplatizeBtn" type="button" class="as-tool-btn as-btn-ai" title="Erkennt Text und fügt automatisch {{Unternehmen}}, {{salutation}} etc. ein">
+                                    <button id="create-anschreibens-aiTemplatizeBtn" type="button" class="as-tool-btn as-btn-ai" title="Detects text and automatically inserts {{Unternehmen}}, {{salutation}} etc.">
                                         <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"/></svg>
                                         <span>KI-Platzhalter</span>
                                     </button>
-                                    <button id="create-anschreibens-atsTailorBtn" type="button" class="as-tool-btn as-btn-luna" title="ATS Schlüsselbegriffe optimieren mit GPT Luna (~$0.00003)">
+                                    <button id="create-anschreibens-atsTailorBtn" type="button" class="as-tool-btn as-btn-luna" title="Optimize ATS keywords with GPT Luna (~$0.00003)">
                                         <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
                                         <span>ATS Tailor</span>
                                     </button>
@@ -1139,7 +1259,7 @@
                                         <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
                                         <span>Golden Hook</span>
                                     </button>
-                                    <span id="create-anschreibens-aiTemplatizeStatus" class="tool-status-inline" hidden>KI läuft...</span>
+                                    <span id="create-anschreibens-aiTemplatizeStatus" class="tool-status-inline" hidden>AI in progress...</span>
                                 </div>
                             </div>
 
@@ -1165,11 +1285,11 @@
                             <div class="as-tool-group">
                                 <span class="as-group-title">Dokumentdesign</span>
                                 <div class="as-group-items">
-                                    <button type="button" id="create-anschreibens-bgTemplatesBtn" class="as-tool-btn as-btn-templates" title="Fertige Briefpapier-Vorlagen auswählen">
+                                    <button type="button" id="create-anschreibens-bgTemplatesBtn" class="as-tool-btn as-btn-templates" title="Choose Pre-Made Stationery Templates">
                                         <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
                                         <span>🎨 Vorlagen</span>
                                     </button>
-                                    <div id="create-anschreibens-designDropZone" class="as-drop-zone-pill" title="Eigenes Hintergrund-PDF hochladen">
+                                    <div id="create-anschreibens-designDropZone" class="as-drop-zone-pill" title="Upload Custom Background PDF">
                                         <input type="file" id="create-anschreibens-designFileInput" accept=".pdf" hidden>
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
                                         <span>Eigenes PDF</span>
@@ -1192,7 +1312,7 @@
                                         <!-- Variant tabs dynamically populated -->
                                     </div>
                                     <div class="as-variants-actions">
-                                        <button id="create-anschreibens-addTemplateBtn" class="as-var-action-btn" type="button" title="Neue Variante hinzufügen">
+                                        <button id="create-anschreibens-addTemplateBtn" class="as-var-action-btn" type="button" title="Add new variation">
                                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                                             <span>Neu</span>
                                         </button>
@@ -1204,7 +1324,7 @@
                                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
                                             <span>Umbenennen</span>
                                         </button>
-                                        <button id="create-anschreibens-deleteTemplateBtn" class="as-var-action-btn as-var-del" type="button" title="Aktive Variante löschen">
+                                        <button id="create-anschreibens-deleteTemplateBtn" class="as-var-action-btn as-var-del" type="button" title="Delete active variation">
                                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                                         </button>
                                     </div>
@@ -1216,10 +1336,10 @@
                                         <div class="as-placeholder-header-left">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
                                             <span class="as-placeholder-title">Platzhalter-Bibliothek</span>
-                                            <span class="as-placeholder-count" id="as-placeholder-counter">Klicken zum Einfügen</span>
+                                            <span class="as-placeholder-count" id="as-placeholder-counter">Click to insert</span>
                                         </div>
                                         <div class="as-placeholder-header-right">
-                                            <input type="text" id="as-placeholder-search" class="as-placeholder-search-input" placeholder="🔍 Platzhalter suchen..." onclick="event.stopPropagation();">
+                                            <input type="text" id="as-placeholder-search" class="as-placeholder-search-input" placeholder="🔍 Search placeholders..." onclick="event.stopPropagation();">
                                             <span class="as-accordion-arrow">▾</span>
                                         </div>
                                     </div>
@@ -1244,13 +1364,13 @@
                                             <button type="button" class="as-fmt-btn" data-prefix="<u>" data-suffix="</u>" title="Unterstrichen"><u>U</u></button>
                                             <button type="button" class="as-fmt-btn" data-prefix="<br><br>" data-suffix="" title="Neuer Absatz">↵</button>
                                             <div class="as-fmt-sep"></div>
-                                            <button type="button" class="as-fmt-btn" id="as-editor-undo" title="Rückgängig (Strg+Z)">↺</button>
+                                            <button type="button" class="as-fmt-btn" id="as-editor-undo" title="Undo (Ctrl+Z)">↺</button>
                                             <button type="button" class="as-fmt-btn" id="as-editor-redo" title="Wiederholen (Strg+Y)">↻</button>
                                         </div>
 
                                         <!-- Word & Character Count -->
                                         <div class="as-editor-stats">
-                                            <span id="as-word-count">0 Wörter</span>
+                                            <span id="as-word-count">0 words</span>
                                             <span class="as-stat-dot">•</span>
                                             <span id="as-char-count">0 Zeichen</span>
                                         </div>
@@ -1262,7 +1382,7 @@
                                             id="create-anschreibens-templateEditor"
                                             class="as-document-textarea"
                                             rows="16"
-                                            placeholder="Schreiben Sie hier Ihr Anschreiben. Klicken Sie oben auf Platzhalter wie {{Unternehmen}}, {{salutation}} oder nutzen Sie die KI-Tools..."
+                                            placeholder="Write your cover letter here. Click above on placeholders like {{Unternehmen}}, {{salutation}} or use the AI tools..."
                                             spellcheck="false"
                                         ></textarea>
                                     </div>
@@ -1272,7 +1392,7 @@
                                         <div class="as-footer-left">
                                             <button id="create-anschreibens-saveTemplateBtn" class="as-btn-save-template" type="button">
                                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-                                                <span>Vorlage speichern</span>
+                                                <span>Save Template</span>
                                             </button>
                                             <button id="create-anschreibens-resetTemplateBtn" class="as-btn-clear-template" type="button">Leeren</button>
                                             <div id="create-anschreibens-validationResult" class="anschreiben-validation-compact" hidden></div>
@@ -1302,7 +1422,7 @@
                                         </button>
 
                                         <div class="as-action-subrow">
-                                            <button id="create-anschreibens-previewBtn" class="as-btn-preview-sub" type="button" title="Vorschau im Großfenster öffnen">
+                                            <button id="create-anschreibens-previewBtn" class="as-btn-preview-sub" type="button" title="Open Fullscreen Preview">
                                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                                                 <span>Vorschau-Fenster</span>
                                             </button>
@@ -1327,20 +1447,20 @@
                                     <div class="as-live-preview-header">
                                         <div class="as-live-preview-title-row">
                                             <span class="as-live-badge">Live-PDF</span>
-                                            <span class="as-live-doc-name" id="as-live-doc-name">Empfänger-Vorschau</span>
+                                            <span class="as-live-doc-name" id="as-live-doc-name">Recipient Preview</span>
                                         </div>
                                         <div class="as-live-nav">
                                             <button type="button" id="as-record-prev" class="as-nav-step" title="Vorheriger Datensatz">&larr;</button>
                                             <span id="as-record-indicator" class="as-record-text">0 / 0</span>
-                                            <button type="button" id="as-record-next" class="as-nav-step" title="Nächster Datensatz">&rarr;</button>
-                                            <button type="button" id="as-refresh-preview" class="as-nav-refresh" title="Vorschau aktualisieren">🔄</button>
+                                            <button type="button" id="as-record-next" class="as-nav-step" title="Next record">&rarr;</button>
+                                            <button type="button" id="as-refresh-preview" class="as-nav-refresh" title="Update Preview">🔄</button>
                                         </div>
                                     </div>
                                     <div class="as-live-preview-viewport">
                                         <iframe id="as-live-preview-iframe" class="as-preview-iframe" title="Echtzeit PDF Vorschau"></iframe>
                                         <div id="as-preview-placeholder" class="as-preview-empty">
                                             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
-                                            <p>Lade eine Datenquelle, um die Live-PDF-Vorschau für jeden Empfänger zu sehen.</p>
+                                            <p>Load a data source to see the live PDF preview for each recipient.</p>
                                         </div>
                                     </div>
                                 </div>
@@ -1348,12 +1468,12 @@
                                 <!-- Document Readiness & Quality Check Card -->
                                 <div class="as-readiness-card">
                                     <div class="as-readiness-header">
-                                        <h5>Dokumentprüfung</h5>
+                                        <h5>Document Review</h5>
                                         <span class="as-readiness-pill ready" id="as-readiness-pill">Bereit</span>
                                     </div>
                                     <div class="as-readiness-list">
                                         <div class="as-readiness-item">
-                                            <span class="as-item-label">Empfänger-Datensätze:</span>
+                                            <span class="as-item-label">Recipient records:</span>
                                             <span class="as-item-val" id="as-check-records">0 Kontakte</span>
                                         </div>
                                         <div class="as-readiness-item">
@@ -1366,7 +1486,7 @@
                                         </div>
                                         <div class="as-readiness-item">
                                             <span class="as-item-label">Platzhalter-Status:</span>
-                                            <span class="as-item-val is-ok" id="as-check-placeholders">Gültig</span>
+                                            <span class="as-item-val is-ok" id="as-check-placeholders">Valid</span>
                                         </div>
                                     </div>
                                 </div>
@@ -1378,29 +1498,47 @@
                                         <summary class="as-layout-summary">
                                             <div class="as-layout-summary-left">
                                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
-                                                <span>Typografie & DIN-Ränder</span>
+                                                <span>Typography &amp; Margins</span>
                                             </div>
                                             <span class="as-drawer-arrow">▾</span>
                                         </summary>
-                                        <div class="as-layout-inputs">
-                                            <div class="as-layout-grid-2">
-                                                <label>Schrift (pt)<input type="number" id="create-anschreibens-fontSizeInput" min="6" max="48" step="1" value="11"></label>
-                                                <label>Zeile (mm)<input type="number" id="create-anschreibens-lineHeightInput" min="2" max="30" step="0.5" value="5"></label>
+                                        <div class="as-layout-body">
+                                            <div class="as-layout-grid">
+                                                <div class="as-input-group">
+                                                    <label for="create-anschreibens-fontSizeInput">Schrift (pt)</label>
+                                                    <input type="number" id="create-anschreibens-fontSizeInput" min="6" max="48" step="1" value="11">
+                                                </div>
+                                                <div class="as-input-group">
+                                                    <label for="create-anschreibens-lineHeightInput">Zeile (mm)</label>
+                                                    <input type="number" id="create-anschreibens-lineHeightInput" min="2" max="30" step="0.5" value="5">
+                                                </div>
+                                                <div class="as-input-group">
+                                                    <label for="create-anschreibens-marginTopInput">Oben (mm)</label>
+                                                    <input type="number" id="create-anschreibens-marginTopInput" min="0" max="250" step="1" value="20">
+                                                </div>
+                                                <div class="as-input-group">
+                                                    <label for="create-anschreibens-marginBottomInput">Unten (mm)</label>
+                                                    <input type="number" id="create-anschreibens-marginBottomInput" min="0" max="250" step="1" value="20">
+                                                </div>
+                                                <div class="as-input-group">
+                                                    <label for="create-anschreibens-marginLeftInput">Links (mm)</label>
+                                                    <input type="number" id="create-anschreibens-marginLeftInput" min="0" max="200" step="1" value="20">
+                                                </div>
+                                                <div class="as-input-group">
+                                                    <label for="create-anschreibens-marginRightInput">Rechts (mm)</label>
+                                                    <input type="number" id="create-anschreibens-marginRightInput" min="0" max="200" step="1" value="20">
+                                                </div>
+                                                <div class="as-input-group">
+                                                    <label for="create-anschreibens-textWidthInput">Breite (mm)</label>
+                                                    <input type="number" id="create-anschreibens-textWidthInput" min="20" max="210" step="1" value="170">
+                                                </div>
+                                                <div class="as-input-group">
+                                                    <label for="create-anschreibens-textHeightInput">Höhe (mm)</label>
+                                                    <input type="number" id="create-anschreibens-textHeightInput" min="20" max="297" step="1" value="257">
+                                                </div>
                                             </div>
-                                            <div class="as-layout-grid-2">
-                                                <label>Oben (mm)<input type="number" id="create-anschreibens-marginTopInput" min="0" max="250" step="1" value="20"></label>
-                                                <label>Unten (mm)<input type="number" id="create-anschreibens-marginBottomInput" min="0" max="250" step="1" value="20"></label>
-                                            </div>
-                                            <div class="as-layout-grid-2">
-                                                <label>Links (mm)<input type="number" id="create-anschreibens-marginLeftInput" min="0" max="200" step="1" value="20"></label>
-                                                <label>Rechts (mm)<input type="number" id="create-anschreibens-marginRightInput" min="0" max="200" step="1" value="20"></label>
-                                            </div>
-                                            <div class="as-layout-grid-2">
-                                                <label>Breite (mm)<input type="number" id="create-anschreibens-textWidthInput" min="20" max="210" step="1" value="170"></label>
-                                                <label>Höhe (mm)<input type="number" id="create-anschreibens-textHeightInput" min="20" max="297" step="1" value="257"></label>
-                                            </div>
-                                            <div class="as-layout-reset-row">
-                                                <button id="create-anschreibens-resetLayoutBtn" class="anschreiben-btn-subtle-sm" type="button">Reset Standard</button>
+                                            <div class="as-layout-footer">
+                                                <button id="create-anschreibens-resetLayoutBtn" class="as-btn-reset-layout" type="button">Reset Standard</button>
                                             </div>
                                         </div>
                                     </details>
@@ -1414,8 +1552,8 @@
                             <div class="anschreiben-modal-content as-full-preview-modal">
                                 <div class="anschreiben-modal-header">
                                     <div class="as-preview-modal-title">
-                                        <h3>Druck- und PDF-Vorschau</h3>
-                                        <span class="as-preview-subtitle">Originalgetreue Ansicht des generierten Anschreibens</span>
+                                        <h3>Print &amp; PDF Preview</h3>
+                                        <span class="as-preview-subtitle">Accurate preview of generated cover letter</span>
                                     </div>
                                     <button class="anschreiben-close-btn" id="create-anschreibens-closeModalBtn" type="button">&times;</button>
                                 </div>
@@ -1423,7 +1561,7 @@
                                     <iframe id="create-anschreibens-pdfPreview" title="PDF Vorschau"></iframe>
                                 </div>
                                 <div class="anschreiben-modal-footer">
-                                    <button class="anschreiben-btn-subtle-sm" id="create-anschreibens-closeFooterBtn" type="button">Schließen</button>
+                                    <button class="anschreiben-btn-subtle-sm" id="create-anschreibens-closeFooterBtn" type="button">Close</button>
                                 </div>
                             </div>
                         </div>
@@ -1436,7 +1574,7 @@
                                         <div class="ats-icon-badge">⚡</div>
                                         <div>
                                             <h3>ATS Keyword Optimizer (GPT Luna)</h3>
-                                            <p class="ats-header-sub">Optimiert Profil-Erfahrungen mit den Schlüsselbegriffen der Stelle (~$0.00003).</p>
+                                            <p class="ats-header-sub">Optimizes profile experience with key phrases from the job listing (~$0.00003).</p>
                                         </div>
                                     </div>
                                     <button class="anschreiben-close-btn" id="create-anschreibens-closeAtsModalBtn" type="button">&times;</button>
@@ -1453,12 +1591,12 @@
                                         </div>
                                     </div>
                                     <div class="ats-field-block">
-                                        <label for="create-anschreibens-atsRequirements">Anforderungen / Stellentext (oder Schlüsselwörter):</label>
-                                        <textarea id="create-anschreibens-atsRequirements" rows="3" placeholder="Fügen Sie hier die Anforderungen aus der Stellenanzeige ein..."></textarea>
+                                        <label for="create-anschreibens-atsRequirements">Job Requirements / Text (or keywords):</label>
+                                        <textarea id="create-anschreibens-atsRequirements" rows="3" placeholder="Paste job requirements or listing text here..."></textarea>
                                     </div>
                                     <div class="ats-field-block">
-                                        <label for="create-anschreibens-atsCustomBullets">Ihre bisherigen Erfahrungen (oder leer lassen für Profil-Standard):</label>
-                                        <textarea id="create-anschreibens-atsCustomBullets" rows="2" placeholder="Leer lassen für automatische Übernahme aus dem Profil"></textarea>
+                                        <label for="create-anschreibens-atsCustomBullets">Candidate work experience (or leave blank for profile default):</label>
+                                        <textarea id="create-anschreibens-atsCustomBullets" rows="2" placeholder="Leave blank to auto-fill from profile"></textarea>
                                     </div>
                                     <div class="ats-action-row">
                                         <button type="button" id="create-anschreibens-atsRunBtn" class="anschreiben-btn-primary-sm btn-luna-run">
@@ -1473,7 +1611,7 @@
                                         <label class="ats-result-label">Generierte ATS-optimierte Stichpunkte:</label>
                                         <div id="create-anschreibens-atsResultBullets" class="ats-bullets-container"></div>
                                         <div class="ats-result-actions">
-                                            <button type="button" id="create-anschreibens-atsInsertBtn" class="anschreiben-btn-primary-sm">In Anschreiben einfügen</button>
+                                            <button type="button" id="create-anschreibens-atsInsertBtn" class="anschreiben-btn-primary-sm">Insert into cover letter</button>
                                             <button type="button" id="create-anschreibens-atsCopyBtn" class="anschreiben-btn-subtle-sm">Kopieren</button>
                                         </div>
                                     </div>
@@ -1488,8 +1626,8 @@
                                     <div class="ats-header-meta">
                                         <div class="ats-icon-badge badge-golden">✨</div>
                                         <div>
-                                            <h3>Golden Hook — Warum Ihr Unternehmen?</h3>
-                                            <p class="ats-header-sub">Generiert einen unwiderstehlichen ersten Satz speziell für das Zielunternehmen (~$0.000015).</p>
+                                            <h3>Golden Hook — Why Your Company?</h3>
+                                            <p class="ats-header-sub">Generates a compelling opening sentence tailored specifically to the target company (~$0.000015).</p>
                                         </div>
                                     </div>
                                     <button class="anschreiben-close-btn" id="create-anschreibens-closeGoldenHookModalBtn" type="button">&times;</button>
@@ -1507,7 +1645,7 @@
                                     </div>
                                     <div class="ats-field-block">
                                         <label for="create-anschreibens-hookContext">Unternehmens-Fokus / Mission (optional):</label>
-                                        <textarea id="create-anschreibens-hookContext" rows="2" placeholder="z. B. Führend in autonomem Fahren und nachhaltiger Mobilität..."></textarea>
+                                        <textarea id="create-anschreibens-hookContext" rows="2" placeholder="e.g. Leading company in autonomous driving and clean mobility..."></textarea>
                                     </div>
                                     <div class="ats-action-row">
                                         <button type="button" id="create-anschreibens-hookRunBtn" class="anschreiben-btn-primary-sm btn-golden-run">
@@ -1519,10 +1657,10 @@
                                         </div>
                                     </div>
                                     <div id="create-anschreibens-hookResultArea" class="ats-result-area" hidden>
-                                        <label class="ats-result-label">Generierter Eröffnungssatz:</label>
+                                        <label class="ats-result-label">Generated opening hook:</label>
                                         <div id="create-anschreibens-hookResultText" class="ats-bullet-item hook-highlight"></div>
                                         <div class="ats-result-actions">
-                                            <button type="button" id="create-anschreibens-hookInsertBtn" class="anschreiben-btn-primary-sm">Als Einleitung einfügen</button>
+                                            <button type="button" id="create-anschreibens-hookInsertBtn" class="anschreiben-btn-primary-sm">Insert as opening hook</button>
                                             <button type="button" id="create-anschreibens-hookCopyBtn" class="anschreiben-btn-subtle-sm">Kopieren</button>
                                         </div>
                                     </div>
@@ -1537,11 +1675,11 @@
                                     <div>
                                         <div class="bg-modal-header-top">
                                             <span class="bg-modal-badge">Design-Briefpapier</span>
-                                            <h3>🎨 Professionelle Hintergrund-Vorlagen</h3>
+                                            <h3>🎨 Professional Background Templates</h3>
                                         </div>
-                                        <p class="modal-sub">Wähle mit einem Klick ein hochwertiges Briefpapier mit dezenten Farbakzenten und DIN 5008 Markierungen (ohne störende Kopfzeilentexte).</p>
+                                        <p class="modal-sub">Select high-quality stationery templates with clean DIN 5008 layouts and subtle color accents.</p>
                                     </div>
-                                    <button class="anschreiben-close-btn" id="create-anschreibens-closeBgTemplatesBtn" type="button" aria-label="Schließen">&times;</button>
+                                    <button class="anschreiben-close-btn" id="create-anschreibens-closeBgTemplatesBtn" type="button" aria-label="Close">&times;</button>
                                 </div>
                                 <div class="anschreiben-modal-body bg-modal-body">
                                     <div id="create-anschreibens-bgTemplatesList" class="bg-templates-grid"></div>
@@ -2257,8 +2395,8 @@
                     <div class="section-hero gmaps-hero">
                         <div>
                             <span class="section-kicker gmaps-kicker">Google Maps</span>
-                            <h2>Business E-Mail Extraktion</h2>
-                            <p>Unternehmen auf Google Maps finden und automatisch E-Mail-Adressen von deren Websites extrahieren.</p>
+                            <h2>Company &amp; Job Opportunity Discovery</h2>
+                            <p>Unternehmen auf Google Maps finden, Karriereseiten crawlen, E-Mails extrahieren, Ausbildung &amp; offene Stellen verifizieren und Bewerbungsformulare entdecken.</p>
                         </div>
                     </div>
 
@@ -2270,7 +2408,7 @@
                                     <input
                                         type="text"
                                         id="gmaps-query"
-                                        placeholder="z.B. Zahnarzt Berlin, IT Unternehmen M&uuml;nchen, Friseur Hamburg"
+                                        placeholder="z.B. IT Unternehmen M&uuml;nchen, Zahnarzt Berlin, Softwareentwicklung K&ouml;ln"
                                         required
                                         autocomplete="off"
                                     >
@@ -2290,9 +2428,48 @@
                                     <input type="range" id="gmaps-max-results" min="5" max="200" value="50" step="5">
                                 </div>
                             </div>
+
+                            <!-- Career & Opportunity Verification Controls -->
+                            <div class="gmaps-verification-box">
+                                <div class="gmaps-toggle-row">
+                                    <label class="gmaps-switch">
+                                        <input type="checkbox" id="gmaps-verify-toggle">
+                                        <span class="gmaps-slider"></span>
+                                    </label>
+                                    <label for="gmaps-verify-toggle" class="gmaps-toggle-label">
+                                        <strong>Verify Open Jobs / Ausbildung Opportunities</strong>
+                                        <span>Karriereseiten automatisch nach passenden Ausbildungs- oder Festanstellungsplätzen durchsuchen</span>
+                                    </label>
+                                </div>
+                                <div id="gmaps-verification-options" class="gmaps-form-grid gmaps-verification-grid" hidden>
+                                    <div class="gmaps-field">
+                                        <label for="gmaps-job-type">Anstellungsart</label>
+                                        <select id="gmaps-job-type">
+                                            <option value="both" selected>Alle (Ausbildung &amp; Festanstellung)</option>
+                                            <option value="ausbildung">Nur Ausbildung</option>
+                                            <option value="employment">Nur Festanstellung</option>
+                                        </select>
+                                    </div>
+                                    <div class="gmaps-field">
+                                        <label for="gmaps-target-title">Zielberuf / Stellentitel</label>
+                                        <input
+                                            type="text"
+                                            id="gmaps-target-title"
+                                            placeholder="z.B. Fachinformatiker Anwendungsentwicklung, Softwareentwickler"
+                                        >
+                                    </div>
+                                    <div class="gmaps-field">
+                                        <label for="gmaps-client-select">Kandidaten-Profil (Optional)</label>
+                                        <select id="gmaps-client-select">
+                                            <option value="">Manuelle Kriterien / Allgemein</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="gmaps-form-actions">
                                 <button id="gmaps-search-btn" type="submit" class="gmaps-btn-primary">
-                                    Businesses &amp; Emails von Google Maps extrahieren
+                                    Unternehmen &amp; Karrieren via Google Maps entdecken
                                 </button>
                             </div>
                             <div id="gmaps-loading" class="gmaps-loading" hidden>
@@ -2302,16 +2479,24 @@
                         </form>
 
                         <section id="gmaps-progress-panel" class="gmaps-progress-panel" hidden>
-                            <h4 class="gmaps-progress-title">Fortschritt</h4>
+                            <h4 class="gmaps-progress-title">Progress &amp; Discovery Stats</h4>
                             <div id="gmaps-phase-label" class="gmaps-phase-label">Warte auf Start&hellip;</div>
-                            <div class="gmaps-progress-stats">
+                            <div class="gmaps-progress-stats" style="grid-template-columns: repeat(6, 1fr);">
                                 <div class="gmaps-progress-stat">
                                     <span id="gmaps-stat-businesses" class="value">0</span>
                                     <span class="label">Unternehmen</span>
                                 </div>
                                 <div class="gmaps-progress-stat">
                                     <span id="gmaps-stat-emails" class="value">0</span>
-                                    <span class="label">E-Mails</span>
+                                    <span class="label">Emails</span>
+                                </div>
+                                <div class="gmaps-progress-stat">
+                                    <span id="gmaps-stat-vacancies" class="value">0</span>
+                                    <span class="label">Stellen</span>
+                                </div>
+                                <div class="gmaps-progress-stat">
+                                    <span id="gmaps-stat-forms" class="value">0</span>
+                                    <span class="label">Formulare</span>
                                 </div>
                                 <div class="gmaps-progress-stat">
                                     <span id="gmaps-stat-no-email" class="value">0</span>
@@ -2319,13 +2504,13 @@
                                 </div>
                                 <div class="gmaps-progress-stat">
                                     <span id="gmaps-stat-failed" class="value">0</span>
-                                    <span class="label">Fehler</span>
+                                    <span class="label">Errors</span>
                                 </div>
                             </div>
                             <div class="gmaps-progress-track">
                                 <div id="gmaps-progress-fill" class="gmaps-progress-fill"></div>
                             </div>
-                            <div id="gmaps-progress-status" class="gmaps-progress-status">Leerlauf</div>
+                            <div id="gmaps-progress-status" class="gmaps-progress-status">Idle</div>
                             <div id="gmaps-progress-error" class="gmaps-progress-error" hidden></div>
                             <div class="gmaps-progress-actions">
                                 <button id="gmaps-stop-btn" type="button" class="gmaps-progress-stop-btn" hidden>Stoppen</button>
@@ -2337,29 +2522,38 @@
                                 <span class="gmaps-discovery-icon">&#128269;</span>
                                 <div>
                                     <strong><span id="gmaps-discovery-count">0</span> Businesses gefunden</strong>
-                                    <p>Klicke auf &bdquo;E-Mails extrahieren starten&ldquo;, um die Websites zu durchsuchen.</p>
+                                    <p>Klicken Sie auf 'E-Mails &amp; Karrieren extrahieren', um Websites und Stellenangebote zu analysieren.</p>
                                 </div>
                                 <button id="gmaps-start-extract-btn" type="button" class="gmaps-extract-btn" hidden>
-                                    E-Mails extrahieren starten
+                                    Extraktion &amp; Verifizierung starten
                                 </button>
                             </div>
                         </div>
 
                         <section id="gmaps-results-panel" class="gmaps-results-panel" hidden>
                             <div class="gmaps-results-head">
-                                <h3>Ergebnisse</h3>
-                                <span id="gmaps-results-summary" class="gmaps-results-summary"></span>
+                                <div>
+                                    <h3>Ergebnisse</h3>
+                                    <span id="gmaps-results-summary" class="gmaps-results-summary"></span>
+                                </div>
+                                <div class="gmaps-filter-bar">
+                                    <button type="button" class="gmaps-filter-btn active" data-filter="all">Alle Unternehmen</button>
+                                    <button type="button" class="gmaps-filter-btn" data-filter="verified">Bestätigte Stellen (<span id="gmaps-count-verified">0</span>)</button>
+                                    <button type="button" class="gmaps-filter-btn" data-filter="forms">Bewerbungsformulare (<span id="gmaps-count-forms">0</span>)</button>
+                                    <button type="button" class="gmaps-filter-btn" data-filter="emails">Mit E-Mail (<span id="gmaps-count-emails">0</span>)</button>
+                                </div>
                             </div>
                             <div class="gmaps-results-table-wrap">
                                 <table class="gmaps-table">
                                     <thead>
                                         <tr>
-                                            <th>Name</th>
-                                            <th>Adresse</th>
-                                            <th>Telefon</th>
-                                            <th>Website</th>
+                                            <th>Unternehmen</th>
+                                            <th>Standort</th>
+                                            <th>Website &amp; Karriere</th>
+                                            <th>Verifizierte Stelle</th>
+                                            <th>Passung</th>
+                                            <th>Bewerbungsweg</th>
                                             <th>E-Mails</th>
-                                            <th>Bewertung</th>
                                             <th>Status</th>
                                         </tr>
                                     </thead>
@@ -2393,8 +2587,8 @@
                                         AI Autofill &amp; Extension Hub
                                     </span>
                                 </div>
-                                <h2 class="af-hero-title">Bewerberprofile &amp; Formular-Sandbox</h2>
-                                <p class="af-hero-desc">Verwalten Sie Kandidatenprofile, Bewerbungsunterlagen und testen Sie das automatisierte Ausfüllen in der interaktiven Formular-Sandbox.</p>
+                                <h2 class="af-hero-title">Bewerberprofile &amp; Form Sandbox</h2>
+                                <p class="af-hero-desc">Manage candidate profiles, application documents, and test automated form filling in the interactive form sandbox.</p>
                             </div>
                             <div class="af-hero-right">
                                 <span class="af-status-badge" id="autofill-backend-badge" title="Lokaler AI Backend Server">
@@ -2408,7 +2602,7 @@
                                     </a>
                                     <a href="/french-form" target="_blank" rel="noopener noreferrer" class="af-btn-ghost">
                                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                                        <span>Französisches Formular</span>
+                                        <span>French Form</span>
                                     </a>
                                 </div>
                             </div>
@@ -2429,20 +2623,20 @@
                                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
                                             </div>
                                             <div>
-                                                <h3 class="af-card-title">Kandidatenprofil</h3>
-                                                <p class="af-card-subtitle">Bewerberdaten, Kontaktdetails und Dokumente</p>
+                                                <h3 class="af-card-title">Candidate Profile</h3>
+                                                <p class="af-card-subtitle">Candidate data, contact details and documents</p>
                                             </div>
                                         </div>
                                         <div class="af-header-actions">
                                             <span id="autofill-unsaved-badge" class="af-unsaved-badge" hidden>
                                                 <span class="af-unsaved-dot"></span> Nicht gespeichert
                                             </span>
-                                            <button type="button" id="autofill-btn-import-cv" class="af-btn-secondary" title="Lebenslauf (PDF) analysieren und Daten automatisch übernehmen">
+                                            <button type="button" id="autofill-btn-import-cv" class="af-btn-secondary" title="Analyze CV (PDF) and auto-populate candidate profile">
                                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                                                 <span>⚡ CV importieren</span>
                                             </button>
                                             <input type="file" id="af-cv-file-input" accept=".pdf" style="display:none;" />
-                                            <button type="button" id="autofill-btn-set-active" class="af-btn-secondary" title="Als aktiven Bewerber für alle Kampagnen festlegen">
+                                            <button type="button" id="autofill-btn-set-active" class="af-btn-secondary" title="Set as active candidate for all campaigns">
                                                 <span>⭐ Aktivieren</span>
                                             </button>
                                             <button type="button" id="autofill-btn-new-profile" class="af-btn-secondary" title="Neues Profil erstellen">
@@ -2451,7 +2645,7 @@
                                             </button>
                                             <button type="button" id="autofill-btn-save-profile" class="af-btn-primary">
                                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
-                                                <span>Profil speichern</span>
+                                                <span>Save Profile</span>
                                             </button>
                                         </div>
                                     </div>
@@ -2480,7 +2674,7 @@
                                     <nav class="af-tabs-bar" aria-label="Profilbereiche">
                                         <button type="button" class="af-tab-btn is-active" data-hub-tab="personal">
                                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                                            <span>Persönlich</span>
+                                            <span>Personal</span>
                                         </button>
                                         <button type="button" class="af-tab-btn" data-hub-tab="contact">
                                             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
@@ -2516,10 +2710,10 @@
                                                 <label for="af-profile-language" class="af-label">Profil-Sprache</label>
                                                 <select id="af-profile-language" class="af-select">
                                                     <option value="de">Deutsch (de)</option>
-                                                    <option value="fr">Französisch (fr)</option>
+                                                    <option value="fr">French (fr)</option>
                                                     <option value="en">Englisch (en)</option>
                                                 </select>
-                                                <span class="af-input-hint">Primäre Formular-Sprache</span>
+                                                <span class="af-input-hint">Primary Form Language</span>
                                             </div>
                                             <div class="af-form-group">
                                                 <label for="af-first-name" class="af-label">Vorname</label>
@@ -2530,7 +2724,7 @@
                                                 <input type="text" id="af-last-name" class="af-input" placeholder="z. B. Mustermann">
                                             </div>
                                             <div class="af-form-group full-width">
-                                                <label for="af-full-name" class="af-label">Vollständiger Name</label>
+                                                <label for="af-full-name" class="af-label">Full Name</label>
                                                 <input type="text" id="af-full-name" class="af-input" placeholder="z. B. Max Mustermann">
                                             </div>
                                             <div class="af-form-group">
@@ -2542,13 +2736,13 @@
                                                 <input type="text" id="af-pob" class="af-input" placeholder="z. B. Köln">
                                             </div>
                                             <div class="af-form-group">
-                                                <label for="af-nationality" class="af-label">Nationalität</label>
+                                                <label for="af-nationality" class="af-label">Nationality</label>
                                                 <input type="text" id="af-nationality" class="af-input" placeholder="z. B. Deutsch / Marokkanisch">
                                             </div>
                                             <div class="af-form-group">
                                                 <label for="af-gender" class="af-label">Geschlecht</label>
                                                 <select id="af-gender" class="af-select">
-                                                    <option value="male">Männlich</option>
+                                                    <option value="male">Male</option>
                                                     <option value="female">Weiblich</option>
                                                     <option value="other">Divers / keine Angabe</option>
                                                 </select>
@@ -2568,8 +2762,8 @@
                                                 <input type="tel" id="af-phone" class="af-input" placeholder="+49 170 1234567">
                                             </div>
                                             <div class="af-form-group">
-                                                <label for="af-street" class="af-label">Straße</label>
-                                                <input type="text" id="af-street" class="af-input" placeholder="Musterstraße">
+                                                <label for="af-street" class="af-label">Street</label>
+                                                <input type="text" id="af-street" class="af-input" placeholder="Sample Street">
                                             </div>
                                             <div class="af-form-group">
                                                 <label for="af-house-no" class="af-label">Hausnummer</label>
@@ -2588,7 +2782,7 @@
                                                 <input type="text" id="af-country" class="af-input" placeholder="Deutschland">
                                             </div>
                                             <div class="af-form-group">
-                                                <label for="af-country-code" class="af-label">Ländercode (ISO)</label>
+                                                <label for="af-country-code" class="af-label">Country Code (ISO)</label>
                                                 <input type="text" id="af-country-code" class="af-input" placeholder="DE">
                                             </div>
                                             <div class="af-form-group full-width">
@@ -2614,17 +2808,17 @@
                                                 <input type="text" id="af-current-title" class="af-input af-input-lg" placeholder="z. B. Senior Softwareentwickler / Azubi Fachinformatiker">
                                             </div>
                                             <div class="af-form-group full-width">
-                                                <label for="af-headline" class="af-label">Bewerbungs-Headline</label>
+                                                <label for="af-headline" class="af-label">Application Headline</label>
                                                 <input type="text" id="af-headline" class="af-input" placeholder="z. B. Leidenschaftlicher Entwickler mit Fokus auf moderne Web-Apps">
                                             </div>
                                             <div class="af-form-group full-width">
-                                                <label for="af-summary" class="af-label">Profil-Zusammenfassung (Summary / Anschreiben-Snippet)</label>
+                                                <label for="af-summary" class="af-label">Profile Summary (Cover Letter Snippet)</label>
                                                 <textarea id="af-summary" class="af-textarea" rows="4" placeholder="Kurze Beschreibung Ihrer Erfahrungen, Schwerpunkte und Qualifikationen..."></textarea>
                                             </div>
                                             <div class="af-form-group full-width">
                                                 <label for="af-primary-fields" class="af-label">Schwerpunkte &amp; Fachgebiete (kommagetrennt)</label>
                                                 <input type="text" id="af-primary-fields" class="af-input" placeholder="z. B. Python, React, Flask, TypeScript, Docker">
-                                                <span class="af-input-hint">Diese Fähigkeiten werden mit Formularfeldern und Dropdowns abgeglichen.</span>
+                                                <span class="af-input-hint">These skills are matched against form fields and dropdowns.</span>
                                             </div>
                                         </div>
                                     </div>
@@ -2637,13 +2831,13 @@
                                                     <div class="af-drop-icon">
                                                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
                                                     </div>
-                                                    <span class="af-drop-text">Dokument oder Lebenslauf hochladen</span>
-                                                    <span class="af-drop-sub">Unterstützt PDF, JPG, PNG &bull; Direkt mit diesem Bewerber verknüpft</span>
+                                                    <span class="af-drop-text">Upload Document or CV</span>
+                                                    <span class="af-drop-sub">Supports PDF, JPG, PNG &bull; Linked directly to this candidate dossier</span>
                                                     <input type="file" id="af-file-upload-input" accept=".pdf,.jpg,.jpeg,.png" style="display:none;">
                                                 </label>
                                             </div>
                                             <div class="af-doc-list" id="af-document-list">
-                                                <div class="doc-empty-state">Keine Dokumente geladen.</div>
+                                                <div class="doc-empty-state">No documents uploaded.</div>
                                             </div>
                                         </div>
                                     </div>
@@ -2653,10 +2847,10 @@
                                         <div class="af-corrections-wrap">
                                             <div class="af-corrections-header">
                                                 <div>
-                                                    <h4 class="af-section-title">Gelehrte Feld-Zuordnungen</h4>
-                                                    <p class="af-section-desc">Regeln und Korrekturen, die automatisch beim Ausfüllen über die Chrome-Extension gelernt wurden.</p>
+                                                    <h4 class="af-section-title">Learned Field Mappings</h4>
+                                                    <p class="af-section-desc">Rules and corrections learned automatically when filling forms via the Chrome extension.</p>
                                                 </div>
-                                                <button type="button" id="af-btn-clear-corrections" class="af-btn-danger af-btn-sm">Alle löschen</button>
+                                                <button type="button" id="af-btn-clear-corrections" class="af-btn-danger af-btn-sm">Delete all</button>
                                             </div>
                                             <div class="af-corrections-list" id="af-corrections-list">
                                                 <div class="doc-empty-state">Keine Korrekturen gespeichert.</div>
@@ -2687,8 +2881,8 @@
                                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
                                             </div>
                                             <div>
-                                                <h3 class="af-card-title">Formular-Sandbox</h3>
-                                                <p class="af-card-subtitle">Echtzeit-Testumgebung für die Chrome Extension</p>
+                                                <h3 class="af-card-title">Form Sandbox</h3>
+                                                <p class="af-card-subtitle">Real-time test environment for the Chrome Extension</p>
                                             </div>
                                         </div>
                                         <div class="af-sandbox-top-actions">
@@ -2710,11 +2904,15 @@
                                             </button>
                                         </div>
                                         <div class="af-sandbox-actions">
+                                            <button type="button" id="btn-autofill-sandbox-now" class="af-btn-primary" onclick="if(window.autofillSandboxForm){window.autofillSandboxForm();}else{console.warn('autofillSandboxForm not ready');}" style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 11.5px; font-weight: 600; background: #0284c7; color: #fff; border-radius: 6px; border: none; cursor: pointer; transition: all 0.15s ease;" title="Füllt das Sandbox-Testformular sofort mit den Profildaten des aktiven Bewerbers aus">
+                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                                                <span>⚡ Sandbox ausfüllen</span>
+                                            </button>
                                             <span class="af-url-pill" id="af-current-sandbox-url">/test-form</span>
-                                            <button type="button" id="btn-refresh-sandbox" class="af-icon-btn" title="Formular neu laden">
+                                            <button type="button" id="btn-refresh-sandbox" class="af-icon-btn" title="Reload Form">
                                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
                                             </button>
-                                            <a href="/test-form" id="link-open-sandbox-tab" target="_blank" rel="noopener noreferrer" class="af-icon-btn" title="In neuem Browser-Tab öffnen">
+                                            <a href="/test-form" id="link-open-sandbox-tab" target="_blank" rel="noopener noreferrer" class="af-icon-btn" title="Open in New Tab">
                                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
                                             </a>
                                         </div>
@@ -2727,7 +2925,7 @@
                                         </div>
                                         <div class="af-banner-text">
                                             <strong>Live Extension Test:</strong>
-                                            <span>Öffnen Sie die Extension oder drücken Sie <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>, um die Formularfelder dieses Test-Formulars automatisch auszufüllen!</span>
+                                            <span>Open the extension or press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>, to automatically fill this test form!</span>
                                         </div>
                                     </div>
 
@@ -2760,13 +2958,13 @@
                                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                                     </div>
                                     <div>
-                                        <h3 class="af-card-title">Erfasste Bewerbungen &amp; Verlauf</h3>
-                                        <p class="af-card-subtitle">Historie aller Bewerbungen, die über die Autofill-Extension oder den "Open &amp; Autofill" Workflow gestartet wurden.</p>
+                                        <h3 class="af-card-title">Application History &amp; Log</h3>
+                                        <p class="af-card-subtitle">History of all applications submitted via the Autofill extension or automated workflow.</p>
                                     </div>
                                 </div>
                                 <button type="button" id="autofill-refresh-history" class="af-btn-secondary">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
-                                    <span>Aktualisieren</span>
+                                    <span>Refresh</span>
                                 </button>
                             </div>
                             <div class="af-history-table-container">
@@ -2782,11 +2980,242 @@
                                         </tr>
                                     </thead>
                                     <tbody id="autofill-history-body">
-                                        <tr><td colspan="6" class="af-history-empty">Lade Bewerbungsverlauf...</td></tr>
+                                        <tr><td colspan="6" class="af-history-empty">Loading application history...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
                         </div>
+                    </div>
+                </section>
+
+                <section
+                    id="ai-settings-section"
+                    class="app-section"
+                    data-section="ai-settings"
+                    {% if initial_section != "ai-settings" %}hidden{% endif %}
+                >
+                    <div class="ai-settings-wrapper">
+                        <!-- Alert Banner -->
+                        <div id="ai-settings-alert" class="ai-alert" hidden></div>
+
+                        <!-- Header Card -->
+                        <div class="ai-header-card">
+                            <div class="ai-header-left">
+                                <h1>
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2">
+                                        <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"></path>
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                        <path d="M12 7v2m0 6v2m-5-5h2m6 0h2"></path>
+                                    </svg>
+                                    KI-Einstellungen / AI Settings
+                                </h1>
+                                <p>Offizielle OpenAI GPT Luna &amp; Google Gemini Integration — direkte Provider-Anbindung ohne externe Proxies.</p>
+                            </div>
+                            <div class="ai-header-right">
+                                <span class="ai-status-pill pill-active" id="ai-active-provider-pill">Aktiv: OpenAI GPT-6 Luna</span>
+                            </div>
+                        </div>
+
+                        <!-- Card 1: Provider Selection -->
+                        <div class="ai-card">
+                            <h3 class="ai-card-title">
+                                <span>Primärer AI-Anbieter (Provider Selection)</span>
+                                <span class="ai-status-pill pill-active">Echtzeit-Routing</span>
+                            </h3>
+                            <p style="font-size:13px; color:#94a3b8; margin:0;">Wählen Sie, welche KI für CV-Parsing, ATS-Optimierung, Golden Hooks und Anschreiben-Generierung verwendet wird:</p>
+                            
+                            <div class="ai-provider-selector">
+                                <label class="ai-provider-option">
+                                    <input type="radio" name="ai_primary_provider" value="openai" checked>
+                                    <div class="ai-provider-info">
+                                        <h4>OpenAI GPT Luna — Primär (Empfohlen)</h4>
+                                        <p>Direkte Anbindung an die offizielle OpenAI API (GPT-6 Luna). Höchste semantische Präzision für deutsche Bewerbungen.</p>
+                                    </div>
+                                </label>
+
+                                <label class="ai-provider-option">
+                                    <input type="radio" name="ai_primary_provider" value="gemini">
+                                    <div class="ai-provider-info">
+                                        <h4>Google Gemini — Primär</h4>
+                                        <p>Google AI Studio API (Flash-Modelle). Hohe Ratenlimits, optimal für Massenverarbeitung und Fallbacks.</p>
+                                    </div>
+                                </label>
+
+                                <label class="ai-provider-option">
+                                    <input type="radio" name="ai_primary_provider" value="offline">
+                                    <div class="ai-provider-info">
+                                        <h4>Lokale Verarbeitung — Offline-Modus</h4>
+                                        <p>Heuristische, regelbasierte Verarbeitung auf Ihrem lokalen Rechner. 100% datenschutzkonform, 0 Tokens, 0 Kosten.</p>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <div style="display:flex; align-items:center; gap:10px; margin-top:6px; padding:10px 14px; background:rgba(15,23,42,0.5); border-radius:8px;">
+                                <input type="checkbox" id="ai-gemini-fallback-toggle" style="cursor:pointer; width:16px; height:16px;">
+                                <label for="ai-gemini-fallback-toggle" style="font-size:12.5px; color:#cbd5e1; cursor:pointer;">
+                                    <strong>Gemini-Fallback aktivieren:</strong> Falls OpenAI vorübergehend überlastet ist oder ein Timeout auftritt, automatisch auf Gemini ausweichen. (Niemals automatische Fremdkosten ohne Genehmigung).
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- 2-Column: OpenAI Configuration & Google Gemini Configuration -->
+                        <div class="ai-grid-2">
+                            <!-- OpenAI Card -->
+                            <div class="ai-card">
+                                <div class="ai-card-title">
+                                    <div style="display:flex; align-items:center; gap:8px;">
+                                        <span style="font-size:18px;">⚡</span>
+                                        <span>Offizielle OpenAI API</span>
+                                    </div>
+                                    <span id="ai-openai-status-badge" class="ai-status-pill pill-untested">Ungetestet</span>
+                                </div>
+
+                                <div class="ai-form-group">
+                                    <label class="ai-label">
+                                        <span>OpenAI API Key</span>
+                                        <span id="ai-openai-key-badge" class="ai-status-pill pill-inactive">Prüfe...</span>
+                                    </label>
+                                    <div class="ai-input-wrap">
+                                        <input type="password" id="ai-openai-key-input" class="ai-input" placeholder="sk-proj-..." autocomplete="off">
+                                        <button type="button" id="ai-openai-toggle-key" class="ai-btn-secondary" title="Schlüssel anzeigen / verbergen">Anzeigen</button>
+                                    </div>
+                                    <span style="font-size:11px; color:#64748b;">Schlüssel wird sicher im Backend verwaltet und niemals im Klartext im Browser exponiert.</span>
+                                </div>
+
+                                <div class="ai-form-group">
+                                    <label class="ai-label" for="ai-openai-model-select">OpenAI Modell</label>
+                                    <select id="ai-openai-model-select" class="ai-select">
+                                        <option value="gpt-6-luna">GPT-6 Luna (Standard / Dashboard)</option>
+                                        <option value="gpt-6-luna-pro">GPT-6 Luna Pro</option>
+                                        <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
+                                        <option value="gpt-4o-mini">GPT-4o Mini (Kostengünstig)</option>
+                                        <option value="gpt-4o">GPT-4o (Vollversion)</option>
+                                    </select>
+                                </div>
+
+                                <div style="display:flex; gap:10px; margin-top:4px;">
+                                    <button type="button" id="ai-openai-save-btn" class="ai-btn-primary" style="flex:1;">OpenAI-Einstellungen Speichern</button>
+                                    <button type="button" id="ai-openai-test-btn" class="ai-btn-secondary" title="Prüft API-Schlüssel über GET /v1/models (0 Kosten)">Verbindung testen (0 Kosten)</button>
+                                </div>
+
+                                <div class="ai-meta-row">
+                                    <span>Status: <strong id="ai-openai-status-msg" style="color:#e2e8f0;">Bereit</strong></span>
+                                    <span>Letzter Test: <strong id="ai-openai-last-tested">-</strong></span>
+                                </div>
+                            </div>
+
+                            <!-- Gemini Card -->
+                            <div class="ai-card">
+                                <div class="ai-card-title">
+                                    <div style="display:flex; align-items:center; gap:8px;">
+                                        <span style="font-size:18px;">✨</span>
+                                        <span>Google Gemini API (Sekundär)</span>
+                                    </div>
+                                    <span id="ai-gemini-status-badge" class="ai-status-pill pill-untested">Ungetestet</span>
+                                </div>
+
+                                <div class="ai-form-group">
+                                    <label class="ai-label">
+                                        <span>Gemini API Key</span>
+                                        <span id="ai-gemini-key-badge" class="ai-status-pill pill-inactive">Prüfe...</span>
+                                    </label>
+                                    <div class="ai-input-wrap">
+                                        <input type="password" id="ai-gemini-key-input" class="ai-input" placeholder="AIzaSy..." autocomplete="off">
+                                        <button type="button" id="ai-gemini-toggle-key" class="ai-btn-secondary">Anzeigen</button>
+                                    </div>
+                                    <span style="font-size:11px; color:#64748b;">Aus Google AI Studio. Kostenloser Kontingent (Free Tier: bis zu 500 RPD).</span>
+                                </div>
+
+                                <div class="ai-form-group">
+                                    <label class="ai-label" for="ai-gemini-model-select">Gemini Modell</label>
+                                    <select id="ai-gemini-model-select" class="ai-select">
+                                        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                        <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite (500 RPD Free)</option>
+                                        <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite (500 RPD Free)</option>
+                                        <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                                    </select>
+                                </div>
+
+                                <div style="display:flex; gap:10px; margin-top:4px;">
+                                    <button type="button" id="ai-gemini-save-btn" class="ai-btn-primary" style="flex:1;">Gemini-Einstellungen Speichern</button>
+                                    <button type="button" id="ai-gemini-test-btn" class="ai-btn-secondary">Verbindung testen</button>
+                                </div>
+
+                                <div class="ai-meta-row">
+                                    <span>Status: <strong id="ai-gemini-status-msg" style="color:#e2e8f0;">Bereit</strong></span>
+                                    <span>Letzter Test: <strong id="ai-gemini-last-tested">-</strong></span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 3: Usage Dashboard & Cost Tracking -->
+                        <div class="ai-card">
+                            <div class="ai-card-title">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span style="font-size:18px;">📊</span>
+                                    <span>KI-Nutzungsüberwachung &amp; Kostenschätzung</span>
+                                </div>
+                                <div style="display:flex; gap:8px;">
+                                    <button type="button" id="ai-btn-refresh-usage" class="ai-btn-secondary" style="padding:4px 10px; font-size:12px;">Aktualisieren</button>
+                                    <button type="button" id="ai-btn-reset-cache" class="ai-btn-secondary" style="padding:4px 10px; font-size:12px;" title="Löscht den lokalen Cache">Cache leeren</button>
+                                </div>
+                            </div>
+
+                            <div class="ai-metrics-grid">
+                                <div class="ai-metric-box">
+                                    <span class="ai-metric-label">Aktiver Provider &amp; Modell</span>
+                                    <span class="ai-metric-val" id="ai-usage-model" style="font-size:15px; color:#38bdf8;">gpt-6-luna</span>
+                                    <span id="ai-usage-provider" style="font-size:11px; color:#94a3b8;">Official OpenAI</span>
+                                </div>
+                                <div class="ai-metric-box">
+                                    <span class="ai-metric-label">Gesamtanfragen (Erfolg / Fehler)</span>
+                                    <span class="ai-metric-val">
+                                        <span id="ai-usage-total-requests">0</span>
+                                        <span style="font-size:13px; color:#94a3b8; font-weight:normal;">(<span id="ai-usage-success-requests" style="color:#34d399;">0</span> / <span id="ai-usage-failed-requests" style="color:#f87171;">0</span>)</span>
+                                    </span>
+                                </div>
+                                <div class="ai-metric-box">
+                                    <span class="ai-metric-label">Token-Verbrauch (In / Out)</span>
+                                    <span class="ai-metric-val" id="ai-usage-total-tokens">0</span>
+                                    <span style="font-size:11px; color:#94a3b8;"><span id="ai-usage-input-tokens">0</span> In • <span id="ai-usage-output-tokens">0</span> Out</span>
+                                </div>
+                                <div class="ai-metric-box">
+                                    <span class="ai-metric-label">Geschätzte Kosten (USD)</span>
+                                    <span class="ai-metric-val ai-cost-tag" id="ai-usage-estimated-cost">$0.0000 USD</span>
+                                    <span style="font-size:11px; color:#94a3b8;">Konto-Guthaben: ca. $4.97</span>
+                                </div>
+                                <div class="ai-metric-box">
+                                    <span class="ai-metric-label">Cache-Trefferquote</span>
+                                    <span class="ai-metric-val" id="ai-usage-cache-rate" style="color:#a78bfa;">0% (0-Kosten)</span>
+                                    <span style="font-size:11px; color:#94a3b8;"><span id="ai-usage-cache-hits">0</span> Wiederholungen geblockt</span>
+                                </div>
+                            </div>
+
+                            <!-- Daily Breakdown Table -->
+                            <div style="margin-top:10px;">
+                                <h4 style="margin:0 0 8px; font-size:13px; color:#cbd5e1;">Täglicher Verlauf (Letzte 7 Tage)</h4>
+                                <div style="overflow-x:auto; border-radius:8px; border:1px solid rgba(255,255,255,0.08);">
+                                    <table class="ai-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Datum</th>
+                                                <th>Anfragen</th>
+                                                <th>Input-Tokens</th>
+                                                <th>Output-Tokens</th>
+                                                <th>Geschätzte Kosten</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="ai-usage-daily-body">
+                                            <tr><td colspan="5" class="ai-table-empty">Keine Aufrufe verzeichnet.</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p style="font-size:11.5px; color:#64748b; margin:8px 0 0;">
+                                    ℹ️ Hinweis: Dies ist eine lokale Kostenkalkulation auf Basis des tatsächlichen Token-Verbrauchs und offizieller OpenAI-Preise ($0.20/1M In, $1.20/1M Out für Luna). Reales Guthaben wird auf Ihrem OpenAI-Dashboard verwaltet.
+                                </p>
+                            </div>
+                        </div>
+
                     </div>
                 </section>
 
@@ -2809,11 +3238,12 @@
     <script src="{{ url_for('static', filename='spa/sections/dashboard.js') }}?v=2.2"></script>
     <script src="{{ url_for('static', filename='spa/sections/supabase.js') }}?v=2.2"></script>
     <script src="{{ url_for('static', filename='spa/sections/money.js') }}?v=2.2"></script>
-    <script src="{{ url_for('static', filename='spa/sections/ausbildungen.js') }}?v=2.2"></script>
+    <script src="{{ url_for('static', filename='spa/sections/ausbildungen.js') }}?v=3.0"></script>
     <script src="{{ url_for('static', filename='spa/sections/create-anschreibens.js') }}?v=2.2"></script>
     <script src="{{ url_for('static', filename='spa/sections/send-emails.js') }}?v=2.2"></script>
     <script src="{{ url_for('static', filename='spa/sections/google-maps.js') }}?v=2.2"></script>
     <script src="{{ url_for('static', filename='spa/sections/autofill-hub.js') }}?v=2.2"></script>
+    <script src="{{ url_for('static', filename='spa/sections/ai-settings.js') }}?v=1.0"></script>
     <script src="{{ url_for('static', filename='spa/app.js') }}?v=2.2"></script>
     <script src="{{ url_for('static', filename='auto_continue.js') }}" defer></script>
 </body>

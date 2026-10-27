@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
     <title>Fortschritt Auto-E-Mail-Extraktion</title>
     <style>
@@ -130,7 +130,7 @@
         <a href="{{ url_for('ausbildungen') }}" class="nav-link">Ausbildungen</a>
     </nav>
     <div class="container">
-        <h1>Automatische E-Mail-Extraktion</h1>
+        <h1>Automatic Email Extraction</h1>
         <p>Verwendet die TrueCAPTCHA-API.</p>
 
         <div class="card">
@@ -163,20 +163,20 @@
             <p id="errorMessage" style="color:#b00;"></p>
             <div id="pauseBox" class="pause-box">
                 <p id="pauseReason">Eine Stelle ist fehlgeschlagen.</p>
-                <button data-auto-continue onclick="continueScraping()" class="button" style="background:#198754;">Fortsetzen</button>
+                <button data-auto-continue onclick="continueScraping()" class="button" style="background:#198754;">Continue</button>
             </div>
         </div>
 
         <div style="text-align: center;">
             <a href="/" class="button">Zurueck zur Suche</a>
             <button onclick="stopAndDownload()" class="button" style="background: #d9534f;">
-                Stoppen + Ergebnis herunterladen
+                Stoppen + Download Results
             </button>
             <button onclick="downloadResults()" class="button blue" id="downloadBtn" style="display: none;">
-                Ergebnis herunterladen
+                Download Results
             </button>
             <button onclick="goToAnschreiben()" class="button" id="toAnschreibenBtn" style="background: #667eea; display: none;">
-                Zu Anschreiben
+                To Cover Letters
             </button>
         </div>
     </div>
@@ -225,7 +225,7 @@
                     } else if (data.paused) {
                         status = 'Pausiert - Fehler';
                         document.getElementById('pauseReason').textContent = data.last_error
-                            ? `Fehler: ${data.last_error}`
+                            ? `Errors: ${data.last_error}`
                             : 'Eine Stelle ist fehlgeschlagen.';
                         document.getElementById('pauseBox').style.display = 'block';
                     } else if (data.is_running) {
@@ -247,13 +247,13 @@
                 .then(async (response) => {
                     const data = await response.json().catch(() => ({}));
                     if (response.ok && data.status === 'success') {
-                        showToast(data.message || 'Fortsetzen angefordert.', 'success');
+                        showToast(data.message || 'Continue angefordert.', 'success');
                     } else {
-                        showToast(data.message || 'Fortsetzen fehlgeschlagen.', 'error');
+                        showToast(data.message || 'Continue fehlgeschlagen.', 'error');
                     }
                 })
                 .catch(() => {
-                    showToast('Netzwerkfehler beim Fortsetzen.', 'error');
+                    showToast('Netzwerkfehler beim Continue.', 'error');
                 });
         }
 

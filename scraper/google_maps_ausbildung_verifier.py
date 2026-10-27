@@ -36,6 +36,7 @@ from bs4 import BeautifulSoup
 
 from .search_filter_engine import is_profession_relevant, clean_extracted_location
 from .application_form_discovery import ApplicationFormDiscovery, classify_application_method
+from .google_maps_opportunity_verifier import GoogleMapsOpportunityVerifier
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +126,11 @@ class GoogleMapsAusbildungVerifier:
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
         self.form_discovery = ApplicationFormDiscovery(session=self.session, timeout=timeout)
+        self.opportunity_verifier = GoogleMapsOpportunityVerifier(
+            session=self.session,
+            timeout=timeout,
+            max_pages=max_pages,
+        )
 
     def _fetch_page(self, url: str) -> Optional[str]:
         if not url or not url.startswith("http"):
@@ -493,4 +499,28 @@ class GoogleMapsAusbildungVerifier:
 
         business["is_verified_vacancy"] = True
         return business
+
+    def verify_opportunities(
+        self,
+        business: Dict,
+        target_title: str = "",
+        job_type: str = "both",
+        client_id: str = "",
+        candidate_profile: Optional[Dict] = None,
+        driver=None,
+    ) -> Dict:
+        """
+        Executes full job opportunity and Ausbildung verification across business official website.
+        Discovers career pages, extracts vacancies, classifies apply destinations,
+        calculates explainable 0-100 matching scores, and prepares queue integration data.
+        """
+        return self.opportunity_verifier.verify_business_opportunities(
+            business=business,
+            target_title=target_title,
+            job_type=job_type,
+            client_id=client_id,
+            candidate_profile=candidate_profile,
+            driver=driver,
+        )
+
 

@@ -35,6 +35,22 @@ def _slugify(text: str) -> str:
     return slug or "client"
 
 
+def _extract_name_from_filename(filename: str) -> str:
+    """Extracts a plausible candidate name from the uploaded PDF filename."""
+    if not filename:
+        return ""
+    name = re.sub(r"(?i)\.pdf$", "", filename)
+    name = re.sub(r"[_\-]+", " ", name)
+    name = re.sub(r"(?i)\b(lebenslauf|resume|curriculum|vitae|cv|bewerbung|profil|aktuelle|dokument|document)\b", " ", name)
+    name = re.sub(r"\s+", " ", name).strip()
+    words = [w for w in name.split() if w.isalpha() and len(w) > 1]
+    if len(words) >= 2:
+        return " ".join(w.capitalize() for w in words[:3])
+    elif len(words) == 1:
+        return words[0].capitalize()
+    return ""
+
+
 class ClientManager:
     """Manages multi-client applicant dossiers, CV parsing, and active client state."""
 
@@ -314,9 +330,49 @@ class ClientManager:
         """
         Parses candidate CV PDF, extracts profile fields, creates client dossier,
         saves Lebenslauf.pdf, and activates the client.
+        Tolerates truncated or corrupt PDF streams without failing.
         """
-        raw_text = CVParser.extract_text_from_pdf(pdf_bytes)
+        try:
+            raw_text = CVParser.extract_text_from_pdf(pdf_bytes)
+        except Exception as exc:
+            logger.warning("Error during text extraction: %s", exc)
+            raw_text = ""
+
         parsed = CVParser.parse_cv_text(raw_text)
+
+        # If raw_text had no extractable text (e.g. scanned image PDF), attempt vision extraction
+        if not raw_text or len(raw_text.strip()) < 15:
+            vision_data = CVParser.extract_with_vision(pdf_bytes)
+            if vision_data:
+                parsed["personal"]["first_name"] = vision_data.get("first_name") or parsed["personal"].get("first_name", "")
+                parsed["personal"]["last_name"] = vision_data.get("last_name") or parsed["personal"].get("last_name", "")
+                parsed["personal"]["full_name"] = vision_data.get("full_name") or f"{parsed['personal']['first_name']} {parsed['personal']['last_name']}".strip()
+                parsed["personal"]["date_of_birth"] = vision_data.get("date_of_birth") or parsed["personal"].get("date_of_birth", "")
+                parsed["personal"]["date_of_birth_display"] = vision_data.get("date_of_birth_display") or parsed["personal"].get("date_of_birth_display", "")
+                parsed["personal"]["place_of_birth"] = vision_data.get("place_of_birth") or parsed["personal"].get("place_of_birth", "")
+                parsed["personal"]["nationality"] = vision_data.get("nationality") or parsed["personal"].get("nationality", "")
+                if vision_data.get("gender"): parsed["personal"]["gender"] = vision_data["gender"]
+                if vision_data.get("salutation"): parsed["personal"]["salutation"] = vision_data["salutation"]
+
+                parsed["contact"]["email"] = vision_data.get("email") or parsed["contact"].get("email", "")
+                parsed["contact"]["phone"] = vision_data.get("phone") or parsed["contact"].get("phone", "")
+                parsed["contact"]["phone_display"] = parsed["contact"]["phone"]
+                addr = parsed["contact"].setdefault("address", {})
+                for fld in ["street", "house_number", "postal_code", "city", "country"]:
+                    if vision_data.get(fld): addr[fld] = vision_data[fld]
+
+                prof = parsed.setdefault("professional_profile", {})
+                if vision_data.get("current_title"): prof["current_title"] = vision_data["current_title"]
+                if vision_data.get("headline"): prof["headline"] = vision_data["headline"]
+                if vision_data.get("summary_de"): prof["summary_de"] = vision_data["summary_de"]
+
+                if vision_data.get("skills"):
+                    techs = parsed.setdefault("skills", {}).setdefault("technologies_from_cv", [])
+                    for s in vision_data["skills"]:
+                        if s not in techs: techs.append(s)
+
+                if vision_data.get("languages"):
+                    parsed["languages"] = vision_data["languages"]
 
         personal = parsed.get("personal", {})
         contact = parsed.get("contact", {})
@@ -324,10 +380,20 @@ class ClientManager:
         languages = parsed.get("languages", [])
 
         full_name = personal.get("full_name") or f"{personal.get('first_name', '')} {personal.get('last_name', '')}".strip()
+        if not full_name or full_name.lower() in ["bewerber", "kandidat"]:
+            name_from_fn = _extract_name_from_filename(filename)
+            if name_from_fn:
+                full_name = name_from_fn
+                personal["full_name"] = full_name
+                personal["first_name"] = full_name.split()[0]
+                personal["last_name"] = " ".join(full_name.split()[1:])
+
         if not client_id:
-            client_id = _slugify(full_name) if full_name else f"client_{int(datetime.now().timestamp())}"
+            client_id = _slugify(full_name) if (full_name and full_name.lower() not in ["bewerber", "kandidat"]) else f"client_{int(datetime.now().timestamp())}"
         else:
             client_id = _slugify(client_id)
+
+        prof = parsed.get("professional_profile", {})
 
         # Build full standard profile structure
         profile_data = {
@@ -338,26 +404,34 @@ class ClientManager:
                     "first_name": personal.get("first_name", ""),
                     "last_name": personal.get("last_name", ""),
                     "full_name": full_name,
+                    "date_of_birth": personal.get("date_of_birth") or "",
+                    "date_of_birth_display": personal.get("date_of_birth_display") or "",
+                    "place_of_birth": personal.get("place_of_birth") or "",
+                    "nationality": personal.get("nationality") or "",
                     "salutation": personal.get("salutation", "Herr"),
-                    "gender": "male" if personal.get("salutation") == "Herr" else "female"
+                    "gender": personal.get("gender") or ("male" if personal.get("salutation") == "Herr" else "female")
                 },
                 "contact": {
                     "email": contact.get("email", ""),
                     "phone": contact.get("phone", ""),
                     "phone_display": contact.get("phone_display", ""),
                     "address": {
-                        "street": "",
-                        "house_number": "",
+                        "street": contact.get("address", {}).get("street", ""),
+                        "house_number": contact.get("address", {}).get("house_number", ""),
                         "postal_code": contact.get("address", {}).get("postal_code", ""),
                         "city": contact.get("address", {}).get("city", ""),
-                        "country": "Deutschland",
-                        "country_code": "DE"
-                    }
+                        "country": contact.get("address", {}).get("country", "Deutschland"),
+                        "country_code": contact.get("address", {}).get("country_code", "DE")
+                    },
+                    "linkedin": contact.get("linkedin", {}),
+                    "portfolio": contact.get("portfolio", {}),
+                    "github": contact.get("github", {})
                 },
                 "professional_profile": {
-                    "current_title": skills.get("technologies_from_cv", ["Auszubildender"])[0] if skills.get("technologies_from_cv") else "Bewerber",
-                    "headline": f"{full_name} - Bewerber",
-                    "summary": f"Motivierter Kandidat mit Fachkenntnissen in: {', '.join(skills.get('technologies_from_cv', [])[:6])}"
+                    "current_title": prof.get("current_title") or "Softwareentwickler",
+                    "headline": prof.get("headline") or f"{full_name} | {prof.get('current_title', 'Bewerber')}",
+                    "summary_de": prof.get("summary_de") or f"Motivierter Kandidat mit Fachkenntnissen in: {', '.join(skills.get('technologies_from_cv', [])[:6])}",
+                    "primary_fields": prof.get("primary_fields") or skills.get("technologies_from_cv", [])[:6]
                 },
                 "skills": skills,
                 "languages": languages
@@ -383,7 +457,16 @@ class ClientManager:
                 "name": full_name,
                 "email": contact.get("email", ""),
                 "phone": contact.get("phone", ""),
+                "street": contact.get("address", {}).get("street", ""),
+                "house_number": contact.get("address", {}).get("house_number", ""),
+                "postal_code": contact.get("address", {}).get("postal_code", ""),
                 "city": contact.get("address", {}).get("city", ""),
+                "date_of_birth": personal.get("date_of_birth", ""),
+                "place_of_birth": personal.get("place_of_birth", ""),
+                "nationality": personal.get("nationality", ""),
+                "title": prof.get("current_title", ""),
+                "linkedin": contact.get("linkedin", {}).get("url", ""),
+                "github": contact.get("github", {}).get("url", ""),
                 "skills": skills.get("technologies_from_cv", []),
                 "languages": languages
             }

@@ -64,8 +64,19 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "change-me-local")
 
-from routes import autofill_bp, enhancements_bp, health_bp, jobs_bp, pdf_bp, campaigns_bp, clients_bp
+from routes import (
+    autofill_bp,
+    enhancements_bp,
+    health_bp,
+    jobs_bp,
+    pdf_bp,
+    campaigns_bp,
+    clients_bp,
+    supabase_onboarding_bp,
+    ai_settings_bp,
+)
 from services.job_store import job_store
+from services.ai_provider_manager import ai_manager
 
 app.register_blueprint(health_bp)
 app.register_blueprint(jobs_bp)
@@ -74,6 +85,8 @@ app.register_blueprint(enhancements_bp)
 app.register_blueprint(autofill_bp)
 app.register_blueprint(campaigns_bp)
 app.register_blueprint(clients_bp)
+app.register_blueprint(supabase_onboarding_bp)
+app.register_blueprint(ai_settings_bp)
 
 # Reset any uncompleted jobs from previous server run
 try:
@@ -85,7 +98,6 @@ except Exception as _exc:
 
 CAPTCHA_USERID = os.getenv("TRUECAPTCHA_USERID", "").strip()
 CAPTCHA_APIKEY = os.getenv("TRUECAPTCHA_APIKEY", "").strip()
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
 SUPABASE_URL = os.getenv("VITE_SUPABASE_URL", os.getenv("SUPABASE_URL", ""))
 SUPABASE_ANON_KEY = os.getenv("VITE_SUPABASE_ANON_KEY", os.getenv("SUPABASE_ANON_KEY", ""))
 
@@ -95,8 +107,8 @@ if not CAPTCHA_USERID:
 if not CAPTCHA_APIKEY:
     logger.warning("TRUECAPTCHA_APIKEY is not set; auto-captcha solving will be disabled.")
 
-if not OPENROUTER_API_KEY:
-    logger.warning("OPENROUTER_API_KEY is not set; AI-assisted features will be disabled.")
+if not ai_manager.is_configured:
+    logger.info("Central AI Provider Manager: Using local offline mode or awaiting key in AI Settings.")
 
 status_lock = threading.Lock()
 search_cache = {
@@ -2832,6 +2844,172 @@ def stop_ausbildungen_update(job_id: str):
     return jsonify({"success": True, "message": "Stop des Updates angefordert"})
 
 
+@app.route("/api/ausbildungen/file/<filename>/preview", methods=["GET"])
+def ausbildungen_file_preview(filename: str):
+    file_path = _resolve_auto_extraction_export_path(filename)
+    if not file_path:
+        return jsonify({"success": False, "message": "Exportdatei nicht gefunden"}), 404
+    try:
+        records = _load_spreadsheet_records(file_path)
+        columns = list(records[0].keys()) if records else []
+        email_count = sum(1 for r in records if bool(str(r.get("email") or "").strip()))
+        return jsonify({
+            "success": True,
+            "filename": file_path.name,
+            "total_rows": len(records),
+            "email_count": email_count,
+            "columns": columns,
+            "rows": records[:100],
+            "is_truncated": len(records) > 100,
+        })
+    except Exception as exc:
+        logger.error("Error previewing %s: %s", filename, exc)
+        return jsonify({"success": False, "message": str(exc)}), 500
+
+
+@app.route("/api/ausbildungen/file/<filename>/download", methods=["GET"])
+def ausbildungen_file_download(filename: str):
+    file_path = _resolve_auto_extraction_export_path(filename)
+    if not file_path:
+        return jsonify({"success": False, "message": "Exportdatei nicht gefunden"}), 404
+    mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" if file_path.suffix == ".xlsx" else "text/csv"
+    return send_file(
+        file_path,
+        as_attachment=True,
+        download_name=file_path.name,
+        mimetype=mimetype,
+    )
+
+
+@app.route("/api/ausbildungen/file/<filename>/delete", methods=["POST", "DELETE"])
+@app.route("/api/ausbildungen/file/<filename>", methods=["DELETE"])
+def ausbildungen_file_delete(filename: str):
+    file_path = _resolve_auto_extraction_export_path(filename)
+    if not file_path:
+        return jsonify({"success": False, "message": "Exportdatei nicht gefunden"}), 404
+
+    running_job = _get_running_ausbildungen_update_for_file(file_path.name)
+    if running_job and running_job.get("is_running"):
+        return jsonify({"success": False, "message": "Datei kann nicht gelöscht werden, solange ein Update-Prozess läuft."}), 400
+
+    try:
+        file_path.unlink()
+        return jsonify({"success": True, "message": f"Datei '{file_path.name}' wurde erfolgreich gelöscht."})
+    except Exception as exc:
+        logger.error("Error deleting file %s: %s", filename, exc)
+        return jsonify({"success": False, "message": str(exc)}), 500
+
+
+@app.route("/api/ausbildungen/merge", methods=["POST"])
+def ausbildungen_merge_files():
+    data = request.get_json(silent=True) or {}
+    filenames = data.get("filenames") or []
+    delete_sources = bool(data.get("delete_sources", False))
+    output_name = str(data.get("output_name") or "").strip()
+
+    if not isinstance(filenames, list) or len(filenames) < 2:
+        return jsonify({"success": False, "message": "Mindestens 2 Dateien müssen zum Zusammenführen ausgewählt werden."}), 400
+
+    resolved_paths: List[Path] = []
+    for fn in filenames:
+        path = _resolve_auto_extraction_export_path(str(fn).strip())
+        if not path:
+            return jsonify({"success": False, "message": f"Datei nicht gefunden: {fn}"}), 404
+        job = _get_running_ausbildungen_update_for_file(path.name)
+        if job and job.get("is_running"):
+            return jsonify({"success": False, "message": f"Datei {path.name} wird gerade aktualisiert und kann nicht zusammengeführt werden."}), 400
+        resolved_paths.append(path)
+
+    try:
+        all_records: List[Dict] = []
+        total_input_rows = 0
+        detected_topics: List[str] = []
+
+        for p in resolved_paths:
+            recs = _load_spreadsheet_records(p)
+            total_input_rows += len(recs)
+            all_records.extend(recs)
+            dname = _format_auto_export_domain_name(p)
+            if dname and dname != "unbekannt":
+                detected_topics.append(dname)
+
+        if not all_records:
+            return jsonify({"success": False, "message": "Die ausgewählten Dateien enthalten keine Datensätze."}), 400
+
+        deduped_map: Dict[str, Dict] = {}
+        no_key_records: List[Dict] = []
+
+        for record in all_records:
+            email = str(record.get("email") or "").strip().lower()
+            title = str(record.get("title") or "").strip().lower()
+            company = str(record.get("company") or "").strip().lower()
+            apply_url = str(record.get("apply_url") or record.get("bewerbung_link") or record.get("form_link") or "").strip().lower()
+
+            dedup_key = ""
+            if email and "@" in email:
+                dedup_key = f"email:{email}"
+            elif title and company:
+                dedup_key = f"job:{title}:::{company}"
+            elif apply_url:
+                dedup_key = f"url:{apply_url}"
+
+            if not dedup_key:
+                no_key_records.append(record)
+                continue
+
+            if dedup_key not in deduped_map:
+                deduped_map[dedup_key] = copy.deepcopy(record)
+            else:
+                existing = deduped_map[dedup_key]
+                for k, v in record.items():
+                    if bool(v) and not bool(existing.get(k)):
+                        existing[k] = v
+
+        final_records = list(deduped_map.values()) + no_key_records
+        duplicates_removed = total_input_rows - len(final_records)
+
+        timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        if output_name:
+            clean_stem = re.sub(r"[^\w\-_]", "_", output_name)
+            if clean_stem.endswith(".xlsx") or clean_stem.endswith(".csv"):
+                clean_stem = Path(clean_stem).stem
+            merged_filename = f"{clean_stem}.xlsx"
+        else:
+            topic_slug = "dataset"
+            if detected_topics:
+                from collections import Counter
+                most_common = Counter(detected_topics).most_common(1)[0][0]
+                topic_slug = re.sub(r"[^\w]+", "_", most_common).strip("_")
+            merged_filename = f"merged_{topic_slug}_{timestamp_str}.xlsx"
+
+        merged_path = AUTO_EXTRACTION_EXPORT_DIR / merged_filename
+        _write_spreadsheet_records(merged_path, final_records)
+
+        deleted_count = 0
+        if delete_sources:
+            for p in resolved_paths:
+                if p.resolve() != merged_path.resolve():
+                    try:
+                        p.unlink()
+                        deleted_count += 1
+                    except Exception as err:
+                        logger.warning("Could not delete source file %s: %s", p.name, err)
+
+        return jsonify({
+            "success": True,
+            "message": f"Erfolgreich zusammengeführt: {len(final_records)} Datensätze ({duplicates_removed} Duplikate entfernt).",
+            "merged_filename": merged_filename,
+            "total_source_files": len(resolved_paths),
+            "total_input_rows": total_input_rows,
+            "unique_rows": len(final_records),
+            "duplicates_removed": duplicates_removed,
+            "deleted_sources": deleted_count,
+        })
+    except Exception as exc:
+        logger.error("Error merging files: %s", exc)
+        return jsonify({"success": False, "message": str(exc)}), 500
+
+
 @app.route("/create-anschreibens")
 def create_anschreibens():
     # Render the PDF generator directly inside the shared SPA shell.
@@ -3732,6 +3910,8 @@ def _render_app_shell(initial_section: str = "search"):
         "send-emails",
         "google-maps",
         "autofill",
+        "ai-settings",
+        "ki-einstellungen",
     }:
         section = "search"
     return render_template(
@@ -7386,10 +7566,8 @@ _AI_TEMPLATIZE_SYSTEM_PROMPT = (
 
 @app.route("/api/ai-templatize", methods=["POST"])
 def ai_templatize():
-    """Send extracted text to OpenRouter AI to convert into a template with placeholders."""
+    """Convert extracted text into a template with placeholders using the central AI manager."""
     try:
-        import requests as http_requests
-
         data = request.get_json(silent=True) or {}
         raw_text = str(data.get("text") or "").strip()
         placeholders = [
@@ -7401,10 +7579,6 @@ def ai_templatize():
             return jsonify({"error": "Kein Text zum Verarbeiten vorhanden."}), 400
         if not isinstance(placeholders, list) or not placeholders:
             return jsonify({"error": "Keine Platzhalter angegeben."}), 400
-
-        api_key = OPENROUTER_API_KEY
-        if not api_key:
-            return jsonify({"error": "OpenRouter API Key ist nicht konfiguriert."}), 500
 
         placeholder_list = "\n".join(f"- {{{{{p}}}}}" for p in placeholders)
         user_prompt = (
@@ -7421,57 +7595,27 @@ def ai_templatize():
             f"- Return only the final template text."
         )
 
-        models = [
-            "google/gemma-4-31b-it:free",
-            "nvidia/nemotron-3-super-120b-a12b:free"
-        ]
-        max_retries = 6
-        
-        for attempt in range(max_retries):
-            current_model = models[attempt % len(models)]
-            try:
-                response = http_requests.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": current_model,
-                        "messages": [
-                            {"role": "system", "content": _AI_TEMPLATIZE_SYSTEM_PROMPT},
-                            {"role": "user", "content": user_prompt},
-                        ],
-                    },
-                    timeout=120,
-                )
-                
-                if response.status_code != 200:
-                    if attempt < max_retries - 1:
-                        time.sleep(2 if response.status_code == 429 else 1)
-                        continue
-                    response.raise_for_status()
-                
-                result = response.json()
-                choices = result.get("choices") or []
-                if not choices:
-                    if attempt < max_retries - 1:
-                        continue
-                    return jsonify({"error": "KI hat keine Antwort geliefert."}), 502
-                
-                ai_text = str(choices[0].get("message", {}).get("content", "")).strip()
-                if not ai_text:
-                    if attempt < max_retries - 1:
-                        continue
-                    return jsonify({"error": "KI hat leeren Text zurueckgegeben."}), 502
-                
-                return jsonify({"success": True, "text": ai_text})
-                
-            except Exception as e:
-                if attempt < max_retries - 1:
-                    time.sleep(1)
-                    continue
-                raise e
+        ai_res = ai_manager.complete(
+            prompt=user_prompt,
+            system_prompt=_AI_TEMPLATIZE_SYSTEM_PROMPT,
+            max_output_tokens=700,
+            temperature=0.2,
+        )
+
+        if not ai_res.get("success"):
+            err_msg = ai_res.get("error", "Unbekannter Fehler")
+            return jsonify({"error": f"KI-Verarbeitung fehlgeschlagen: {err_msg}"}), 502
+
+        ai_text = str(ai_res.get("text") or "").strip()
+        if not ai_text:
+            return jsonify({"error": "KI hat leeren Text zurückgegeben."}), 502
+
+        return jsonify({
+            "success": True,
+            "text": ai_text,
+            "model": ai_res.get("model", "gpt-6-luna"),
+            "usage": ai_res.get("usage", {})
+        })
 
     except Exception as exc:
         logger.error("AI templatize error: %s", exc)
@@ -7482,7 +7626,15 @@ def ai_templatize():
 # Google Maps Business Email Scraper
 # ---------------------------------------------------------------------------
 
-def _create_google_maps_job(query: str, max_results: int, radius: int) -> str:
+def _create_google_maps_job(
+    query: str,
+    max_results: int,
+    radius: int,
+    verify_opportunities: bool = False,
+    target_title: str = "",
+    job_type: str = "both",
+    client_id: str = "",
+) -> str:
     job_id = str(uuid.uuid4())
     now = datetime.now().isoformat()
     job = {
@@ -7490,6 +7642,10 @@ def _create_google_maps_job(query: str, max_results: int, radius: int) -> str:
         "query": query,
         "max_results": max_results,
         "radius": radius,
+        "verify_opportunities": bool(verify_opportunities),
+        "target_title": str(target_title or "").strip(),
+        "job_type": str(job_type or "both").strip().lower(),
+        "client_id": str(client_id or "").strip(),
         "phase": "queued",
         "is_running": False,
         "stop_requested": False,
@@ -7498,6 +7654,8 @@ def _create_google_maps_job(query: str, max_results: int, radius: int) -> str:
         "emails_found": 0,
         "no_email": 0,
         "failed": 0,
+        "vacancies_found": 0,
+        "forms_found": 0,
         "results": [],
         "last_error": "",
         "created_at": now,
@@ -7588,12 +7746,24 @@ def _run_google_maps_extraction(job_id: str) -> None:
         if not job:
             return
         businesses = list(job.get("results") or [])
+        verify_opportunities = bool(job.get("verify_opportunities"))
+        target_title = str(job.get("target_title") or "")
+        job_type = str(job.get("job_type") or "both")
+        client_id = str(job.get("client_id") or "")
 
     if not businesses:
         _set_google_maps_job(job_id, phase="done", is_running=False)
         return
 
     _set_google_maps_job(job_id, is_running=True, phase="extracting_emails")
+
+    candidate_profile = None
+    if client_id:
+        try:
+            from services.client_manager import client_manager
+            candidate_profile = client_manager.get_client(client_id)
+        except Exception as c_exc:
+            logger.warning("Could not load candidate profile for client %s: %s", client_id, c_exc)
 
     scraper = None
     try:
@@ -7604,23 +7774,31 @@ def _run_google_maps_extraction(job_id: str) -> None:
                 j = google_maps_jobs.get(job_id)
                 return not j or j.get("stop_requested", False)
 
-        # Process each business link by link
-        for idx, business in enumerate(businesses):
-            if stop_check():
-                _set_google_maps_job(job_id, phase="stopped", is_running=False)
-                return
-
-            scraper.process_business(business, stop_check=stop_check)
-
+        def on_progress(current_idx, biz):
             with google_maps_jobs_lock:
                 j = google_maps_jobs.get(job_id)
                 if j:
-                    j["current_index"] = idx + 1
+                    j["current_index"] = current_idx
                     j["results"] = businesses
                     j["emails_found"] = scraper.stats.get("emails_found", 0)
+                    j["vacancies_found"] = scraper.stats.get("vacancies_found", 0)
+                    j["forms_found"] = scraper.stats.get("forms_found", 0)
                     j["no_email"] = scraper.stats.get("no_email", 0)
                     j["failed"] = scraper.stats.get("failed", 0)
                     j["updated_at"] = datetime.now().isoformat()
+
+        # Concurrent website crawling with ThreadPoolExecutor (max_workers=8)
+        scraper.process_businesses_concurrent(
+            businesses,
+            max_workers=8,
+            on_progress=on_progress,
+            stop_check=stop_check,
+            verify_opportunities=verify_opportunities,
+            target_title=target_title,
+            job_type=job_type,
+            client_id=client_id,
+            candidate_profile=candidate_profile,
+        )
 
         _save_google_maps_export(job_id, businesses, str(job.get("query") or ""))
         _set_google_maps_job(
@@ -7651,12 +7829,24 @@ def _run_google_maps_job(job_id: str) -> None:
             return
         query = str(job.get("query") or "")
         max_results = int(job.get("max_results") or 50)
+        verify_opportunities = bool(job.get("verify_opportunities"))
+        target_title = str(job.get("target_title") or "")
+        job_type = str(job.get("job_type") or "both")
+        client_id = str(job.get("client_id") or "")
 
     if not query:
         _set_google_maps_job(job_id, phase="error", last_error="Kein Suchbegriff angegeben")
         return
 
     _set_google_maps_job(job_id, is_running=True, phase="scraping_maps")
+
+    candidate_profile = None
+    if client_id:
+        try:
+            from services.client_manager import client_manager
+            candidate_profile = client_manager.get_client(client_id)
+        except Exception as c_exc:
+            logger.warning("Could not load candidate profile for client %s: %s", client_id, c_exc)
 
     scraper = None
     try:
@@ -7689,23 +7879,31 @@ def _run_google_maps_job(job_id: str) -> None:
             results=businesses,
         )
 
-        # Phase 2: Process each business (enrich details + extract emails)
-        for idx, business in enumerate(businesses):
-            if stop_check():
-                _set_google_maps_job(job_id, phase="stopped", is_running=False)
-                return
-
-            scraper.process_business(business, stop_check=stop_check)
-
+        # Phase 2: Process each business concurrently (enrich details + parallel email crawling)
+        def on_progress_job(current_idx, biz):
             with google_maps_jobs_lock:
                 j = google_maps_jobs.get(job_id)
                 if j:
-                    j["current_index"] = idx + 1
+                    j["current_index"] = current_idx
                     j["results"] = businesses
                     j["emails_found"] = scraper.stats.get("emails_found", 0)
+                    j["vacancies_found"] = scraper.stats.get("vacancies_found", 0)
+                    j["forms_found"] = scraper.stats.get("forms_found", 0)
                     j["no_email"] = scraper.stats.get("no_email", 0)
                     j["failed"] = scraper.stats.get("failed", 0)
                     j["updated_at"] = datetime.now().isoformat()
+
+        scraper.process_businesses_concurrent(
+            businesses,
+            max_workers=8,
+            on_progress=on_progress_job,
+            stop_check=stop_check,
+            verify_opportunities=verify_opportunities,
+            target_title=target_title,
+            job_type=job_type,
+            client_id=client_id,
+            candidate_profile=candidate_profile,
+        )
 
         # Done — save export file
         _save_google_maps_export(job_id, businesses, query)
@@ -7730,28 +7928,73 @@ def _run_google_maps_job(job_id: str) -> None:
             scraper.close()
 
 
+def _build_unified_export_rows(businesses: List[Dict]) -> List[Dict[str, Any]]:
+    rows = []
+    for biz in businesses:
+        emails_str = ", ".join(biz.get("emails") or [])
+        vacancies = biz.get("vacancies") or []
+        if vacancies:
+            for vac in vacancies:
+                rows.append({
+                    "Unternehmen": biz.get("name", ""),
+                    "Adresse": biz.get("address", ""),
+                    "Telefon": biz.get("phone", ""),
+                    "Website": biz.get("website", ""),
+                    "E-Mails": emails_str,
+                    "Karriereseite": biz.get("career_page", ""),
+                    "Stellenbezeichnung": vac.get("job_title", biz.get("primary_job_title", "")),
+                    "Bewerbungslink": vac.get("direct_application_url", biz.get("primary_apply_url", "")),
+                    "Bewerbungsart": vac.get("application_method", biz.get("primary_apply_method", "")),
+                    "Ziel-URL-Typ": vac.get("application_url_type", biz.get("primary_url_type", "")),
+                    "Verifizierungsstatus": vac.get("verification_status", biz.get("primary_verification_status", "")),
+                    "Passungs-Score": vac.get("matching_score", biz.get("primary_matching_score", 0)),
+                    "Score-Begründung": "; ".join(vac.get("matching_reasons") or biz.get("primary_matching_reasons") or []),
+                    "Ausbildung": "Ja" if vac.get("is_ausbildung", biz.get("ausbildung_available")) else "Nein",
+                    "Offene Stellen": biz.get("vacancies_count", len(vacancies)),
+                    "Bewertung": biz.get("rating", ""),
+                    "Rezensionen": biz.get("reviews_count", ""),
+                    "Kategorie": biz.get("category", ""),
+                    "Status": biz.get("status", ""),
+                    "Google Maps URL": biz.get("maps_url", ""),
+                    "Client ID": vac.get("client_id", biz.get("client_id", "")),
+                    "Company ID": vac.get("company_id", biz.get("company_id", "")),
+                    "Job ID": vac.get("job_id", ""),
+                })
+        else:
+            rows.append({
+                "Unternehmen": biz.get("name", ""),
+                "Adresse": biz.get("address", ""),
+                "Telefon": biz.get("phone", ""),
+                "Website": biz.get("website", ""),
+                "E-Mails": emails_str,
+                "Karriereseite": biz.get("career_page", ""),
+                "Stellenbezeichnung": biz.get("primary_job_title", ""),
+                "Bewerbungslink": biz.get("primary_apply_url", ""),
+                "Bewerbungsart": biz.get("primary_apply_method", ""),
+                "Ziel-URL-Typ": biz.get("primary_url_type", ""),
+                "Verifizierungsstatus": biz.get("primary_verification_status", ""),
+                "Passungs-Score": biz.get("primary_matching_score", 0),
+                "Score-Begründung": "; ".join(biz.get("primary_matching_reasons") or []),
+                "Ausbildung": "Ja" if biz.get("ausbildung_available") else "Nein",
+                "Offene Stellen": biz.get("vacancies_count", 0),
+                "Bewertung": biz.get("rating", ""),
+                "Rezensionen": biz.get("reviews_count", ""),
+                "Kategorie": biz.get("category", ""),
+                "Status": biz.get("status", ""),
+                "Google Maps URL": biz.get("maps_url", ""),
+                "Client ID": biz.get("client_id", ""),
+                "Company ID": biz.get("company_id", ""),
+                "Job ID": "",
+            })
+    return rows
+
+
 def _save_google_maps_export(job_id: str, businesses: List[Dict], query: str) -> Optional[Path]:
     if not businesses:
         return None
 
     GOOGLE_MAPS_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-
-    rows = []
-    for biz in businesses:
-        emails_str = ", ".join(biz.get("emails") or [])
-        rows.append({
-            "Name": biz.get("name", ""),
-            "Adresse": biz.get("address", ""),
-            "Telefon": biz.get("phone", ""),
-            "Website": biz.get("website", ""),
-            "E-Mails": emails_str,
-            "Bewertung": biz.get("rating", ""),
-            "Rezensionen": biz.get("reviews_count", ""),
-            "Kategorie": biz.get("category", ""),
-            "Status": biz.get("status", ""),
-            "Google Maps URL": biz.get("maps_url", ""),
-        })
-
+    rows = _build_unified_export_rows(businesses)
     df = pd.DataFrame(rows)
     safe_query = re.sub(r"[^\w\s-]", "", query)[:40].strip().replace(" ", "_")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -7784,8 +8027,20 @@ def api_google_maps_discover():
     if max_results < 1:
         max_results = 10
     radius = int(data.get("radius") or 10)
+    verify_opps = bool(data.get("verify_opportunities"))
+    target_title = str(data.get("target_title") or "").strip()
+    job_type = str(data.get("job_type") or "both").strip().lower()
+    client_id = str(data.get("client_id") or "").strip()
 
-    job_id = _create_google_maps_job(query, max_results, radius)
+    job_id = _create_google_maps_job(
+        query=query,
+        max_results=max_results,
+        radius=radius,
+        verify_opportunities=verify_opps,
+        target_title=target_title,
+        job_type=job_type,
+        client_id=client_id,
+    )
     thread = threading.Thread(target=_run_google_maps_discovery, args=(job_id,), daemon=True)
     thread.start()
 
@@ -7794,6 +8049,10 @@ def api_google_maps_discover():
         "job_id": job_id,
         "query": query,
         "max_results": max_results,
+        "verify_opportunities": verify_opps,
+        "target_title": target_title,
+        "job_type": job_type,
+        "client_id": client_id,
         "message": "Discovery gestartet. Status unter /api/google-maps/status/<job_id> abrufen.",
     })
 
@@ -7809,8 +8068,20 @@ def api_google_maps_start():
     if max_results < 1:
         max_results = 10
     radius = int(data.get("radius") or 10)
+    verify_opps = bool(data.get("verify_opportunities"))
+    target_title = str(data.get("target_title") or "").strip()
+    job_type = str(data.get("job_type") or "both").strip().lower()
+    client_id = str(data.get("client_id") or "").strip()
 
-    job_id = _create_google_maps_job(query, max_results, radius)
+    job_id = _create_google_maps_job(
+        query=query,
+        max_results=max_results,
+        radius=radius,
+        verify_opportunities=verify_opps,
+        target_title=target_title,
+        job_type=job_type,
+        client_id=client_id,
+    )
     thread = threading.Thread(target=_run_google_maps_job, args=(job_id,), daemon=True)
     thread.start()
 
@@ -7819,16 +8090,32 @@ def api_google_maps_start():
         "job_id": job_id,
         "query": query,
         "max_results": max_results,
+        "verify_opportunities": verify_opps,
+        "target_title": target_title,
+        "job_type": job_type,
+        "client_id": client_id,
     })
 
 
 @app.route("/api/google-maps/extract/<job_id>", methods=["POST"])
 def api_google_maps_extract(job_id: str):
-    """Phase 2: Start link-by-link email extraction for discovered businesses."""
+    """Phase 2: Start link-by-link email extraction and opportunity verification."""
+    data = request.get_json(silent=True) or {}
     with google_maps_jobs_lock:
         job = google_maps_jobs.get(job_id)
         if not job:
             return jsonify({"success": False, "message": "Job nicht gefunden"}), 404
+
+        # Allow overriding verification options at Phase 2
+        if "verify_opportunities" in data:
+            job["verify_opportunities"] = bool(data["verify_opportunities"])
+        if "target_title" in data:
+            job["target_title"] = str(data["target_title"]).strip()
+        if "job_type" in data:
+            job["job_type"] = str(data["job_type"]).strip().lower()
+        if "client_id" in data:
+            job["client_id"] = str(data["client_id"]).strip()
+
         phase = str(job.get("phase") or "")
         if phase not in ("ready_to_extract", "done", "stopped"):
             return jsonify({
@@ -7861,7 +8148,7 @@ def api_google_maps_status(job_id: str):
         total = int(job.get("total_businesses") or 0)
         current = int(job.get("current_index") or 0)
 
-        # Build safe results payload (limit result details for polling)
+        # Build safe results payload (including rich opportunity data)
         results = []
         for biz in (job.get("results") or []):
             results.append({
@@ -7869,11 +8156,30 @@ def api_google_maps_status(job_id: str):
                 "address": biz.get("address", ""),
                 "phone": biz.get("phone", ""),
                 "website": biz.get("website", ""),
+                "maps_url": biz.get("maps_url", ""),
                 "emails": biz.get("emails", []),
                 "rating": biz.get("rating", ""),
                 "reviews_count": biz.get("reviews_count", ""),
                 "category": biz.get("category", ""),
                 "status": biz.get("status", "pending"),
+                # Recruitment & Opportunity verification
+                "has_career_page": bool(biz.get("has_career_page")),
+                "career_page": biz.get("career_page", ""),
+                "has_verified_vacancy": bool(biz.get("has_verified_vacancy")),
+                "primary_job_title": biz.get("primary_job_title", ""),
+                "primary_apply_url": biz.get("primary_apply_url", ""),
+                "primary_apply_method": biz.get("primary_apply_method", "None"),
+                "primary_url_type": biz.get("primary_url_type", "UNKNOWN"),
+                "primary_verification_status": biz.get("primary_verification_status", "UNKNOWN"),
+                "primary_matching_score": int(biz.get("primary_matching_score") or 0),
+                "primary_matching_reasons": biz.get("primary_matching_reasons", []),
+                "ausbildung_available": bool(biz.get("ausbildung_available")),
+                "employment_available": bool(biz.get("employment_available")),
+                "vacancies_count": int(biz.get("vacancies_count") or len(biz.get("vacancies") or [])),
+                "vacancies": biz.get("vacancies", []),
+                # Queue integration IDs
+                "client_id": biz.get("client_id", ""),
+                "company_id": biz.get("company_id", ""),
             })
 
         payload = {
@@ -7887,8 +8193,14 @@ def api_google_maps_status(job_id: str):
                 "current_index": current,
                 "total_businesses": total,
                 "emails_found": int(job.get("emails_found") or 0),
+                "vacancies_found": int(job.get("vacancies_found") or 0),
+                "forms_found": int(job.get("forms_found") or 0),
                 "no_email": int(job.get("no_email") or 0),
                 "failed": int(job.get("failed") or 0),
+                "verify_opportunities": bool(job.get("verify_opportunities")),
+                "target_title": str(job.get("target_title") or ""),
+                "job_type": str(job.get("job_type") or "both"),
+                "client_id": str(job.get("client_id") or ""),
                 "last_error": str(job.get("last_error") or ""),
                 "percentage": (current / total * 100) if total else 0,
                 "results": results,
@@ -7957,21 +8269,7 @@ def api_google_maps_export(job_id: str, fmt: str):
     if not results:
         return jsonify({"success": False, "message": "Keine Ergebnisse vorhanden"}), 404
 
-    rows = []
-    for biz in results:
-        emails_str = ", ".join(biz.get("emails") or [])
-        rows.append({
-            "Name": biz.get("name", ""),
-            "Adresse": biz.get("address", ""),
-            "Telefon": biz.get("phone", ""),
-            "Website": biz.get("website", ""),
-            "E-Mails": emails_str,
-            "Bewertung": biz.get("rating", ""),
-            "Rezensionen": biz.get("reviews_count", ""),
-            "Kategorie": biz.get("category", ""),
-            "Status": biz.get("status", ""),
-        })
-
+    rows = _build_unified_export_rows(results)
     df = pd.DataFrame(rows)
     safe_query = re.sub(r"[^\w\s-]", "", query)[:40].strip().replace(" ", "_")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

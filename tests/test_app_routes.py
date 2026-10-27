@@ -35,6 +35,29 @@ class AppRoutesTestCase(unittest.TestCase):
         self.assertTrue(data.get("success"))
         self.assertIn("files", data)
 
+    def test_ausbildungen_file_preview_api(self):
+        # Test preview with non-existent file returns 404
+        response = self.client.get("/api/ausbildungen/file/non_existent.xlsx/preview")
+        self.assertEqual(response.status_code, 404)
+
+        # Test preview with existing file if available
+        files_res = self.client.get("/api/ausbildungen/files")
+        files = files_res.get_json().get("files", [])
+        if files:
+            first_fn = files[0]["filename"]
+            prev_res = self.client.get(f"/api/ausbildungen/file/{first_fn}/preview")
+            self.assertEqual(prev_res.status_code, 200)
+            pdata = prev_res.get_json()
+            self.assertTrue(pdata.get("success"))
+            self.assertIn("rows", pdata)
+            self.assertIn("columns", pdata)
+
+    def test_ausbildungen_merge_validation(self):
+        # Merge with fewer than 2 files should return 400
+        res = self.client.post("/api/ausbildungen/merge", json={"filenames": ["file1.xlsx"]})
+        self.assertEqual(res.status_code, 400)
+        self.assertFalse(res.get_json().get("success"))
+
     def test_send_emails_campaigns_api(self):
         response = self.client.get("/api/send-emails/campaigns")
         self.assertEqual(response.status_code, 200)

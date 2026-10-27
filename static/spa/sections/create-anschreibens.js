@@ -263,8 +263,8 @@
         const firebaseApplicationStoragePrefix = "create-anschreibens:firebase-application:";
         const firebaseLastApplicationKey = "create-anschreibens:last-firebase-application";
         const noDataMessage = dataSourceMode === "firebase-application"
-            ? "Bitte zuerst eine Bewerbung laden"
-            : "Bitte zuerst Exportdaten laden";
+            ? "Please load an application first"
+            : "Please load export data first";
 
         let initialized = false;
         let toastTimer = null;
@@ -317,7 +317,7 @@
             if (!els.error) {
                 return;
             }
-            els.error.textContent = String(message || "").trim() || "Unbekannter Fehler.";
+            els.error.textContent = String(message || "").trim() || "Unknown error.";
             els.error.hidden = false;
         }
 
@@ -404,7 +404,7 @@
             const words = trimmed ? trimmed.split(/\s+/).length : 0;
             const chars = text.length;
             if (els.wordCountEl) {
-                els.wordCountEl.textContent = `${words} ${words === 1 ? 'Wort' : 'Wörter'}`;
+                els.wordCountEl.textContent = `${words} ${words === 1 ? 'word' : 'words'}`;
             }
             if (els.charCountEl) {
                 els.charCountEl.textContent = `${chars} ${chars === 1 ? 'Zeichen' : 'Zeichen'}`;
@@ -417,11 +417,11 @@
                 els.saveStatusPill.className = `as-save-indicator ${saved ? 'is-saved' : 'is-unsaved'}`;
                 const textEl = els.saveStatusPill.querySelector(".as-save-text");
                 if (textEl) {
-                    textEl.textContent = saved ? "Gespeichert" : "Ungespeichert";
+                    textEl.textContent = saved ? "Saved" : "Unsaved";
                 }
             }
             if (els.autoDraftNote) {
-                els.autoDraftNote.textContent = saved ? "Alle Änderungen gespeichert" : "Änderungen ungespeichert";
+                els.autoDraftNote.textContent = saved ? "All changes saved" : "Unsaved changes";
             }
             updateReadiness();
         }
@@ -460,10 +460,10 @@
                     .filter(t => !knownTokens.has(t));
 
                 if (unresolved.length > 0 && state.columns.length > 0) {
-                    els.checkPlaceholders.textContent = `${unresolved.length} unvollständig`;
+                    els.checkPlaceholders.textContent = `${unresolved.length} incomplete`;
                     els.checkPlaceholders.className = "as-item-val is-warn";
                 } else {
-                    els.checkPlaceholders.textContent = "Gültig";
+                    els.checkPlaceholders.textContent = "Valid";
                     els.checkPlaceholders.className = "as-item-val is-ok";
                 }
             }
@@ -553,7 +553,7 @@
         function deleteActiveTemplate() {
             ensureTemplateState();
             if (state.templates.length <= 1) {
-                if (window.confirm("Möchten Sie diese Variante leeren?")) {
+                if (window.confirm("Do you want to clear this variation?")) {
                     state.templates[0] = "";
                     loadActiveTemplateIntoEditor();
                     setSaveStatus(false);
@@ -2043,17 +2043,48 @@
 
             try {
                 let payload;
-                if (bootstrap.applicationId && bootstrap.application && !bootstrap.editCampaignId && !bootstrap.autoloadSource) {
-                    payload = await fetchJson(`${API_BASE}/create-anschreibens/application-bootstrap`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                            filename: bootstrap.filename || "",
-                            application_id: bootstrap.applicationId,
-                            application: bootstrap.application,
-                            source_label: bootstrap.application.source_label || "Supabase",
-                        }),
-                    });
+                if (bootstrap.applicationId && !bootstrap.editCampaignId && !bootstrap.autoloadSource) {
+                    if (!bootstrap.application) {
+                        try {
+                            const cRes = await fetch(`/api/supabase/candidate-by-application/${encodeURIComponent(bootstrap.applicationId)}`);
+                            if (cRes.ok) {
+                                const cData = await cRes.json();
+                                if (cData && cData.found && cData.client) {
+                                    const c = cData.client;
+                                    bootstrap.application = {
+                                        id: bootstrap.applicationId,
+                                        full_name: c.name || c.contact?.full_name || "",
+                                        email: c.contact?.email || "",
+                                        whatsapp: c.contact?.phone || "",
+                                        field: c.profile?.field || "",
+                                        bereich: c.profile?.field || "",
+                                        pack: c.package?.name || "",
+                                        source_label: `JobScout (${c.id})`,
+                                        documents: (c.documents || []).map(d => ({
+                                            path: d.filename || d.name,
+                                            name: d.name || d.filename,
+                                            is_cv: Boolean(d.is_cv)
+                                        }))
+                                    };
+                                }
+                            }
+                        } catch (_) {}
+                    }
+
+                    if (bootstrap.application) {
+                        payload = await fetchJson(`${API_BASE}/create-anschreibens/application-bootstrap`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                filename: bootstrap.filename || "",
+                                application_id: bootstrap.applicationId,
+                                application: bootstrap.application,
+                                source_label: bootstrap.application.source_label || "Supabase",
+                            }),
+                        });
+                    } else {
+                        payload = await fetchJson(`${API_BASE}/create-anschreibens/bootstrap?${bootstrap.query}`);
+                    }
                 } else {
                     payload = await fetchJson(`${API_BASE}/create-anschreibens/bootstrap?${bootstrap.query}`);
                 }
@@ -2170,6 +2201,33 @@
             showProgress("Bewerbung wird geladen...", 25);
 
             try {
+                if (!bootstrap.application) {
+                    try {
+                        const cRes = await fetch(`/api/supabase/candidate-by-application/${encodeURIComponent(bootstrap.applicationId)}`);
+                        if (cRes.ok) {
+                            const cData = await cRes.json();
+                            if (cData && cData.found && cData.client) {
+                                const c = cData.client;
+                                bootstrap.application = {
+                                    id: bootstrap.applicationId,
+                                    full_name: c.name || c.contact?.full_name || "",
+                                    email: c.contact?.email || "",
+                                    whatsapp: c.contact?.phone || "",
+                                    field: c.profile?.field || "",
+                                    bereich: c.profile?.field || "",
+                                    pack: c.package?.name || "",
+                                    source_label: `JobScout (${c.id})`,
+                                    documents: (c.documents || []).map(d => ({
+                                        path: d.filename || d.name,
+                                        name: d.name || d.filename,
+                                        is_cv: Boolean(d.is_cv)
+                                    }))
+                                };
+                            }
+                        }
+                    } catch (_) {}
+                }
+
                 const payload = await fetchJson(`${API_BASE}/create-anschreibens/application-bootstrap`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },

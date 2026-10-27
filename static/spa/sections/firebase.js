@@ -152,14 +152,14 @@
                         <span class="firebase-badge">${escapeHtml(application.source_label || "Firebase")}</span>
                     </h3>
                     <div class="firebase-meta">
-                        Quelle: <strong>${escapeHtml(application.source_label || "Firebase")}</strong><br>
-                        E-Mail: <strong>${escapeHtml(application.email || "k. A.")}</strong><br>
+                        Source: <strong>${escapeHtml(application.source_label || "Firebase")}</strong><br>
+                        Email: <strong>${escapeHtml(application.email || "k. A.")}</strong><br>
                         WhatsApp: <span>${escapeHtml(application.whatsapp || "k. A.")}</span><br>
-                        Paket: <span>${escapeHtml(application.bewerbungen || "k. A.")}</span><br>
-                        Bereich: <span>${escapeHtml(application.bereich || "k. A.")}</span><br>
+                        Package: <span>${escapeHtml(application.bewerbungen || "k. A.")}</span><br>
+                        Field/Industry: <span>${escapeHtml(application.bereich || "k. A.")}</span><br>
                         Bank: <span>${escapeHtml(application.bank || "k. A.")}</span><br>
-                        Dokumente: ${documentsHtml}<br>
-                        Eingereicht: <span>${escapeHtml(application.created_at_display || "k. A.")}</span>
+                        Documents: ${documentsHtml}<br>
+                        Submitted: <span>${escapeHtml(application.created_at_display || "k. A.")}</span>
                     </div>
                     <div class="campaign-actions">
                         <button
@@ -175,7 +175,7 @@
                             data-firebase-id="${escapeHtml(applicationId)}"
                             ${pendingDeletes.has(applicationId) ? "disabled" : ""}
                         >
-                            ${pendingDeletes.has(applicationId) ? "Lösche..." : "Löschen"}
+                            ${pendingDeletes.has(applicationId) ? "Deleting..." : "Delete"}
                         </button>
                     </div>
                 </article>
@@ -229,7 +229,7 @@
         async function loadApplicationsViaApi() {
             const payload = await fetchJson("/api/firebase/applications");
             if (!payload.success || !Array.isArray(payload.applications)) {
-                throw new Error(payload.message || "Firebase-Daten konnten nicht geladen werden");
+                throw new Error(payload.message || "Could not load client application data");
             }
             return payload.applications;
         }
@@ -256,7 +256,7 @@
                     setStatus(
                         apiError.message
                         || clientError.message
-                        || "Firebase-Daten konnten nicht geladen werden.",
+                        || "Could not load application data.",
                         true,
                     );
                 }
@@ -277,7 +277,7 @@
             }
 
             const confirmed = window.confirm(
-                "Diese Firebase-Bewerbung löschen? Das kann nicht rückgängig gemacht werden.",
+                "Delete this client application? This cannot be undone.",
             );
             if (!confirmed) {
                 return;
@@ -288,16 +288,16 @@
 
             try {
                 await deleteApplicationViaClient(applicationId);
-                setStatus("Firebase-Bewerbung gelöscht.", false);
+                setStatus("Client application deleted.", false);
             } catch (clientError) {
                 try {
                     const payload = await fetchJson(`/api/firebase/delete/${encodeURIComponent(applicationId)}`, {
                         method: "POST",
                     });
                     if (!payload.success) {
-                        throw new Error(payload.message || "Firebase-Bewerbung konnte nicht gelöscht werden");
+                        throw new Error(payload.message || "Application could not be deleted");
                     }
-                    setStatus("Firebase-Bewerbung gelöscht.", false);
+                    setStatus("Client application deleted.", false);
                 } catch (apiError) {
                     setStatus(
                         apiError.message

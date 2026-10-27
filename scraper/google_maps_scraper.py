@@ -5,15 +5,19 @@ Uses Selenium to search Google Maps for businesses, extract their details,
 and crawl their websites to find email addresses.
 """
 
+import html
 import logging
 import re
 import time
 import random
+import threading
 import urllib.parse
-from typing import Dict, List, Optional, Set
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Callable, Dict, List, Optional, Set
 from urllib.parse import urljoin, urlparse
 
 import requests
+from requests.adapters import HTTPAdapter
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -28,6 +32,7 @@ from selenium.common.exceptions import (
 )
 
 from .browser_driver import find_browser, new_options, start_driver
+from .google_maps_opportunity_verifier import GoogleMapsOpportunityVerifier
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +61,7 @@ EXCLUDED_EMAIL_PREFIXES = {
 CONTACT_PAGE_PATTERNS = [
     "/kontakt", "/contact", "/impressum", "/imprint",
     "/ueber-uns", "/about", "/about-us", "/team", "/datenschutz",
+    "/karriere", "/jobs", "/career", "/stellenangebote", "/stellen",
 ]
 
 MAPS_URL = "https://www.google.com/maps"
@@ -113,8 +119,34 @@ def _extract_emails_from_text(text: str) -> List[str]:
     return valid
 
 
+def _decode_cloudflare_email(cf_hex: str) -> str:
+    """Decodes Cloudflare email protection hex strings."""
+    try:
+        r = int(cf_hex[:2], 16)
+        email = "".join(chr(int(cf_hex[i:i+2], 16) ^ r) for i in range(2, len(cf_hex), 2))
+        return email.strip()
+    except Exception:
+        return ""
+
+
+def _deobfuscate_email_text(text: str) -> str:
+    """Converts common email obfuscation patterns back to standard email format."""
+    if not text:
+        return ""
+    text = html.unescape(text)
+    # Replace [at], (at), [AT], (AT) with @
+    text = re.sub(r'\[\s*(?:at|AT)\s*\]|\(\s*(?:at|AT)\s*\)', '@', text)
+    # Replace [dot], (dot), [DOT], (DOT) with .
+    text = re.sub(r'\[\s*(?:dot|DOT)\s*\]|\(\s*(?:dot|DOT)\s*\)', '.', text)
+    # Reconnect spaces around dots between domain segments like "domain . de" -> "domain.de"
+    text = re.sub(r'([A-Za-z0-9-]+)\s*\.\s*([A-Za-z]{2,}\b)', r'\1.\2', text)
+    # Reconnect spaces around @ like "name @ domain.com" -> "name@domain.com"
+    text = re.sub(r'(\b[A-Za-z0-9._%+-]+)\s*@\s*([A-Za-z0-9.-]+\.[A-Za-z]{2,}\b)', r'\1@\2', text)
+    return text
+
+
 def _extract_emails_from_html(html_content: str) -> List[str]:
-    """Extract emails from both visible text and mailto: links."""
+    """Extract emails from visible text, mailto links, and Cloudflare protected spans."""
     if not html_content:
         return []
 
@@ -123,18 +155,34 @@ def _extract_emails_from_html(html_content: str) -> List[str]:
     try:
         soup = BeautifulSoup(html_content, "html.parser")
 
-        # Extract from mailto links
+        # 1. Extract from standard mailto links
         for a_tag in soup.find_all("a", href=True):
             href = (a_tag.get("href") or "").strip()
             if href.startswith("mailto:"):
                 addr = href.replace("mailto:", "", 1).split("?")[0].strip()
-                normalized = _normalize_email(addr)
+                normalized = _normalize_email(_deobfuscate_email_text(addr))
+                if normalized and _is_valid_email(normalized):
+                    emails.add(normalized)
+            # Cloudflare email protection links
+            elif "/cdn-cgi/l/email-protection#" in href:
+                cf_hex = href.split("/cdn-cgi/l/email-protection#", 1)[1].split("?")[0].strip()
+                decoded = _decode_cloudflare_email(cf_hex)
+                normalized = _normalize_email(decoded)
                 if normalized and _is_valid_email(normalized):
                     emails.add(normalized)
 
-        # Extract from visible text
+        # 2. Extract from Cloudflare data-cfemail spans/tags
+        for tag in soup.find_all(attrs={"data-cfemail": True}):
+            cf_hex = str(tag.get("data-cfemail") or "").strip()
+            decoded = _decode_cloudflare_email(cf_hex)
+            normalized = _normalize_email(decoded)
+            if normalized and _is_valid_email(normalized):
+                emails.add(normalized)
+
+        # 3. Extract from visible text with de-obfuscation
         text = soup.get_text(separator="\n")
-        for email in _extract_emails_from_text(text):
+        deobf_text = _deobfuscate_email_text(text)
+        for email in _extract_emails_from_text(deobf_text):
             emails.add(email)
 
     except Exception as exc:
@@ -182,20 +230,34 @@ class GoogleMapsBusinessScraper:
     def __init__(self, headless: bool = True):
         self.driver = None
         self.http_session = requests.Session()
+        # High-capacity connection pool for concurrent worker threads
+        adapter = HTTPAdapter(pool_connections=32, pool_maxsize=32, max_retries=1)
+        self.http_session.mount("http://", adapter)
+        self.http_session.mount("https://", adapter)
         self.http_session.headers.update({"User-Agent": CRAWL_USER_AGENT})
         self.headless = headless
         self.global_emails: Set[str] = set()
+        self.lock = threading.Lock()
 
         # Suppress SSL warnings for flaky business sites
         import urllib3
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         self.http_session.verify = False
+
+        self.opportunity_verifier = GoogleMapsOpportunityVerifier(
+            session=self.http_session,
+            timeout=CRAWL_TIMEOUT,
+            max_pages=MAX_CRAWL_PAGES,
+        )
+
         self.stats = {
             "businesses_found": 0,
             "emails_found": 0,
             "no_email": 0,
             "failed": 0,
             "websites_crawled": 0,
+            "vacancies_found": 0,
+            "forms_found": 0,
         }
 
     def _ensure_driver(self):
@@ -437,9 +499,8 @@ class GoogleMapsBusinessScraper:
 
         try:
             driver.get(maps_url)
-            time.sleep(4)  # Allow detail panel JS to render
 
-            # --- Wait for detail panel to load ---
+            # --- Dynamic wait for detail panel to render (fast settle) ---
             panel_selectors = [
                 "div[role='main']",
                 "div.m6QErb[aria-label]",
@@ -448,13 +509,13 @@ class GoogleMapsBusinessScraper:
             ]
             for sel in panel_selectors:
                 try:
-                    WebDriverWait(driver, 8).until(
+                    WebDriverWait(driver, 3.5).until(
                         EC.presence_of_element_located((By.CSS_SELECTOR, sel))
                     )
                     break
                 except (TimeoutException, NoSuchElementException):
                     continue
-            time.sleep(1.5)
+            time.sleep(0.4)
 
             # ================================================================
             # PHASE A: CSS Selector-based (try current Google Maps DOM)
@@ -759,8 +820,13 @@ class GoogleMapsBusinessScraper:
         business: Dict,
         *,
         stop_check=None,
+        verify_opportunities: bool = False,
+        target_title: str = "",
+        job_type: str = "both",
+        client_id: str = "",
+        candidate_profile: Optional[Dict] = None,
     ) -> Dict:
-        """Full processing: enrich details + extract emails."""
+        """Full processing: enrich details + extract emails + optionally verify job opportunities."""
         name = business.get("name", "Unknown")
 
         try:
@@ -769,41 +835,216 @@ class GoogleMapsBusinessScraper:
                 return business
 
             self.enrich_business_details(business)
-            _random_delay(1.0, 2.0)
+            _random_delay(0.5, 1.0)
 
             website = business.get("website", "")
             if website:
                 emails = self.extract_emails_from_website(website)
                 new_emails = []
-                for email in emails:
-                    normalized = _normalize_email(email)
-                    if normalized not in self.global_emails:
-                        self.global_emails.add(normalized)
-                    new_emails.append(normalized)
+                with self.lock:
+                    for email in emails:
+                        normalized = _normalize_email(email)
+                        if normalized not in self.global_emails:
+                            self.global_emails.add(normalized)
+                        new_emails.append(normalized)
 
-                business["emails"] = new_emails
+                    business["emails"] = new_emails
 
-                if new_emails:
-                    business["status"] = "success"
-                    self.stats["emails_found"] += 1
-                    logger.info("Found %d email(s) for %s", len(new_emails), name)
-                else:
-                    business["status"] = "no_email"
-                    self.stats["no_email"] += 1
-                    logger.info("No emails for %s", name)
+                    if new_emails:
+                        business["status"] = "success"
+                        self.stats["emails_found"] += 1
+                        logger.info("Found %d email(s) for %s", len(new_emails), name)
+                    else:
+                        business["status"] = "no_email"
+                        self.stats["no_email"] += 1
+                        logger.info("No emails for %s", name)
+
+                # Optional Job Opportunity & Ausbildung Verification
+                if verify_opportunities:
+                    self.opportunity_verifier.verify_business_opportunities(
+                        business=business,
+                        target_title=target_title,
+                        job_type=job_type,
+                        client_id=client_id,
+                        candidate_profile=candidate_profile,
+                    )
+                    with self.lock:
+                        vacs = business.get("vacancies") or []
+                        self.stats["vacancies_found"] += len(vacs)
+                        if business.get("primary_url_type") in ("DIRECT_APPLICATION_FORM", "APPLICATION_PORTAL"):
+                            self.stats["forms_found"] += 1
             else:
                 business["emails"] = []
                 business["status"] = "no_website"
-                self.stats["no_email"] += 1
+                with self.lock:
+                    self.stats["no_email"] += 1
                 logger.info("No website for %s", name)
+                if verify_opportunities:
+                    business["primary_verification_status"] = "UNKNOWN"
+                    business["vacancies"] = []
+                    business["vacancies_count"] = 0
 
         except Exception as exc:
             logger.error("Error processing %s: %s", name, exc)
             business["status"] = "error"
             business["error"] = str(exc)
-            self.stats["failed"] += 1
+            with self.lock:
+                self.stats["failed"] += 1
 
         return business
+
+    def process_businesses_concurrent(
+        self,
+        businesses: List[Dict],
+        max_workers: int = 8,
+        on_progress: Optional[Callable[[int, Dict], None]] = None,
+        stop_check: Optional[Callable[[], bool]] = None,
+        verify_opportunities: bool = False,
+        target_title: str = "",
+        job_type: str = "both",
+        client_id: str = "",
+        candidate_profile: Optional[Dict] = None,
+    ) -> List[Dict]:
+        """
+        High-performance concurrent website crawling for Google Maps businesses.
+        Pipelined architecture:
+        - Resolves business details (website/phone) via Selenium.
+        - As soon as each website is resolved, immediately submits it to a ThreadPoolExecutor.
+        - Up to max_workers (default 8) crawl websites concurrently in parallel.
+        - Thread-safe state tracking and real-time progress callbacks.
+        - When verify_opportunities=True, discovers careers, extracts vacancies, and verifies fit.
+        """
+        if not businesses:
+            return businesses
+
+        total = len(businesses)
+        completed_count = 0
+        progress_lock = threading.Lock()
+
+        def _crawl_worker(biz: Dict) -> Dict:
+            nonlocal completed_count
+            name = biz.get("name", "Unknown")
+            website = biz.get("website", "")
+            try:
+                if stop_check and stop_check():
+                    biz["status"] = "stopped"
+                    return biz
+
+                if website:
+                    emails = self.extract_emails_from_website(website)
+                    new_emails = []
+                    with self.lock:
+                        for email in emails:
+                            normalized = _normalize_email(email)
+                            if normalized not in self.global_emails:
+                                self.global_emails.add(normalized)
+                            new_emails.append(normalized)
+
+                    biz["emails"] = new_emails
+                    with self.lock:
+                        if new_emails:
+                            biz["status"] = "success"
+                            self.stats["emails_found"] += 1
+                            logger.info("Found %d email(s) for %s", len(new_emails), name)
+                        else:
+                            biz["status"] = "no_email"
+                            self.stats["no_email"] += 1
+                            logger.info("No emails for %s", name)
+
+                    # Optional Opportunity Verification
+                    if verify_opportunities:
+                        self.opportunity_verifier.verify_business_opportunities(
+                            business=biz,
+                            target_title=target_title,
+                            job_type=job_type,
+                            client_id=client_id,
+                            candidate_profile=candidate_profile,
+                        )
+                        with self.lock:
+                            vacs = biz.get("vacancies") or []
+                            self.stats["vacancies_found"] += len(vacs)
+                            if biz.get("primary_url_type") in ("DIRECT_APPLICATION_FORM", "APPLICATION_PORTAL"):
+                                self.stats["forms_found"] += 1
+                else:
+                    biz["emails"] = []
+                    biz["status"] = "no_website"
+                    with self.lock:
+                        self.stats["no_email"] += 1
+                    if verify_opportunities:
+                        biz["primary_verification_status"] = "UNKNOWN"
+                        biz["vacancies"] = []
+                        biz["vacancies_count"] = 0
+
+            except Exception as exc:
+                logger.error("Error crawling website for %s: %s", name, exc)
+                biz["status"] = "error"
+                biz["error"] = str(exc)
+                with self.lock:
+                    self.stats["failed"] += 1
+
+            with progress_lock:
+                completed_count += 1
+                current_c = completed_count
+
+            if on_progress:
+                try:
+                    on_progress(current_c, biz)
+                except Exception:
+                    pass
+
+            return biz
+
+        futures = []
+        with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="gmaps_crawl") as executor:
+            for idx, biz in enumerate(businesses):
+                if stop_check and stop_check():
+                    biz["status"] = "stopped"
+                    with progress_lock:
+                        completed_count += 1
+                        current_c = completed_count
+                    if on_progress:
+                        try:
+                            on_progress(current_c, biz)
+                        except Exception:
+                            pass
+                    continue
+
+                # Step 1: Ensure website and phone are enriched
+                if not biz.get("website") and biz.get("maps_url"):
+                    try:
+                        self.enrich_business_details(biz)
+                    except Exception as enrich_exc:
+                        logger.warning("Enrichment failed for %s: %s", biz.get("name"), enrich_exc)
+
+                # Step 2: Submit to concurrent crawler if website available
+                if biz.get("website"):
+                    futures.append(executor.submit(_crawl_worker, biz))
+                else:
+                    biz["emails"] = []
+                    biz["status"] = "no_website"
+                    if verify_opportunities:
+                        biz["primary_verification_status"] = "UNKNOWN"
+                        biz["vacancies"] = []
+                        biz["vacancies_count"] = 0
+                    with self.lock:
+                        self.stats["no_email"] += 1
+                    with progress_lock:
+                        completed_count += 1
+                        current_c = completed_count
+                    if on_progress:
+                        try:
+                            on_progress(current_c, biz)
+                        except Exception:
+                            pass
+
+            # Wait for all background web crawling tasks to complete
+            for f in as_completed(futures):
+                try:
+                    f.result()
+                except Exception:
+                    pass
+
+        return businesses
 
     def close(self) -> None:
         """Clean up resources."""

@@ -24,7 +24,7 @@
 
             const srcLabels = {
                 all: "Alle Quellen inkl. Google Maps",
-                job_portals: "Nur Jobbörsen",
+                job_portals: "Job Portals Only",
                 google_maps: "Nur Google Maps",
             };
             const dateLabels = {
@@ -62,6 +62,11 @@
         function restoreIndexState() {
             const raw = localStorage.getItem(INDEX_STATE_KEY);
             if (!raw) {
+                const ausRadio = document.getElementById("mode_ausbildung");
+                const kwEl = document.getElementById("keyword");
+                if (ausRadio && ausRadio.checked && kwEl && (!kwEl.value || kwEl.value.trim() === "")) {
+                    kwEl.value = "Ausbildung als ";
+                }
                 updateFilterSummaryBadge();
                 return;
             }
@@ -161,9 +166,9 @@
                 if (pct >= 100) {
                     ui.btnLabel.textContent = `Fertig (${found} Stellen)`;
                 } else if (found > 0) {
-                    ui.btnLabel.textContent = `Suche läuft... ${pct}% (${found} Stellen)`;
+                    ui.btnLabel.textContent = `Searching... ${pct}% (${found} positions)`;
                 } else {
-                    ui.btnLabel.textContent = `Suche läuft... ${pct}%`;
+                    ui.btnLabel.textContent = `Searching... ${pct}%`;
                 }
             }
 
@@ -176,7 +181,7 @@
             }
             if (ui.progressCounter) {
                 if (progressData.raw_found && progressData.raw_found > found) {
-                    ui.progressCounter.textContent = `${found} passende Stellen (${progressData.raw_found} geprüft)`;
+                    ui.progressCounter.textContent = `${found} matching positions (${progressData.raw_found} checked)`;
                 } else {
                     ui.progressCounter.textContent = `${found} Stellen gefunden`;
                 }
@@ -217,7 +222,7 @@
             const sidebarMeta = document.getElementById("sidebar-job-meta");
             if (sidebarJob && sidebarTitle && sidebarPercent && sidebarFill && sidebarMeta) {
                 sidebarJob.hidden = false;
-                sidebarTitle.textContent = "Jobsuche läuft";
+                sidebarTitle.textContent = "Job search running";
                 sidebarPercent.textContent = `${pct}%`;
                 sidebarFill.style.width = `${pct}%`;
                 sidebarMeta.textContent = stage || `${found} Stellen gefunden`;
@@ -313,7 +318,7 @@
 
             const total = Number(data.total || ui.lastJobs.length || 0);
             const publishedSince = publishedSinceLabel(data.published_since || "all");
-            let metaText = `${total} passende Stellen gefunden | Veröffentlicht seit: ${publishedSince}`;
+            let metaText = `${total} matching positions found | Veröffentlicht seit: ${publishedSince}`;
             if (data.audit && data.audit.raw_total) {
                 metaText = `${total} passende Stellen aus ${data.audit.raw_total} geprüften Angeboten | Veröffentlicht seit: ${publishedSince}`;
             }
@@ -372,7 +377,7 @@
 
             if (!ui.lastJobs.length) {
                 if (ui.filterBar) ui.filterBar.style.display = "none";
-                ui.listEl.innerHTML = '<div class="job-item">Keine passenden Stellenangebote für diese Suchkriterien gefunden.</div>';
+                ui.listEl.innerHTML = '<div class="job-item">No matching job listings found for these search criteria gefunden.</div>';
                 ui.autoBtn.style.display = "none";
                 if (exportBtn) exportBtn.style.display = "none";
                 return;
@@ -1005,23 +1010,61 @@
             });
         }
 
-        // Mode Segmented Control dynamic placeholders & hints
+        // Mode Segmented Control dynamic placeholders, hints & prefix prefill
         const modeRadios = document.querySelectorAll('input[name="mode"]');
+        const ausbildungOption = document.querySelector('label[for="mode_ausbildung"]');
+
+        function applyAusbildungPrefix(focus = true) {
+            const kwInput = document.getElementById("keyword");
+            if (!kwInput) return;
+            const prefix = "Ausbildung als ";
+            if (!kwInput.value || kwInput.value.trim() === "" || kwInput.value.trim() === "Ausbildung als") {
+                kwInput.value = prefix;
+            } else if (!kwInput.value.startsWith(prefix)) {
+                kwInput.value = prefix + kwInput.value.replace(/^Ausbildung\s+(als\s+)?/i, "").trimStart();
+            }
+            if (focus) {
+                kwInput.focus();
+                const len = kwInput.value.length;
+                kwInput.setSelectionRange(len, len);
+            }
+        }
+
         modeRadios.forEach((radio) => {
             radio.addEventListener("change", (e) => {
                 const val = e.target.value;
                 const kwInput = document.getElementById("keyword");
                 const hint = document.getElementById("keyword_hint");
                 if (val === "arbeit") {
-                    if (kwInput) kwInput.placeholder = "z. B. Softwareentwickler, Projektmanager, Elektroniker";
+                    if (kwInput) {
+                        kwInput.placeholder = "z. B. Softwareentwickler, Projektmanager, Elektroniker";
+                        if (kwInput.value === "Ausbildung als " || kwInput.value.trim() === "Ausbildung als") {
+                            kwInput.value = "";
+                        } else if (kwInput.value.startsWith("Ausbildung als ")) {
+                            kwInput.value = kwInput.value.slice("Ausbildung als ".length);
+                        }
+                    }
                     if (hint) hint.textContent = "Geben Sie die Berufsbezeichnung ein — findet Arbeitgeber und direkte E-Mail-Kontakte.";
                 } else {
-                    if (kwInput) kwInput.placeholder = "z. B. Fachinformatiker, Koch, Softwareentwickler";
+                    if (kwInput) {
+                        kwInput.placeholder = "z. B. Fachinformatiker, Koch, Softwareentwickler";
+                        applyAusbildungPrefix(true);
+                    }
                     if (hint) hint.textContent = "Geben Sie einfach die Berufsbezeichnung ein — Suche passt sich automatisch an.";
                 }
                 saveIndexState();
             });
         });
+
+        // Also allow clicking directly on Ausbildung option/label to focus and ensure prefix is present
+        if (ausbildungOption) {
+            ausbildungOption.addEventListener("click", () => {
+                const hint = document.getElementById("keyword_hint");
+                if (hint) hint.textContent = "Geben Sie einfach die Berufsbezeichnung ein — Suche passt sich automatisch an.";
+                applyAusbildungPrefix(true);
+                saveIndexState();
+            });
+        }
 
         // Collapsible Advanced Filters Toggle
         const filterToggle = document.getElementById("advanced_filters_toggle");

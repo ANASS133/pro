@@ -14,11 +14,19 @@ DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")
 # Third-party API Credentials
 CAPTCHA_USERID = os.getenv("TRUECAPTCHA_USERID", "").strip()
 CAPTCHA_APIKEY = os.getenv("TRUECAPTCHA_APIKEY", "").strip()
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
+# AI Provider Settings (Official OpenAI API - GPT Luna & Optional Gemini)
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-6-luna").strip()
+OPENAI_ENDPOINT = os.getenv("OPENAI_ENDPOINT", "https://api.openai.com/v1").strip()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+AI_PROVIDER = os.getenv("AI_PROVIDER", "openai").strip()
 
 # Supabase Configuration
-SUPABASE_URL = os.environ.get("VITE_SUPABASE_URL", os.environ.get("SUPABASE_URL", ""))
+SUPABASE_URL = os.environ.get("VITE_SUPABASE_URL", os.environ.get("SUPABASE_URL", "")).rstrip("/")
 SUPABASE_ANON_KEY = os.environ.get("VITE_SUPABASE_ANON_KEY", os.environ.get("SUPABASE_ANON_KEY", ""))
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+SUPABASE_STORAGE_BUCKET = os.environ.get("SUPABASE_STORAGE_BUCKET", "applications").strip()
 
 # Firebase Configuration
 FIREBASE_CONFIG = {

@@ -323,6 +323,24 @@ class TestRedesignedSearchInterface(unittest.TestCase):
         self.assertNotIn('id="search_form_2"', content)
         self.assertNotIn('id="keyword_2"', content)
 
+    # -------------------------------------------------------------------------
+    # Scenario H: Ausbildung Mode Auto-Prefill Verification
+    # -------------------------------------------------------------------------
+    def test_scenario_h_ausbildung_prefill_in_search_scripts(self):
+        """Verify that selecting Ausbildung prefills 'Ausbildung als ' as editable text with caret at end."""
+        with open("static/spa/sections/search.js", "r", encoding="utf-8") as f:
+            search_js = f.read()
+
+        self.assertIn('Ausbildung als ', search_js)
+        self.assertIn('setSelectionRange', search_js)
+        self.assertIn('applyAusbildungPrefix', search_js)
+
+        with open("templates/index.html", "r", encoding="utf-8") as f:
+            index_html = f.read()
+
+        self.assertIn('Ausbildung als ', index_html)
+        self.assertIn('setSelectionRange', index_html)
+
 
 if __name__ == "__main__":
     unittest.main()

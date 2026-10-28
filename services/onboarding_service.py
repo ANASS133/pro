@@ -15,11 +15,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from services.client_manager import ClientManager, _slugify, client_manager
 from services.cv_parser import CVParser
-from services.onboarding_tracker import OnboardingStatus, onboarding_tracker
+from services.onboarding_tracker import OnboardingStatus, OnboardingTracker, onboarding_tracker
 from services.supabase_service import (
     ApplicationNotFoundError,
     DocumentDownloadError,
     PaymentUnverifiedError,
+    SupabaseService,
     SupabaseServiceError,
     supabase_service,
 )

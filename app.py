@@ -750,15 +750,19 @@ def _coerce_nonnegative_float(value, default: float = 0.0) -> float:
     return parsed if parsed >= 0 else default
 
 
-def _normalize_pdf_layout_options(layout_options) -> Dict[str, float]:
+def _normalize_pdf_layout_options(layout_options) -> Dict[str, Any]:
     if not isinstance(layout_options, dict):
         layout_options = {}
 
-    normalized: Dict[str, float] = {}
+    normalized: Dict[str, Any] = {}
     for key, default_value in PDF_LAYOUT_DEFAULTS.items():
         normalized[key] = _coerce_nonnegative_float(
             layout_options.get(key), default=float(default_value)
         )
+    # Preserve advanced controls (font, auto_fit, din_5008, show_fold_marks, colors, watermark, header, footer, scale, etc.)
+    for key, val in layout_options.items():
+        if key not in normalized:
+            normalized[key] = val
     return normalized
 
 

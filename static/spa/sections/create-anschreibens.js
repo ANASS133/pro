@@ -69,6 +69,12 @@
             displayMode: "split",
             livePreviewObjectUrl: "",
             livePreviewDebounceTimer: null,
+            autoFit: true,
+            minFontSize: 8.0,
+            selectedFont: "helvetica",
+            showFoldMarks: false,
+            dinPreset: null,
+            watermarkText: "",
         };
 
         function byId(name) {
@@ -378,10 +384,16 @@
             els.marginBottomInput.value = normalizedLayout.margin_bottom ?? defaultLayout.margin_bottom;
             els.textWidthInput.value = normalizedLayout.text_width ?? defaultLayout.text_width;
             els.textHeightInput.value = normalizedLayout.text_height ?? defaultLayout.text_height;
+
+            if (normalizedLayout.auto_fit !== undefined) state.autoFit = Boolean(normalizedLayout.auto_fit);
+            if (normalizedLayout.font) state.selectedFont = normalizedLayout.font;
+            if (normalizedLayout.din_5008_preset) state.dinPreset = normalizedLayout.din_5008_preset;
+            if (normalizedLayout.show_fold_marks !== undefined) state.showFoldMarks = Boolean(normalizedLayout.show_fold_marks);
+            if (normalizedLayout.watermark !== undefined) state.watermarkText = normalizedLayout.watermark;
         }
 
         function getLayoutOptions() {
-            return {
+            const opts = {
                 font_size: toNumber(els.fontSizeInput.value, defaultLayout.font_size),
                 line_height: toNumber(els.lineHeightInput.value, defaultLayout.line_height),
                 margin_top: toNumber(els.marginTopInput.value, defaultLayout.margin_top),
@@ -390,7 +402,18 @@
                 margin_bottom: toNumber(els.marginBottomInput.value, defaultLayout.margin_bottom),
                 text_width: toNumber(els.textWidthInput.value, defaultLayout.text_width),
                 text_height: toNumber(els.textHeightInput.value, defaultLayout.text_height),
+                auto_fit: state.autoFit !== undefined ? state.autoFit : true,
+                min_font_size: state.minFontSize || 8.0,
+                font: state.selectedFont || "helvetica",
+                show_fold_marks: Boolean(state.showFoldMarks),
             };
+            if (state.dinPreset) {
+                opts.din_5008_preset = state.dinPreset;
+            }
+            if (state.watermarkText) {
+                opts.watermark = state.watermarkText;
+            }
+            return opts;
         }
 
         function persistActiveTemplateValue() {

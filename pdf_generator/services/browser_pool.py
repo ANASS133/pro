@@ -85,8 +85,22 @@ class BrowserPool:
                 self._recycle()
                 raise
 
-    def render_html_to_pdf(self, html_doc_str: str) -> bytes:
+    def render_html_to_pdf(self, html_doc_str: str, print_options: Optional[dict] = None) -> bytes:
         """Renders HTML string directly to PDF bytes via warm browser CDP."""
+        cdp_options = {
+            "printBackground": True,
+            "preferCSSPageSize": True,
+            "displayHeaderFooter": False,
+            "paperWidth": 210 / 25.4,
+            "paperHeight": 297 / 25.4,
+            "marginTop": 0,
+            "marginBottom": 0,
+            "marginLeft": 0,
+            "marginRight": 0,
+        }
+        if print_options and isinstance(print_options, dict):
+            cdp_options.update(print_options)
+
         with self.get_driver() as driver:
             driver.execute_cdp_cmd("Emulation.setEmulatedMedia", {"media": "print"})
             encoded = base64.b64encode(html_doc_str.encode("utf-8")).decode("ascii")
@@ -104,17 +118,7 @@ class BrowserPool:
                 ]).then(() => done());
             """)
 
-            result = driver.execute_cdp_cmd("Page.printToPDF", {
-                "printBackground": True,
-                "preferCSSPageSize": True,
-                "displayHeaderFooter": False,
-                "paperWidth": 210 / 25.4,
-                "paperHeight": 297 / 25.4,
-                "marginTop": 0,
-                "marginBottom": 0,
-                "marginLeft": 0,
-                "marginRight": 0,
-            })
+            result = driver.execute_cdp_cmd("Page.printToPDF", cdp_options)
 
             pdf_data = base64.b64decode(result["data"])
             return pdf_data

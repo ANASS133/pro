@@ -1,6 +1,7 @@
 import io
 from flask import Blueprint, jsonify, request, send_file
-from pdf_generator.services.pdf_service import PDFService
+from pdf_generator.services.pdf_service import DIN_5008_PRESETS, PDFService
+from pdf_generator.services.background_templates import get_template_pdf_path
 
 pdf_bp = Blueprint("pdf_routes", __name__)
 
@@ -14,6 +15,16 @@ def get_fonts():
         "default_font": service.font,
         "default_font_size": service.font_size,
         "supported_fonts": service.get_supported_fonts(),
+        "custom_fonts": list(service.custom_fonts.keys()),
+    }), 200
+
+
+@pdf_bp.route("/api/pdf/din5008-presets", methods=["GET"])
+def get_din5008_presets():
+    """List German DIN 5008 layout presets (Form A and Form B specifications)."""
+    return jsonify({
+        "success": True,
+        "presets": DIN_5008_PRESETS,
     }), 200
 
 
@@ -27,12 +38,21 @@ def preview_pdf_stream():
 
     layout_options = data.get("layout_options")
     metadata = data.get("metadata", {"title": "Preview Document"})
+    
+    # Resolve design background from path or template_id
+    design_pdf_path = data.get("design_pdf_path")
+    template_id = data.get("template_id")
+    if not design_pdf_path and template_id:
+        resolved_path = get_template_pdf_path(template_id)
+        if resolved_path:
+            design_pdf_path = str(resolved_path)
 
     try:
         service = PDFService()
         stream = service.create_pdf_stream(
             content=content,
             metadata=metadata,
+            design_pdf_path=design_pdf_path,
             layout_options=layout_options,
         )
         return send_file(

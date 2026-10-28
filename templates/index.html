@@ -173,26 +173,45 @@
             font-size: 14px;
         }
         .results-actions {
-            margin-top: 10px;
+            margin-top: 14px;
             display: flex;
+            gap: 12px;
+            align-items: center;
             justify-content: flex-end;
+            flex-wrap: wrap;
         }
         .auto-btn {
-            width: auto;
-            background: #2ea44f;
-            border: none;
-            color: #fff;
-            font-weight: 700;
-            border-radius: 6px;
-            padding: 9px 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            height: 40px;
+            padding: 0 18px;
+            font-size: 13.5px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            color: #ffffff;
+            background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            box-shadow: 0 3px 12px rgba(16, 185, 129, 0.28), 0 1px 2px rgba(0, 0, 0, 0.05);
             cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            white-space: nowrap;
         }
-        .auto-btn:hover {
-            background: #24813e;
+        .auto-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            background: linear-gradient(135deg, #047857 0%, #059669 100%);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4), 0 2px 4px rgba(0, 0, 0, 0.08);
+        }
+        .auto-btn:active:not(:disabled) {
+            transform: translateY(0);
+            box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
         }
         .auto-btn:disabled {
             opacity: 0.7;
             cursor: not-allowed;
+            transform: none;
         }
         .progress-panel {
             margin-top: 12px;
@@ -268,30 +287,76 @@
             font-size: 13px;
         }
         .progress-actions {
-            margin-top: 8px;
+            margin-top: 14px;
             display: flex;
-            gap: 8px;
+            gap: 10px;
+            align-items: center;
             flex-wrap: wrap;
+            padding-top: 12px;
+            border-top: 1px solid rgba(0, 0, 0, 0.06);
         }
         .progress-btn {
-            width: auto;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 7px;
+            height: 38px;
+            padding: 0 16px;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: -0.01em;
             border: none;
-            border-radius: 6px;
-            padding: 8px 12px;
-            color: #fff;
-            font-weight: 700;
+            border-radius: 9px;
+            color: #ffffff;
             cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            white-space: nowrap;
+            text-decoration: none;
+        }
+        .progress-btn:hover {
+            transform: translateY(-1.5px);
+        }
+        .progress-btn:active {
+            transform: translateY(0);
         }
         .progress-btn.stop {
-            background: #d9534f;
+            background: linear-gradient(135deg, #dc2626 0%, #ef4444 100%);
+            box-shadow: 0 3px 12px rgba(220, 38, 38, 0.28);
+            border: 1px solid rgba(220, 38, 38, 0.2);
+        }
+        .progress-btn.stop:hover {
+            background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%);
+            box-shadow: 0 5px 16px rgba(220, 38, 38, 0.38);
         }
         .progress-btn.download {
-            background: #2196f3;
+            background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
+            box-shadow: 0 3px 12px rgba(37, 99, 235, 0.28);
+            border: 1px solid rgba(37, 99, 235, 0.2);
             display: none;
         }
+        .progress-btn.download:hover {
+            background: linear-gradient(135deg, #0369a1 0%, #1d4ed8 100%);
+            box-shadow: 0 5px 16px rgba(37, 99, 235, 0.4);
+        }
         .progress-btn.continue {
-            background: #198754;
+            background: linear-gradient(135deg, #0d9488 0%, #10b981 100%);
+            box-shadow: 0 3px 12px rgba(16, 185, 129, 0.28);
+            border: 1px solid rgba(16, 185, 129, 0.2);
             display: none;
+        }
+        .progress-btn.continue:hover {
+            background: linear-gradient(135deg, #0f766e 0%, #059669 100%);
+            box-shadow: 0 5px 16px rgba(16, 185, 129, 0.4);
+        }
+        .progress-btn.primary-action {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            box-shadow: 0 3px 12px rgba(99, 102, 241, 0.3);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+        }
+        .progress-btn.primary-action:hover {
+            background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%);
+            box-shadow: 0 5px 18px rgba(99, 102, 241, 0.45);
         }
         @media (max-width: 760px) {
             .progress-stats {
@@ -572,7 +637,10 @@
                     <div id="results_meta_1" class="results-meta"></div>
                     <div id="results_list_1" class="results-list"></div>
                     <div class="results-actions">
-                        <button id="auto_btn_1" type="button" class="auto-btn" style="display:none;">Automatisch extrahieren</button>
+                        <button id="auto_btn_1" type="button" class="auto-btn" style="display:none;">
+                            <svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                            <span>Automatisch extrahieren</span>
+                        </button>
                     </div>
                     <section id="progress_panel_1" class="progress-panel">
                         <h4 class="progress-title">Fortschritt Auto-Extraktion</h4>
@@ -586,10 +654,22 @@
                         <div id="progress_status_1" class="progress-status">Leerlauf</div>
                         <div id="progress_error_1" class="progress-error"></div>
                         <div class="progress-actions">
-                            <button id="stop_btn_1" type="button" class="progress-btn stop">Stoppen + Ergebnis herunterladen</button>
-                            <button data-auto-continue id="continue_btn_1" type="button" class="progress-btn continue">Fortsetzen</button>
-                            <button id="download_btn_1" type="button" class="progress-btn download">Ergebnis herunterladen</button>
-                            <button id="anschreiben_btn_1" type="button" class="progress-btn" style="background:#667eea; display:none;">Zu Anschreiben</button>
+                            <button id="stop_btn_1" type="button" class="progress-btn stop" style="display:none;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
+                                <span>Stoppen + Ergebnis herunterladen</span>
+                            </button>
+                            <button data-auto-continue id="continue_btn_1" type="button" class="progress-btn continue" style="display:none;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                <span>Fortsetzen</span>
+                            </button>
+                            <button id="download_btn_1" type="button" class="progress-btn download" style="display:none;">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                <span>Ergebnis herunterladen</span>
+                            </button>
+                            <button id="anschreiben_btn_1" type="button" class="progress-btn primary-action" style="display:none;">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                                <span>Zu Anschreiben</span>
+                            </button>
                         </div>
                     </section>
                     <div id="results_error_1" class="results-error" style="display:none;"></div>
@@ -927,22 +1007,24 @@
             }
 
             let status = 'Leerlauf';
-            if (!data.is_running && Number(data.current_index || 0) >= Number(data.total_jobs || 0) && Number(data.total_jobs || 0) > 0) {
+            const isCompleted = !data.is_running && Number(data.current_index || 0) >= Number(data.total_jobs || 0) && Number(data.total_jobs || 0) > 0;
+            if (isCompleted) {
                 status = 'Extraktion abgeschlossen';
             } else if (data.stop_requested) {
                 status = 'Gestoppt';
             } else if (data.paused) {
-                status = 'Pausiert - Fehler';
+                status = data.last_error ? 'Pausiert - Fehler' : 'Pausiert';
             } else if (data.is_running) {
                 status = `Verarbeite Stelle ${data.current_index}/${data.total_jobs}...`;
             }
             ui.progressStatus.textContent = status;
 
-            ui.continueBtn.style.display = data.paused ? 'inline-block' : 'none';
-            const canDownload = Boolean(data.stop_requested || (!data.is_running && Number(data.current_index || 0) > 0));
-            ui.downloadBtn.style.display = canDownload ? 'inline-block' : 'none';
+            if (ui.stopBtn) ui.stopBtn.style.display = (data.is_running || data.paused) ? 'inline-flex' : 'none';
+            if (ui.continueBtn) ui.continueBtn.style.display = data.paused ? 'inline-flex' : 'none';
+            const canDownload = Boolean(isCompleted || data.stop_requested || (!data.is_running && Number(data.current_index || 0) > 0));
+            if (ui.downloadBtn) ui.downloadBtn.style.display = (canDownload && !data.is_running) ? 'inline-flex' : 'none';
             const canGoToAnschreiben = Boolean(!data.is_running && !data.paused && Number(data.current_index || 0) > 0);
-            ui.anschreibenBtn.style.display = canGoToAnschreiben ? 'inline-block' : 'none';
+            if (ui.anschreibenBtn) ui.anschreibenBtn.style.display = canGoToAnschreiben ? 'inline-flex' : 'none';
         }
 
         async function pollAutoProgress(ui) {

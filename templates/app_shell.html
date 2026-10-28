@@ -184,6 +184,69 @@
                                     <div class="field-hint">Bundesweite Suche falls leer.</div>
                                 </div>
 
+                                <!-- Collapsible Section: KI-Berufsverständnis -->
+                                <div class="advanced-filters-wrapper" id="ai_profession_wrapper" style="margin-bottom: 1.25rem;">
+                                    <button type="button" id="ai_profession_toggle" class="advanced-filters-toggle" aria-expanded="false" aria-controls="ai_profession_content" style="background: linear-gradient(135deg, rgba(79, 70, 229, 0.05), rgba(37, 99, 235, 0.05)); border-color: rgba(99, 102, 241, 0.25);">
+                                        <div class="toggle-left">
+                                            <svg class="filter-tune-icon text-indigo-600" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                                            </svg>
+                                            <span class="toggle-title" style="font-weight: 600; color: #1e293b;">KI-Berufsverständnis</span>
+                                            <span class="toggle-summary-badge" id="prof_summary_badge" style="background: #e0e7ff; color: #3730a3;">Automatische Erkennung aktiv</span>
+                                        </div>
+                                        <svg class="toggle-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                    </button>
+
+                                    <div id="ai_profession_content" class="advanced-filters-content" style="display:none; padding: 1.1rem; border: 1px solid rgba(99,102,241,0.2); border-radius: 0 0 10px 10px; background: #ffffff;">
+                                        <!-- Controls row: Auto-detect toggle + Search mode selector -->
+                                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1rem; padding-bottom: 0.85rem; border-bottom: 1px solid #f1f5f9;">
+                                            <div>
+                                                <label class="filter-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                                    <input type="checkbox" id="auto_categories_toggle" name="auto_categories" value="true" checked style="width: 16px; height: 16px; accent-color: #4f46e5;">
+                                                    <span style="font-weight: 600; color: #1e293b;">Automatische Arbeitgeber-Erkennung</span>
+                                                </label>
+                                                <span class="filter-subtext" style="margin-left: 24px;">Identifiziert Branchen & Betriebe automatisch nach Beruf</span>
+                                            </div>
+
+                                            <div>
+                                                <label for="search_scope" class="filter-label" style="font-weight: 600; color: #1e293b;">Suchmodus</label>
+                                                <select id="search_scope" name="search_scope" class="form-select">
+                                                    <option value="both" selected>Beides (Bestätigte Stellen & Potenzielle Betriebe)</option>
+                                                    <option value="verified_only">Nur bestätigte Ausbildungsstellen</option>
+                                                    <option value="potential_only">Potenzielle Arbeitgeber (Initiativbewerbung)</option>
+                                                </select>
+                                                <span class="filter-subtext">Filtert Arbeitgeber nach Ausbildungsnachweis</span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Classification status bar -->
+                                        <div id="prof_status_bar" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 14px; margin-bottom: 1rem; font-size: 13px;">
+                                            <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+                                                <div><strong>Erkannter Beruf:</strong> <span id="prof_recognized_name" style="color: #2563eb; font-weight: 600;">(Warte auf Eingabe)</span></div>
+                                                <div>&bull; <strong>Berufsfeld / Branche:</strong> <span id="prof_sector_name" style="color: #475569; font-weight: 600;">—</span></div>
+                                                <div>&bull; <strong>Geografische Abdeckung:</strong> <span id="geo_coverage_indicator" style="color: #475569;">Bundesweit / Stadt</span></div>
+                                            </div>
+                                            <div style="margin-top: 6px; font-size: 12px; color: #64748b;">
+                                                <strong>Generierte Google Maps Suchbegriffe:</strong> <span id="prof_search_terms_preview">Geben Sie oben einen Beruf ein.</span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Employer categories chips manager -->
+                                        <div>
+                                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                                <label class="filter-label" style="font-weight: 600; color: #1e293b; margin-bottom: 0;">Ausgewählte Arbeitgeber-Kategorien (Ziel-Branchen)</label>
+                                                <span style="font-size: 11px; color: #64748b;">Automatisch durch KI ermittelt</span>
+                                            </div>
+
+                                            <input type="hidden" id="custom_categories" name="custom_categories" value="">
+
+                                            <div id="employer_categories_chips" style="display: flex; flex-wrap: wrap; gap: 6px; min-height: 34px; padding: 8px; background: #fafafa; border: 1px dashed #cbd5e1; border-radius: 8px; margin-bottom: 0;">
+                                                <span style="color: #94a3b8; font-size: 12px; padding: 4px;">Keine Branchen ausgewählt</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <!-- Row 4: Collapsible Advanced Filters -->
                                 <div class="advanced-filters-wrapper">
                                     <button type="button" id="advanced_filters_toggle" class="advanced-filters-toggle" aria-expanded="false" aria-controls="advanced_filters_content">
@@ -290,9 +353,15 @@
                                     <button type="button" class="filter-pill" data-filter="missing">No Direct Contact <span class="filter-count" id="count_missing_1">0</span></button>
                                 </div>
                                 <div id="results_list_1" class="results-list"></div>
-                                <div class="results-actions" style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-                                    <button id="auto_btn_1" type="button" class="auto-btn" style="display:none;">Extract Automatically</button>
-                                    <a id="export_excel_btn_1" href="/api/search/download" class="progress-btn download" style="display:none; text-decoration:none; padding:10px 18px; border-radius:8px; font-weight:600; align-items:center; gap:6px;">📊 Export to Excel (.xlsx)</a>
+                                <div class="results-actions">
+                                    <button id="auto_btn_1" type="button" class="auto-btn" style="display:none;">
+                                        <svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                                        <span>Automatisch extrahieren</span>
+                                    </button>
+                                    <a id="export_excel_btn_1" href="/api/search/download" class="export-excel-btn" style="display:none;">
+                                        <svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                        <span>Export to Excel (.xlsx)</span>
+                                    </a>
                                 </div>
                                 <section id="progress_panel_1" class="progress-panel">
                                     <h4 class="progress-title">Auto-Extraction Progress</h4>
@@ -306,10 +375,23 @@
                                     <div id="progress_status_1" class="progress-status">Idle</div>
                                     <div id="progress_error_1" class="progress-error"></div>
                                     <div class="progress-actions">
-                                        <button id="stop_btn_1" type="button" class="progress-btn stop">Stop &amp; Download Results</button>
-                                        <button data-auto-continue id="continue_btn_1" type="button" class="progress-btn continue">Continue</button>
-                                        <button id="download_btn_1" type="button" class="progress-btn download">Download Results</button>
-                                        <button id="anschreiben_btn_1" type="button" class="progress-btn primary-action" style="display:none;">Go to Cover Letters</button>
+                                        <button id="stop_btn_1" type="button" class="progress-btn stop" style="display:none;">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
+                                            <span>Stop &amp; Download Results</span>
+                                        </button>
+                                        <button data-auto-continue id="continue_btn_1" type="button" class="progress-btn continue" style="display:none;">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                            <span>Continue</span>
+                                        </button>
+                                        <button id="download_btn_1" type="button" class="progress-btn download" style="display:none;">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                            <span>Download Results</span>
+                                        </button>
+                                        <button id="anschreiben_btn_1" type="button" class="progress-btn primary-action" style="display:none;">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                                            <span>Go to Cover Letters</span>
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                        </button>
                                     </div>
                                 </section>
                                 <div id="results_error_1" class="results-error" style="display:none;"></div>

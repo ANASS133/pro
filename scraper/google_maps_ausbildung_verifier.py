@@ -276,6 +276,7 @@ class GoogleMapsAusbildungVerifier:
 
         # Step 1: Check website presence
         if not website or not website.startswith("http"):
+            business["opportunity_type"] = "UNVERIFIED"
             business["is_verified_vacancy"] = False
             business["verification_status"] = "missing_website"
             business["status"] = "Unbestätigt: Keine Website vorhanden"
@@ -288,12 +289,16 @@ class GoogleMapsAusbildungVerifier:
         if not homepage_html and driver is not None:
             try:
                 driver.get(website)
+                from .cookie_handler import accept_cookies
+                accept_cookies(driver)
                 time.sleep(2)
+                accept_cookies(driver)
                 homepage_html = driver.page_source
             except Exception as exc:
                 logger.debug("Selenium fallback failed for %s: %s", website, exc)
 
         if not homepage_html:
+            business["opportunity_type"] = "UNVERIFIED"
             business["is_verified_vacancy"] = False
             business["verification_status"] = "inaccessible_website"
             business["status"] = "Unbestätigt: Website nicht erreichbar"
@@ -323,6 +328,7 @@ class GoogleMapsAusbildungVerifier:
             verified_title = matched_vacancy["title"]
             vacancy_url = matched_vacancy["vacancy_url"]
 
+            business["opportunity_type"] = "VERIFIED_AUSBILDUNG"
             business["is_verified_vacancy"] = True
             business["verification_status"] = "verified_ausbildung"
             business["title"] = verified_title
@@ -340,7 +346,7 @@ class GoogleMapsAusbildungVerifier:
                 emails_found.extend(self.extract_emails_from_html(p_html))
 
             # Also check /impressum or /kontakt
-            contact_paths = ["/kontakt", "/impressum"]
+            contact_paths = ["/kontakt", "/impressum", "/contact", "/imprint"]
             parsed_site = urlparse(website)
             for cp in contact_paths:
                 cp_url = urljoin(f"{parsed_site.scheme}://{parsed_site.netloc}", cp)
@@ -380,10 +386,38 @@ class GoogleMapsAusbildungVerifier:
             business["bewerbung_art"] = art
             return business
 
-        # Step 6: If NO matching Ausbildung vacancy is found -> retain as unconfirmed potential employer
+        # Step 6: If NO matching Ausbildung vacancy is found -> retain as POTENTIAL_EMPLOYER
+        # Extract publicly available contact email so outreach is still possible
+        emails_found = []
+        for _, p_html in pages_to_check:
+            emails_found.extend(self.extract_emails_from_html(p_html))
+
+        contact_paths = ["/kontakt", "/impressum", "/contact", "/imprint"]
+        parsed_site = urlparse(website)
+        for cp in contact_paths:
+            cp_url = urljoin(f"{parsed_site.scheme}://{parsed_site.netloc}", cp)
+            cp_html = self._fetch_page(cp_url)
+            if cp_html:
+                emails_found.extend(self.extract_emails_from_html(cp_html))
+
+        clean_emails = [e for e in set(emails_found) if e]
+        if clean_emails:
+            business["email"] = clean_emails[0]
+            business["emails"] = clean_emails
+            business["email_extracted"] = True
+        else:
+            business.setdefault("email", "")
+            business["email_extracted"] = False
+
+        business["opportunity_type"] = "POTENTIAL_EMPLOYER"
         business["is_verified_vacancy"] = False
         business["verification_status"] = "no_matching_ausbildung"
-        business["status"] = "Unbestätigter Betrieb: Keine passende Ausschreibung"
+        business["status"] = "Potenzieller Ausbildungsbetrieb: Keine passende Ausschreibung (Initiativbewerbung)"
+        business["title"] = f"Potenzieller Ausbildungsbetrieb: {name}"
+        business["company"] = name
+        business["hauptberuf"] = search_kw
+        business["job_type"] = "Ausbildung"
+        business["apply_url"] = website
         business["verification_notes"] = f"Website geprüft ({len(pages_to_check)} Seiten), keine offene Stellenausschreibung für '{search_kw}' gefunden"
         business["source"] = "Google Maps"
         return business
@@ -522,5 +556,78 @@ class GoogleMapsAusbildungVerifier:
             candidate_profile=candidate_profile,
             driver=driver,
         )
+
+    @classmethod
+    def calculate_relevance_score(
+        cls,
+        business: Dict,
+        category_relevance: float = 1.0,
+        target_location: str = "",
+    ) -> int:
+        """
+        Calculates a composite explainable score (0-100) based on:
+        1. Category relevance from ProfessionIntelligence (0-35 pts)
+        2. Opportunity verification (30 pts for verified, 18 pts for potential employer)
+        3. Contact accessibility (up to 20 pts for email/phone/form)
+        4. Geographic relevance (up to 15 pts for city match)
+        """
+        score = 0
+        # 1. Category relevance (0-35 pts)
+        cat_rel = float(business.get("profession_relevance") or business.get("category_relevance") or category_relevance or 1.0)
+        score += int(min(max(cat_rel, 0.0), 1.0) * 35)
+
+        # 2. Opportunity verification (up to 30 pts)
+        opp_type = business.get("opportunity_type")
+        if opp_type == "VERIFIED_AUSBILDUNG" or business.get("is_verified_vacancy"):
+            score += 30
+        elif opp_type == "POTENTIAL_EMPLOYER" or business.get("has_career_page"):
+            score += 18
+        elif business.get("website"):
+            score += 8
+
+        # 3. Contact accessibility (up to 20 pts)
+        if business.get("email"):
+            score += 20
+        elif business.get("has_form") or business.get("apply_url"):
+            score += 12
+        elif business.get("phone"):
+            score += 8
+
+        # 4. Geographic relevance (up to 15 pts)
+        biz_city = str(business.get("city") or business.get("location") or "").lower()
+        target_loc = str(target_location or "").lower()
+        if target_loc and (target_loc in biz_city or biz_city in target_loc):
+            score += 15
+        elif biz_city:
+            score += 8
+
+        return min(max(score, 0), 100)
+
+    @classmethod
+    def smart_rank_employers(
+        cls,
+        employers: List[Dict],
+        category_relevance_map: Optional[Dict[str, float]] = None,
+        target_location: str = "",
+        profession: str = "",
+        **kwargs,
+    ) -> List[Dict]:
+        """
+        Ranks a list of employers using calculate_relevance_score and sorts them descending.
+        """
+        cat_map = category_relevance_map or {}
+        for emp in employers:
+            cat = str(emp.get("employer_category") or emp.get("category") or emp.get("target_category") or "").strip()
+            cat_rel = cat_map.get(cat, float(emp.get("profession_relevance") or emp.get("category_relevance", 0.9)))
+            emp["category_relevance"] = cat_rel
+            score = cls.calculate_relevance_score(
+                emp,
+                category_relevance=cat_rel,
+                target_location=target_location,
+            )
+            emp["relevance_score"] = score
+            emp["smart_relevance_score"] = score
+
+        return sorted(employers, key=lambda x: x.get("relevance_score", 0), reverse=True)
 
 

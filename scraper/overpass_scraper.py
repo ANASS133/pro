@@ -42,10 +42,30 @@ class OverpassBusinessScraper:
             "Accept": "application/json",
         })
 
-    def build_query(self, city: str, category: str = "handwerk", limit: int = 100) -> str:
+    def build_query(
+        self,
+        city: str,
+        category: str = "handwerk",
+        limit: int = 100,
+        osm_tags: Optional[List[str]] = None,
+    ) -> str:
         """Construct Overpass QL query filtering by German city and business category."""
         clean_city = str(city or "").strip()
-        tags = CATEGORY_TAG_MAP.get(category.lower(), ["node['craft']", "node['office']"])
+        
+        # 1. Use explicitly passed OSM tags if present
+        tags = list(osm_tags or [])
+        
+        # 2. Consult ProfessionIntelligence for dynamic taxonomy mapping
+        if not tags:
+            try:
+                from services.profession_intelligence import profession_intelligence
+                tags = profession_intelligence.get_osm_tags_for_profession(category)
+            except Exception:
+                tags = []
+
+        # 3. Fallback to predefined CATEGORY_TAG_MAP or generic craft/office
+        if not tags:
+            tags = CATEGORY_TAG_MAP.get(category.lower(), ["node['craft']", "node['office']"])
         
         tag_queries = []
         for tag in tags:
@@ -70,17 +90,35 @@ out skel qt;
         city: str,
         category: str = "handwerk",
         limit: int = 100,
+        osm_tags: Optional[List[str]] = None,
     ) -> List[Dict]:
         """Query Overpass API and parse results into standardized business dicts."""
-        if not city:
-            return []
+        clean_city = str(city or "").strip()
+        if not clean_city or clean_city.lower() in {"deutschland", "bundesweit", "all", "alle", "germany"}:
+            try:
+                from services.geographic_batching import geographic_batching
+                targets = geographic_batching.resolve_targets(clean_city, max_hubs=3).get("target_cities", ["Berlin", "Köln", "München"])
+            except Exception:
+                targets = ["Berlin", "Köln", "München"]
+            
+            all_biz: List[Dict] = []
+            seen = set()
+            per_city_limit = max(10, limit // len(targets))
+            for target_city in targets:
+                city_results = self.search_businesses(city=target_city, category=category, limit=per_city_limit, osm_tags=osm_tags)
+                for b in city_results:
+                    key = (b.get("name", "").lower(), b.get("city", "").lower())
+                    if key not in seen:
+                        seen.add(key)
+                        all_biz.append(b)
+            return all_biz
 
-        query = self.build_query(city=city, category=category, limit=limit)
+        query = self.build_query(city=clean_city, category=category, limit=limit, osm_tags=osm_tags)
         data = None
 
         for endpoint in self.endpoints:
             try:
-                logger.info("Executing Overpass query against %s for %s (%s)", endpoint, city, category)
+                logger.info("Executing Overpass query against %s for %s (%s)", endpoint, clean_city, category)
                 resp = self.session.post(
                     endpoint,
                     data={"data": query},
@@ -93,10 +131,10 @@ out skel qt;
                 logger.warning("Overpass endpoint %s failed: %s", endpoint, exc)
 
         if not data or "elements" not in data:
-            logger.warning("No data returned from Overpass API for city=%s", city)
+            logger.warning("No data returned from Overpass API for city=%s", clean_city)
             return []
 
-        return self.parse_elements(data["elements"], default_city=city)
+        return self.parse_elements(data["elements"], default_city=clean_city)
 
     def parse_elements(self, elements: List[Dict], default_city: str = "") -> List[Dict]:
         """Convert raw OSM elements into clean business records."""

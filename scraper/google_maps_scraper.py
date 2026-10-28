@@ -295,8 +295,15 @@ class GoogleMapsBusinessScraper:
         return self.driver
 
     def _accept_cookies(self) -> None:
-        """Dismiss the Google consent dialog if present."""
+        """Dismiss the Google consent dialog or cookie banners if present."""
         driver = self._ensure_driver()
+        try:
+            from .cookie_handler import accept_cookies
+            if accept_cookies(driver, wait_after_click=1.0):
+                return
+        except Exception:
+            pass
+
         consent_selectors = [
             "//button[contains(., 'Alle akzeptieren')]",
             "//button[contains(., 'Accept all')]",

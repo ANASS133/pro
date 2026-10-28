@@ -488,12 +488,30 @@
                 }
                 actionButtonsHtml += aiButtonsHtml;
 
+                let oppBadge = "";
+                const isVerifiedVacancy = job.is_verified_vacancy === true || job.opportunity_type === "VERIFIED_AUSBILDUNG";
+                const isPotential = job.opportunity_type === "POTENTIAL_EMPLOYER" || job.is_potential_employer;
+
+                if (isVerifiedVacancy) {
+                    oppBadge = `<span class="job-contact-pill" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;" title="Verifizierte aktive Ausschreibung auf Unternehmenswebsite">✓ Bestätigte Ausbildungsstelle</span>`;
+                } else if (isPotential) {
+                    oppBadge = `<span class="job-contact-pill" style="background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe;" title="Relevanter potenzieller Ausbildungsbetrieb für Initiativbewerbungen">★ Potenzieller Arbeitgeber</span>`;
+                }
+
+                let catBadge = "";
+                const catText = job.target_category || job.category;
+                if (catText) {
+                    catBadge = `<span class="job-contact-pill" style="background:#f8fafc; color:#475569; border:1px solid #cbd5e1;" title="Identifizierte Arbeitgeber-Branche">🏷️ ${escapeHtml(catText)}</span>`;
+                }
+
                 return `
                     <article class="job-item">
                         <div class="job-item-header">
                             <h4 class="job-title">${title}</h4>
                             <div class="job-badges-wrap">
                                 ${sourceBadge}
+                                ${oppBadge}
+                                ${catBadge}
                                 ${contactBadge}
                             </div>
                         </div>
@@ -541,22 +559,55 @@
             }
 
             let status = "Leerlauf";
-            if (!data.is_running && Number(data.current_index || 0) >= Number(data.total_jobs || 0) && Number(data.total_jobs || 0) > 0) {
+            const isCompleted = !data.is_running && Number(data.current_index || 0) >= Number(data.total_jobs || 0) && Number(data.total_jobs || 0) > 0;
+            if (isCompleted) {
                 status = "Extraktion abgeschlossen";
             } else if (data.stop_requested) {
                 status = "Gestoppt";
             } else if (data.paused) {
-                status = "Pausiert - Fehler";
+                status = data.last_error ? "Pausiert - Fehler" : "Pausiert";
             } else if (data.is_running) {
                 status = `Verarbeite Stelle ${data.current_index}/${data.total_jobs}...`;
             }
             ui.progressStatus.textContent = status;
 
-            ui.continueBtn.style.display = data.paused ? "inline-flex" : "none";
-            const canDownload = Boolean(data.stop_requested || (!data.is_running && Number(data.current_index || 0) > 0));
-            ui.downloadBtn.style.display = canDownload ? "inline-flex" : "none";
+            // Stop button: ONLY visible while actively running or paused; hidden when extraction is finished or stopped
+            if (ui.stopBtn) {
+                ui.stopBtn.style.display = (data.is_running || data.paused) ? "inline-flex" : "none";
+            }
+
+            // Continue button: ONLY visible when paused
+            if (ui.continueBtn) {
+                ui.continueBtn.style.display = data.paused ? "inline-flex" : "none";
+            }
+
+            // Download button: visible when extraction is finished, stopped, or when idle with collected results
+            const canDownload = Boolean(
+                isCompleted ||
+                data.stop_requested ||
+                (!data.is_running && Number(data.current_index || 0) > 0)
+            );
+            if (ui.downloadBtn) {
+                ui.downloadBtn.style.display = (canDownload && !data.is_running) ? "inline-flex" : "none";
+            }
+
+            // Go to Cover Letters button: visible when completed or stopped with collected results
             const canGoToAnschreiben = Boolean(!data.is_running && !data.paused && Number(data.current_index || 0) > 0);
-            ui.anschreibenBtn.style.display = canGoToAnschreiben ? "inline-flex" : "none";
+            if (ui.anschreibenBtn) {
+                ui.anschreibenBtn.style.display = canGoToAnschreiben ? "inline-flex" : "none";
+            }
+        }
+
+        function setAutoBtnIdle(btn) {
+            if (!btn) return;
+            btn.disabled = false;
+            btn.innerHTML = `<svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg><span>Automatisch extrahieren</span>`;
+        }
+
+        function setAutoBtnLoading(btn, text = "Starte...") {
+            if (!btn) return;
+            btn.disabled = true;
+            btn.innerHTML = `<span class="btn-spinner"></span><span>${escapeHtml(text)}</span>`;
         }
 
         async function pollAutoProgress(ui) {
@@ -579,8 +630,7 @@
                         clearInterval(ui.pollTimer);
                         ui.pollTimer = null;
                     }
-                    ui.autoBtn.disabled = false;
-                    ui.autoBtn.textContent = "Automatisch extrahieren";
+                    setAutoBtnIdle(ui.autoBtn);
                 }
             } catch (error) {
                 ui.progressError.textContent = error.message || "Statusfehler";
@@ -594,9 +644,7 @@
                 return;
             }
 
-            ui.autoBtn.disabled = true;
-            const originalText = ui.autoBtn.textContent;
-            ui.autoBtn.textContent = "Starte...";
+            setAutoBtnLoading(ui.autoBtn, "Starte...");
 
             try {
                 const response = await fetch("/api/inline/auto-jobs/start", {
@@ -629,8 +677,7 @@
                 }, 1500);
                 await pollAutoProgress(ui);
             } catch (error) {
-                ui.autoBtn.disabled = false;
-                ui.autoBtn.textContent = originalText;
+                setAutoBtnIdle(ui.autoBtn);
                 showError(ui, error.message || "Auto-Extraktion konnte nicht gestartet werden");
             }
         }
@@ -713,6 +760,13 @@
             saveIndexState();
             setLoading(ui, true);
 
+            const searchScopeEl = document.getElementById("search_scope");
+            const searchScope = searchScopeEl ? searchScopeEl.value : "both";
+            const autoCategoriesEl = document.getElementById("auto_categories_toggle");
+            const autoCategories = autoCategoriesEl ? String(autoCategoriesEl.checked) : "true";
+            const customCategoriesEl = document.getElementById("custom_categories");
+            const customCategories = customCategoriesEl ? customCategoriesEl.value : "";
+
             const params = new URLSearchParams({
                 keyword,
                 location,
@@ -720,6 +774,9 @@
                 source,
                 mode,
                 radius,
+                search_scope: searchScope,
+                auto_categories: autoCategories,
+                custom_categories: customCategories,
             });
 
             let searchCompleted = false;
@@ -1076,6 +1133,165 @@
                 filterToggle.setAttribute("aria-expanded", String(newExpanded));
                 filterContent.style.display = newExpanded ? "block" : "none";
                 filterToggle.classList.toggle("is-open", newExpanded);
+            });
+        }
+
+        // ---------------------------------------------------------------------
+        // KI-Berufsverständnis (Intelligent Profession-to-Employer Engine)
+        // ---------------------------------------------------------------------
+        const aiProfToggle = document.getElementById("ai_profession_toggle");
+        const aiProfContent = document.getElementById("ai_profession_content");
+        const autoCatToggle = document.getElementById("auto_categories_toggle");
+        const chipsContainer = document.getElementById("employer_categories_chips");
+        const customCategoriesInput = document.getElementById("custom_categories");
+        const profRecognizedName = document.getElementById("prof_recognized_name");
+        const profSectorName = document.getElementById("prof_sector_name");
+        const geoCoverageIndicator = document.getElementById("geo_coverage_indicator");
+        const profSearchTermsPreview = document.getElementById("prof_search_terms_preview");
+        const profSummaryBadge = document.getElementById("prof_summary_badge");
+
+        let activeCategoriesList = [];
+        let defaultCategoriesList = [];
+        let classifyDebounceTimer = null;
+
+        if (aiProfToggle && aiProfContent) {
+            aiProfToggle.addEventListener("click", () => {
+                const isExpanded = aiProfToggle.getAttribute("aria-expanded") === "true";
+                const newExpanded = !isExpanded;
+                aiProfToggle.setAttribute("aria-expanded", String(newExpanded));
+                aiProfContent.style.display = newExpanded ? "block" : "none";
+                aiProfToggle.classList.toggle("is-open", newExpanded);
+            });
+        }
+
+        function renderCategoryChips() {
+            if (!chipsContainer) return;
+            chipsContainer.innerHTML = "";
+
+            if (!activeCategoriesList.length) {
+                chipsContainer.innerHTML = '<span style="color: #94a3b8; font-size: 12px; padding: 4px;">Keine Branchen ausgewählt</span>';
+                if (customCategoriesInput) customCategoriesInput.value = "";
+                return;
+            }
+
+            activeCategoriesList.forEach((cat, idx) => {
+                const chip = document.createElement("span");
+                chip.style.cssText = "display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe; border-radius: 16px; font-size: 12px; font-weight: 500;";
+                chip.innerHTML = `${escapeHtml(cat)} <button type="button" data-idx="${idx}" style="background: none; border: none; color: #6366f1; cursor: pointer; font-weight: bold; font-size: 14px; line-height: 1; padding: 0 2px;" title="Entfernen">&times;</button>`;
+                
+                chip.querySelector("button").addEventListener("click", (e) => {
+                    e.stopPropagation();
+                    activeCategoriesList.splice(idx, 1);
+                    if (customCategoriesInput) customCategoriesInput.value = activeCategoriesList.join(", ");
+                    renderCategoryChips();
+                    updateSearchTermsPreview();
+                });
+
+                chipsContainer.appendChild(chip);
+            });
+
+            if (customCategoriesInput) {
+                customCategoriesInput.value = activeCategoriesList.join(", ");
+            }
+        }
+
+        function updateSearchTermsPreview() {
+            if (!profSearchTermsPreview) return;
+            if (activeCategoriesList.length) {
+                const loc = document.getElementById("location") ? document.getElementById("location").value.trim() : "";
+                const locSuffix = loc ? ` ${loc}` : "";
+                const terms = activeCategoriesList.map(c => `"${c}${locSuffix}"`).join(", ");
+                profSearchTermsPreview.textContent = terms;
+            } else {
+                profSearchTermsPreview.textContent = "Keine Kategorien aktiv.";
+            }
+        }
+
+        async function triggerProfessionClassification(force = false) {
+            const kwInput = document.getElementById("keyword");
+            if (!kwInput) return;
+            const rawVal = kwInput.value.trim();
+            const locVal = document.getElementById("location") ? document.getElementById("location").value.trim() : "";
+
+            if (!rawVal || rawVal.length < 3) {
+                if (profRecognizedName) profRecognizedName.textContent = "(Warte auf Eingabe)";
+                if (profSectorName) profSectorName.textContent = "—";
+                if (profSearchTermsPreview) profSearchTermsPreview.textContent = "Geben Sie oben einen Beruf ein.";
+                if (profSummaryBadge) profSummaryBadge.textContent = "Bereit für Eingabe";
+                activeCategoriesList = [];
+                defaultCategoriesList = [];
+                renderCategoryChips();
+                return;
+            }
+
+            if (autoCatToggle && !autoCatToggle.checked && !force) {
+                return;
+            }
+
+            try {
+                if (profSummaryBadge) profSummaryBadge.textContent = "Analysiere Beruf...";
+                const res = await fetch(`/api/profession/classify?keyword=${encodeURIComponent(rawVal)}&location=${encodeURIComponent(locVal)}`);
+                if (!res.ok) throw new Error("Klassifizierung fehlgeschlagen");
+                const data = await res.json();
+                
+                const norm = data.normalized_profession || rawVal;
+                const sector = data.sector || "Allgemein";
+                const cats = (data.employer_categories || []).map(c => c.category || c.search_term);
+                
+                if (profRecognizedName) profRecognizedName.textContent = norm;
+                if (profSectorName) profSectorName.textContent = sector;
+                if (profSummaryBadge) profSummaryBadge.textContent = `${norm} (${sector})`;
+                
+                if (data.geographic_coverage) {
+                    const cov = data.geographic_coverage;
+                    const hubCount = (cov.targets || []).length;
+                    if (geoCoverageIndicator) {
+                        if (cov.scope === "nationwide_sample") {
+                            geoCoverageIndicator.textContent = `Bundesweit (${hubCount} Metropol-Hubs)`;
+                        } else if (cov.scope === "federal_state") {
+                            geoCoverageIndicator.textContent = `${cov.matched_state} (${hubCount} Hubs)`;
+                        } else {
+                            geoCoverageIndicator.textContent = locVal || "Lokal";
+                        }
+                    }
+                }
+
+                defaultCategoriesList = cats;
+                activeCategoriesList = [...cats];
+                renderCategoryChips();
+                updateSearchTermsPreview();
+            } catch (err) {
+                console.warn("Profession classify error:", err);
+                if (profSummaryBadge) profSummaryBadge.textContent = "Automatische Erkennung aktiv";
+            }
+        }
+
+
+        if (autoCatToggle) {
+            autoCatToggle.addEventListener("change", () => {
+                if (autoCatToggle.checked) {
+                    triggerProfessionClassification(true);
+                }
+            });
+        }
+
+        const mainKwInput = document.getElementById("keyword");
+        if (mainKwInput) {
+            mainKwInput.addEventListener("input", () => {
+                clearTimeout(classifyDebounceTimer);
+                classifyDebounceTimer = setTimeout(() => {
+                    triggerProfessionClassification();
+                }, 400);
+            });
+        }
+
+        const mainLocInput = document.getElementById("location");
+        if (mainLocInput) {
+            mainLocInput.addEventListener("input", () => {
+                clearTimeout(classifyDebounceTimer);
+                classifyDebounceTimer = setTimeout(() => {
+                    triggerProfessionClassification();
+                }, 500);
             });
         }
 

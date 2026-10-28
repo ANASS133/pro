@@ -77,6 +77,8 @@ from routes import (
 )
 from services.job_store import job_store
 from services.ai_provider_manager import ai_manager
+from services.profession_intelligence import profession_intelligence
+from services.geographic_batching import geographic_batching
 
 app.register_blueprint(health_bp)
 app.register_blueprint(jobs_bp)
@@ -165,7 +167,10 @@ email_send_jobs: Dict[str, Dict] = {}
 parallel_scrape_jobs_lock = threading.Lock()
 parallel_scrape_jobs: Dict[str, Dict] = {}
 PARALLEL_EXPORT_DIR = Path("data") / "parallel_exports"
-auto_extraction_jobs_lock = threading.Lock()
+auto_extraction_jobs_lock = threading.RLock()
+auto_extraction_threads_lock = threading.RLock()
+auto_extraction_threads: Dict[str, threading.Thread] = {}
+AUTO_JOBS_STORE_PATH = Path("data") / "progress" / "auto_extraction_jobs.json"
 auto_extraction_jobs: Dict[str, Dict] = {}
 ausbildungen_update_jobs_lock = threading.Lock()
 ausbildungen_update_jobs: Dict[str, Dict] = {}
@@ -2418,6 +2423,118 @@ def run_auto_extraction():
             extractor.close()
 
 
+def _save_auto_extraction_jobs_to_disk() -> None:
+    try:
+        AUTO_JOBS_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with auto_extraction_jobs_lock:
+            serializable_jobs = {}
+            for jid, jdata in auto_extraction_jobs.items():
+                if isinstance(jdata, dict):
+                    serializable_jobs[jid] = {
+                        k: v for k, v in jdata.items()
+                        if not k.startswith("_") and k != "thread"
+                    }
+        tmp_path = AUTO_JOBS_STORE_PATH.with_suffix(".tmp")
+        with tmp_path.open("w", encoding="utf-8") as f:
+            json.dump(serializable_jobs, f, ensure_ascii=False)
+        tmp_path.replace(AUTO_JOBS_STORE_PATH)
+    except Exception as exc:
+        logger.warning("Could not persist auto extraction jobs: %s", exc)
+
+
+def _load_auto_extraction_jobs_from_disk() -> Dict[str, Dict]:
+    if not AUTO_JOBS_STORE_PATH.exists():
+        return {}
+    try:
+        with AUTO_JOBS_STORE_PATH.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            for jdata in data.values():
+                if isinstance(jdata, dict):
+                    if jdata.get("is_running"):
+                        jdata["is_running"] = False
+                        jdata["paused"] = True
+            return data
+    except Exception as exc:
+        logger.warning("Could not load auto extraction jobs: %s", exc)
+    return {}
+
+
+def _recover_auto_job_from_progress(job_id: str) -> Optional[Dict]:
+    progress_file = Path("data") / "progress" / "auto_extraction_progress.json"
+    if not progress_file.exists():
+        return None
+    try:
+        with progress_file.open("r", encoding="utf-8") as f:
+            pdata = json.load(f)
+        last_index = int(pdata.get("last_index", -1))
+        total = int(pdata.get("total", 0))
+        stats = pdata.get("stats", {}) or {}
+        extracted_jobs = pdata.get("jobs", []) or []
+
+        cached = _load_search_cache_from_disk()
+        all_jobs = list(cached.get("jobs") or [])
+        keyword = cached.get("keyword") or ""
+        location = cached.get("location") or ""
+        published_since = cached.get("published_since") or "all"
+
+        if len(all_jobs) >= len(extracted_jobs):
+            for idx, ej in enumerate(extracted_jobs):
+                if idx < len(all_jobs) and isinstance(ej, dict):
+                    all_jobs[idx] = ej
+        else:
+            all_jobs = extracted_jobs
+
+        final_total = total if total > 0 else (len(all_jobs) if all_jobs else len(extracted_jobs))
+        current_idx = last_index + 1 if last_index >= 0 else len(extracted_jobs)
+        now = datetime.now().isoformat()
+
+        recovered_job = {
+            "job_id": job_id,
+            "keyword": keyword,
+            "location": location,
+            "published_since": _normalize_published_since(published_since),
+            "is_running": False,
+            "stop_requested": False,
+            "paused": True,
+            "continue_requested": False,
+            "current_index": current_idx,
+            "total_jobs": final_total,
+            "emails_found": int(stats.get("emails_found") or 0),
+            "captchas_solved": int(stats.get("captchas_solved") or 0),
+            "failed": int(stats.get("failed") or 0),
+            "jobs": all_jobs,
+            "last_error": "",
+            "created_at": now,
+            "updated_at": now,
+            "finished_at": "",
+        }
+
+        with auto_extraction_jobs_lock:
+            auto_extraction_jobs[job_id] = recovered_job
+        _save_auto_extraction_jobs_to_disk()
+        logger.info(
+            "Recovered auto job %s from progress: %d/%d processed, %d emails",
+            job_id,
+            current_idx,
+            final_total,
+            recovered_job["emails_found"],
+        )
+        return recovered_job
+    except Exception as exc:
+        logger.error("Failed to recover auto job %s from progress: %s", job_id, exc)
+        return None
+
+
+# Populate in-memory store from persisted jobs on startup
+try:
+    _loaded_jobs = _load_auto_extraction_jobs_from_disk()
+    if _loaded_jobs:
+        auto_extraction_jobs.update(_loaded_jobs)
+except Exception as _e:
+    logger.warning("Startup load of auto extraction jobs skipped: %s", _e)
+
+
 def _create_auto_extraction_job(
     jobs: List[Dict], keyword: str, location: str, published_since: str
 ) -> str:
@@ -2444,6 +2561,7 @@ def _create_auto_extraction_job(
             "updated_at": now,
             "finished_at": "",
         }
+    _save_auto_extraction_jobs_to_disk()
     return job_id
 
 
@@ -2454,7 +2572,7 @@ def _set_auto_job_status(job_id: str, **kwargs) -> bool:
             return False
         job.update(kwargs)
         job["updated_at"] = datetime.now().isoformat()
-        return True
+    return True
 
 
 def _wait_for_continue_auto_job(job_id: str, error_message: str) -> bool:
@@ -2465,6 +2583,7 @@ def _wait_for_continue_auto_job(job_id: str, error_message: str) -> bool:
         last_error=error_message,
     ):
         return False
+    _save_auto_extraction_jobs_to_disk()
 
     while True:
         time.sleep(1)
@@ -2475,20 +2594,26 @@ def _wait_for_continue_auto_job(job_id: str, error_message: str) -> bool:
             if job.get("stop_requested") or not job.get("is_running"):
                 job["paused"] = False
                 job["updated_at"] = datetime.now().isoformat()
+                _save_auto_extraction_jobs_to_disk()
                 return False
             if job.get("continue_requested"):
                 job["paused"] = False
                 job["continue_requested"] = False
                 job["last_error"] = ""
                 job["updated_at"] = datetime.now().isoformat()
+                _save_auto_extraction_jobs_to_disk()
                 return True
 
 
 def _run_auto_extraction_job(job_id: str):
     extractor = None
+    with auto_extraction_threads_lock:
+        auto_extraction_threads[job_id] = threading.current_thread()
     try:
         with auto_extraction_jobs_lock:
             job = auto_extraction_jobs.get(job_id)
+            if not job:
+                job = _recover_auto_job_from_progress(job_id)
             if not job:
                 return
             jobs = job.get("jobs") or []
@@ -2499,13 +2624,24 @@ def _run_auto_extraction_job(job_id: str):
             job["continue_requested"] = False
             job["last_error"] = ""
             job["updated_at"] = datetime.now().isoformat()
+            emails_count = int(job.get("emails_found") or 0)
+            captchas_solved = int(job.get("captchas_solved") or 0)
+            failed_count = int(job.get("failed") or 0)
 
         existing_emails = _extract_valid_emails_from_records(jobs[:start_index])
+        initial_stats = {
+            "processed": start_index,
+            "emails_found": emails_count if emails_count else len(existing_emails),
+            "captchas_encountered": captchas_solved,
+            "captchas_solved": captchas_solved,
+            "failed": failed_count,
+        }
         extractor = WorkingEmailExtractor(
             captcha_userid=CAPTCHA_USERID,
             captcha_apikey=CAPTCHA_APIKEY,
             headless=False,
             known_emails=existing_emails,
+            initial_stats=initial_stats,
         )
 
         for i in range(start_index, len(jobs)):
@@ -2537,12 +2673,13 @@ def _run_auto_extraction_job(job_id: str):
                 if not _wait_for_continue_auto_job(job_id, error_message):
                     break
 
-            if (i + 1) % 10 == 0:
+            if (i + 1) % 5 == 0:
                 extractor.save_progress(jobs, i)
+                _save_auto_extraction_jobs_to_disk()
             time.sleep(1)
 
         if jobs:
-            extractor.save_progress(jobs, len(jobs) - 1)
+            extractor.save_progress(jobs, min(len(jobs) - 1, max(0, start_index)))
 
         with auto_extraction_jobs_lock:
             job = auto_extraction_jobs.get(job_id)
@@ -2556,6 +2693,7 @@ def _run_auto_extraction_job(job_id: str):
             job["current_index"] = current_index if stop_requested else len(jobs)
             job["finished_at"] = datetime.now().isoformat()
             job["updated_at"] = datetime.now().isoformat()
+        _save_auto_extraction_jobs_to_disk()
     except Exception as exc:
         logger.error("Auto extraction job %s error: %s", job_id, exc)
         _set_auto_job_status(
@@ -2565,7 +2703,10 @@ def _run_auto_extraction_job(job_id: str):
             last_error=str(exc),
             finished_at=datetime.now().isoformat(),
         )
+        _save_auto_extraction_jobs_to_disk()
     finally:
+        with auto_extraction_threads_lock:
+            auto_extraction_threads.pop(job_id, None)
         if extractor:
             extractor.close()
 
@@ -5222,14 +5363,21 @@ def _save_auto_extraction_export_records(
         is_maps = "maps" in src or "google" in src or bool(r.get("maps_url"))
 
         if is_maps:
-            if r.get("is_verified_vacancy") is True:
+            if r.get("is_verified_vacancy") is True or r.get("opportunity_type") == "VERIFIED_AUSBILDUNG":
                 confirmed_rows.append(normalize_job_opportunity_row(r))
+            elif r.get("opportunity_type") == "POTENTIAL_EMPLOYER":
+                row = normalize_job_opportunity_row(r)
+                if not row.get("Titel") or row.get("Titel") in {"k. A.", ""}:
+                    cat = r.get("target_category") or r.get("category") or "Initiativbewerbung"
+                    row["Titel"] = f"Potenzieller Ausbildungsbetrieb ({cat})"
+                confirmed_rows.append(row)
             else:
                 emails_val = r.get("email") or (
                     ", ".join(r.get("emails", [])) if isinstance(r.get("emails"), list) else ""
                 )
                 unconfirmed_rows.append({
                     "Unternehmen": r.get("company") or r.get("name") or "",
+                    "Kategorie/Branche": r.get("target_category") or r.get("category") or "",
                     "Adresse": r.get("location") or r.get("address") or "",
                     "Stadt": r.get("city") or "",
                     "Website": r.get("website") or r.get("url") or "",
@@ -5238,6 +5386,7 @@ def _save_auto_extraction_export_records(
                     "Quelle": "Google Maps",
                     "Status": r.get("status") or "Unbestätigt: Keine verifizierte Ausschreibung",
                     "Verifizierungs-Notiz": r.get("verification_notes") or "Keine passende Ausbildung auf Website gefunden",
+                    "Relevanz-Score": r.get("smart_relevance_score") or r.get("profession_relevance") or "",
                     "Google Maps URL": r.get("maps_url") or "",
                 })
         else:
@@ -5262,6 +5411,7 @@ def _save_auto_extraction_export_records(
                     seen_unconfirmed.add(key)
                     deduped_unconfirmed.append({
                         "Unternehmen": item.get("Unternehmen") or item.get("company") or "",
+                        "Kategorie/Branche": item.get("Kategorie/Branche") or item.get("target_category") or "",
                         "Adresse": item.get("Adresse") or item.get("location") or item.get("address") or "",
                         "Stadt": item.get("Stadt") or item.get("city") or "",
                         "Website": item.get("Website") or item.get("website") or item.get("url") or "",
@@ -5270,6 +5420,7 @@ def _save_auto_extraction_export_records(
                         "Quelle": "Google Maps",
                         "Status": item.get("Status") or item.get("status") or "Unbestätigt: Keine verifizierte Ausschreibung",
                         "Verifizierungs-Notiz": item.get("Verifizierungs-Notiz") or item.get("verification_notes") or "Keine passende Ausbildung auf Website gefunden",
+                        "Relevanz-Score": item.get("Relevanz-Score") or item.get("smart_relevance_score") or "",
                         "Google Maps URL": item.get("Google Maps URL") or item.get("maps_url") or "",
                     })
             df_unconfirmed = pd.DataFrame(deduped_unconfirmed)
@@ -5719,12 +5870,23 @@ def _fetch_combined_jobs(
     published_since_days: Optional[int] = None,
     progress_callback: Optional[Any] = None,
     return_audit: bool = False,
+    search_scope: str = "both",
+    auto_categories: bool = True,
+    custom_categories: Optional[Union[List[str], str]] = None,
 ) -> Union[List[Dict], Tuple[List[Dict], Dict[str, Any]]]:
     """Fetches jobs from enabled scrapers, tracking verified matches and audit metrics throughout."""
     from scraper.search_filter_engine import (
         filter_and_deduplicate_jobs,
         filter_and_deduplicate_jobs_with_audit,
     )
+
+    # 0. Intelligent Profession Classification & Geographic Target Resolution
+    prof_info = profession_intelligence.classify_profession(keyword)
+    search_cache["profession_intelligence"] = prof_info
+    norm_keyword = prof_info.get("normalized_profession") or keyword
+
+    geo_plan = geographic_batching.resolve_targets(location, max_hubs=3)
+    search_cache["geographic_coverage"] = geo_plan
 
     mode_clean = str(mode or "ausbildung").strip().lower()
     if mode_clean not in {"ausbildung", "arbeit"}:
@@ -6055,37 +6217,110 @@ def _fetch_combined_jobs(
 
             verifier = GoogleMapsAusbildungVerifier()
             unconfirmed_maps_companies = []
-            
-            # Fast discovery of local businesses in the location
+
+            # Determine target employer categories
+            parsed_custom_cats = []
+            if custom_categories:
+                if isinstance(custom_categories, list):
+                    parsed_custom_cats = [str(c).strip() for c in custom_categories if str(c).strip()]
+                elif isinstance(custom_categories, str):
+                    parsed_custom_cats = [c.strip() for c in custom_categories.split(",") if c.strip()]
+
+            if parsed_custom_cats:
+                categories_to_query = parsed_custom_cats
+            elif auto_categories and prof_info.get("employer_categories"):
+                categories_to_query = [
+                    cat.get("search_term") or cat.get("category")
+                    for cat in prof_info.get("employer_categories", [])
+                ]
+            else:
+                categories_to_query = [keyword]
+
+            target_cities = geo_plan.get("targets") or [location or "Berlin"]
+
+            report_progress({
+                "source": "google_maps",
+                "stage": f"Google Maps KI: Suche nach '{norm_keyword}' ({prof_info.get('sector', 'Allgemein')}) in {len(categories_to_query)} Branchen über {', '.join(target_cities[:3])}...",
+                "percent": 96 if is_all else 30,
+                "found": valid_total,
+                "raw_found": len(jobs),
+                "status": "running",
+            })
+
             overpass_scraper = OverpassBusinessScraper()
-            city_query = location or "Deutschland"
-            local_businesses = overpass_scraper.search_businesses(city=city_query, category=keyword)
-            
+            discovered_raw = []
+            seen_biz_keys = set()
+
+            for cat_term in categories_to_query[:4]:
+                for target_city in target_cities[:2]:
+                    try:
+                        batch = overpass_scraper.search_businesses(city=target_city, category=cat_term, limit=10)
+                        for b in batch:
+                            b_key = (
+                                (b.get("name") or "").lower().strip(),
+                                (b.get("website") or b.get("street") or b.get("city") or "").lower().strip(),
+                            )
+                            if b_key not in seen_biz_keys:
+                                seen_biz_keys.add(b_key)
+                                b["target_category"] = cat_term
+                                discovered_raw.append(b)
+                    except Exception as err:
+                        logger.debug("Overpass batch error for city=%s cat=%s: %s", target_city, cat_term, err)
+
+            if not discovered_raw:
+                city_query = location or "Berlin"
+                discovered_raw = overpass_scraper.search_businesses(city=city_query, category=keyword, limit=12)
+
             verified_count = 0
+            search_scope_clean = str(search_scope or "both").lower().strip()
+
             if mode_clean == "arbeit":
-                for biz in local_businesses[:15]:
-                    verified_biz = verifier.verify_business_for_arbeit(biz, profession_keyword=keyword)
+                for biz in discovered_raw[:15]:
+                    verified_biz = verifier.verify_business_for_arbeit(biz, profession_keyword=norm_keyword)
                     ref = verified_biz.get("apply_url") or verified_biz.get("website") or verified_biz.get("name")
                     if ref and ref not in seen_refs:
                         seen_refs.add(ref)
                         jobs.append(verified_biz)
                         verified_count += 1
             else:
-                for biz in local_businesses[:12]:
-                    verified_biz = verifier.verify_business(biz, profession_keyword=keyword)
-                    if verified_biz.get("is_verified_vacancy"):
-                        ref = verified_biz.get("apply_url") or verified_biz.get("website")
-                        if ref and ref not in seen_refs:
-                            seen_refs.add(ref)
-                            jobs.append(verified_biz)
-                            verified_count += 1
-                    else:
-                        unconfirmed_maps_companies.append(verified_biz)
+                for biz in discovered_raw[:15]:
+                    verified_biz = verifier.verify_business(biz, profession_keyword=norm_keyword)
+                    opp_type = verified_biz.get("opportunity_type") or (
+                        "VERIFIED_AUSBILDUNG" if verified_biz.get("is_verified_vacancy") else "POTENTIAL_EMPLOYER"
+                    )
+                    ref = verified_biz.get("apply_url") or verified_biz.get("website") or verified_biz.get("name")
 
+                    if search_scope_clean == "verified_only":
+                        if opp_type == "VERIFIED_AUSBILDUNG" or verified_biz.get("is_verified_vacancy"):
+                            if ref and ref not in seen_refs:
+                                seen_refs.add(ref)
+                                jobs.append(verified_biz)
+                                verified_count += 1
+                        else:
+                            unconfirmed_maps_companies.append(verified_biz)
+                    elif search_scope_clean == "potential_only":
+                        if opp_type == "POTENTIAL_EMPLOYER":
+                            if ref and ref not in seen_refs:
+                                seen_refs.add(ref)
+                                jobs.append(verified_biz)
+                                verified_count += 1
+                        else:
+                            unconfirmed_maps_companies.append(verified_biz)
+                    else:  # "both" (default)
+                        if opp_type in ("VERIFIED_AUSBILDUNG", "POTENTIAL_EMPLOYER") or verified_biz.get("is_verified_vacancy"):
+                            if ref and ref not in seen_refs:
+                                seen_refs.add(ref)
+                                jobs.append(verified_biz)
+                                verified_count += 1
+                        else:
+                            unconfirmed_maps_companies.append(verified_biz)
+
+            # Smart relevance ranking on collected jobs
+            jobs = verifier.smart_rank_employers(jobs, profession=norm_keyword)
             search_cache["unconfirmed_maps_companies"] = unconfirmed_maps_companies
 
             valid_total, _ = _calc_valid_counts()
-            success_stage = f"Google Maps: {verified_count} Unternehmen erfasst" if mode_clean == "arbeit" else f"Google Maps: {verified_count} bestätigte Ausbildungsstellen"
+            success_stage = f"Google Maps: {verified_count} Unternehmen erfasst" if mode_clean == "arbeit" else f"Google Maps: {verified_count} passende Betriebe/Stellen"
             report_progress({
                 "source": "google_maps",
                 "finished_source": "google_maps",
@@ -6145,6 +6380,9 @@ def search():
     mode = request.form.get("mode", "ausbildung").strip().lower()
     radius = request.form.get("radius", "").strip()
     published_since = _normalize_published_since(request.form.get("published_since", "all"))
+    search_scope = request.form.get("search_scope", "both").strip().lower()
+    auto_categories = request.form.get("auto_categories", "true").lower() in ("true", "1", "yes", "on")
+    custom_categories = request.form.get("custom_categories", "")
 
     try:
         fetch_res = _fetch_combined_jobs(
@@ -6156,6 +6394,9 @@ def search():
             max_jobs=DEFAULT_MAX_JOBS,
             published_since_days=_published_since_to_days(published_since),
             return_audit=True,
+            search_scope=search_scope,
+            auto_categories=auto_categories,
+            custom_categories=custom_categories,
         )
         if isinstance(fetch_res, tuple) and len(fetch_res) == 2:
             jobs, audit = fetch_res
@@ -6207,6 +6448,9 @@ def api_search():
     radius = request.args.get("radius", "").strip()
     published_since = _normalize_published_since(request.args.get("published_since", "all"))
     max_jobs = int(request.args.get("max_jobs", DEFAULT_MAX_JOBS))
+    search_scope = request.args.get("search_scope", "both").strip().lower()
+    auto_categories = request.args.get("auto_categories", "true").lower() in ("true", "1", "yes", "on")
+    custom_categories = request.args.get("custom_categories", "")
 
     fetch_res = _fetch_combined_jobs(
         keyword,
@@ -6217,6 +6461,9 @@ def api_search():
         max_jobs=max_jobs,
         published_since_days=_published_since_to_days(published_since),
         return_audit=True,
+        search_scope=search_scope,
+        auto_categories=auto_categories,
+        custom_categories=custom_categories,
     )
     if isinstance(fetch_res, tuple) and len(fetch_res) == 2:
         jobs, audit = fetch_res
@@ -6242,8 +6489,11 @@ def api_search():
             "mode": mode,
             "radius": radius,
             "published_since": published_since,
+            "search_scope": search_scope,
             "jobs": jobs,
             "audit": audit,
+            "profession_intelligence": search_cache.get("profession_intelligence"),
+            "geographic_coverage": search_cache.get("geographic_coverage"),
         }
     )
 
@@ -6258,6 +6508,40 @@ def api_search_audit():
     })
 
 
+@app.route("/api/profession/classify", methods=["GET", "POST"])
+def api_classify_profession():
+    """Classifies a user-provided profession title, returning normalized job title, sector, and employer categories."""
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        keyword = data.get("keyword") or request.form.get("keyword") or ""
+        location = data.get("location") or request.form.get("location") or ""
+    else:
+        keyword = request.args.get("keyword", "")
+        location = request.args.get("location", "")
+
+    keyword = str(keyword or "").strip()
+    if not keyword:
+        return jsonify({"status": "error", "message": "Stichwort/Beruf ist erforderlich."}), 400
+
+    try:
+        classification = profession_intelligence.classify_profession(keyword)
+        geo_coverage = geographic_batching.resolve_targets(location, max_hubs=3) if location is not None else None
+        search_queries = profession_intelligence.get_search_queries(keyword, location=location or "")
+        return jsonify({
+            "status": "success",
+            "classification": classification,
+            "geographic_coverage": geo_coverage,
+            "search_queries": search_queries,
+            "input": classification.get("input", keyword),
+            "normalized_profession": classification.get("normalized_profession", keyword),
+            "sector": classification.get("sector", "Allgemein"),
+            "employer_categories": classification.get("employer_categories", []),
+        })
+    except Exception as exc:
+        logger.warning("api_classify_profession error: %s", exc)
+        return jsonify({"status": "error", "message": str(exc)}), 500
+
+
 @app.route("/api/search/stream", methods=["GET"])
 def api_search_stream():
     keyword = request.args.get("keyword", "").strip()
@@ -6267,6 +6551,9 @@ def api_search_stream():
     radius = request.args.get("radius", "").strip()
     published_since = _normalize_published_since(request.args.get("published_since", "all"))
     max_jobs = int(request.args.get("max_jobs", DEFAULT_MAX_JOBS))
+    search_scope = request.args.get("search_scope", "both").strip().lower()
+    auto_categories = request.args.get("auto_categories", "true").lower() in ("true", "1", "yes", "on")
+    custom_categories = request.args.get("custom_categories", "")
     days = _published_since_to_days(published_since)
 
     if not keyword:
@@ -6291,6 +6578,9 @@ def api_search_stream():
                     published_since_days=days,
                     progress_callback=progress_cb,
                     return_audit=True,
+                    search_scope=search_scope,
+                    auto_categories=auto_categories,
+                    custom_categories=custom_categories,
                 )
                 if isinstance(fetch_res, tuple) and len(fetch_res) == 2:
                     jobs, audit = fetch_res
@@ -6314,8 +6604,11 @@ def api_search_stream():
                     "mode": mode,
                     "radius": radius,
                     "published_since": published_since,
+                    "search_scope": search_scope,
                     "jobs": jobs,
                     "audit": audit,
+                    "profession_intelligence": search_cache.get("profession_intelligence"),
+                    "geographic_coverage": search_cache.get("geographic_coverage"),
                 }))
             except Exception as exc:
                 logger.exception("Search stream error: %s", exc)
@@ -6464,6 +6757,8 @@ def api_inline_auto_job_status(job_id: str):
     with auto_extraction_jobs_lock:
         job = auto_extraction_jobs.get(job_id)
         if not job:
+            job = _recover_auto_job_from_progress(job_id)
+        if not job:
             return jsonify({"success": False, "message": "Auto-Extraktionsjob nicht gefunden"}), 404
         total = int(job.get("total_jobs") or 0)
         current = int(job.get("current_index") or 0)
@@ -6496,13 +6791,27 @@ def api_inline_continue_auto_job(job_id: str):
     with auto_extraction_jobs_lock:
         job = auto_extraction_jobs.get(job_id)
         if not job:
+            job = _recover_auto_job_from_progress(job_id)
+        if not job:
             return jsonify({"success": False, "message": "Auto-Extraktionsjob nicht gefunden"}), 404
-        if not job.get("paused"):
+        if not job.get("paused") and not job.get("stop_requested"):
             return jsonify({"success": False, "message": "Auto-Extraktionsjob ist nicht pausiert"}), 400
         job["is_running"] = True
         job["paused"] = False
+        job["stop_requested"] = False
         job["continue_requested"] = True
+        job["last_error"] = ""
         job["updated_at"] = datetime.now().isoformat()
+        _save_auto_extraction_jobs_to_disk()
+
+    with auto_extraction_threads_lock:
+        thread = auto_extraction_threads.get(job_id)
+        thread_alive = thread is not None and thread.is_alive()
+
+    if not thread_alive:
+        t = threading.Thread(target=_run_auto_extraction_job, args=(job_id,), daemon=True)
+        t.start()
+
     return jsonify({"success": True, "message": "Fortsetzen angefordert"})
 
 
@@ -6511,12 +6820,15 @@ def api_inline_stop_auto_job(job_id: str):
     with auto_extraction_jobs_lock:
         job = auto_extraction_jobs.get(job_id)
         if not job:
+            job = _recover_auto_job_from_progress(job_id)
+        if not job:
             return jsonify({"success": False, "message": "Auto-Extraktionsjob nicht gefunden"}), 404
         job["is_running"] = False
         job["stop_requested"] = True
         job["paused"] = False
         job["continue_requested"] = False
         job["updated_at"] = datetime.now().isoformat()
+        _save_auto_extraction_jobs_to_disk()
     return jsonify({"success": True, "message": "Stop der Auto-Extraktion angefordert"})
 
 
@@ -6525,6 +6837,8 @@ def api_inline_download_auto_job(job_id: str):
     with auto_extraction_jobs_lock:
         job = auto_extraction_jobs.get(job_id)
         if not job:
+            job = _recover_auto_job_from_progress(job_id)
+        if not job:
             return jsonify({"success": False, "message": "Auto-Extraktionsjob nicht gefunden"}), 404
         jobs = list(job.get("jobs") or [])
         keyword = str(job.get("keyword") or "")
@@ -6532,10 +6846,13 @@ def api_inline_download_auto_job(job_id: str):
     filter_mode = request.args.get("filter", "all")
     prepared_jobs = _prepare_download_jobs(jobs, filter_mode=filter_mode)
     if not prepared_jobs:
+        prepared_jobs = [normalize_job_opportunity_row(j) for j in jobs if isinstance(j, dict)]
+    if not prepared_jobs:
         return jsonify({"success": False, "message": "Keine Stellenangebote verfügbar"}), 400
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     slug = _sanitize_export_slug(keyword, fallback=f"auto_{job_id[:8]}")
+    AUTO_EXTRACTION_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
     file_path = AUTO_EXTRACTION_EXPORT_DIR / f"{timestamp}_{slug}_{job_id[:8]}.xlsx"
     df = pd.DataFrame(prepared_jobs)
     existing_cols = [c for c in EXCEL_COLUMNS if c in df.columns]
@@ -6550,10 +6867,14 @@ def api_inline_use_auto_job_for_anschreiben(job_id: str):
     with auto_extraction_jobs_lock:
         job = auto_extraction_jobs.get(job_id)
         if not job:
+            job = _recover_auto_job_from_progress(job_id)
+        if not job:
             return jsonify({"success": False, "message": "Auto-Extraktionsjob nicht gefunden"}), 404
         jobs = list(job.get("jobs") or [])
 
     prepared_jobs = _prepare_download_jobs(jobs)
+    if not prepared_jobs:
+        prepared_jobs = [normalize_job_opportunity_row(j) for j in jobs if isinstance(j, dict)]
     if not prepared_jobs:
         return jsonify({"success": False, "message": "Keine gesammelten Stellen mit E-Mail oder Bewerbungsformular gefunden"}), 400
 

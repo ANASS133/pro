@@ -47,17 +47,19 @@ class WorkingEmailExtractor:
         captcha_apikey: str,
         headless: bool = False,
         known_emails: Optional[Set[str]] = None,
+        initial_stats: Optional[Dict] = None,
     ):
         self.captcha_solver = TrueCaptchaSolver(captcha_userid, captcha_apikey)
         self.setup_driver(headless)
         self.known_emails = {self._normalize_email(e) for e in (known_emails or set()) if e}
         self.form_discovery = ApplicationFormDiscovery()
+        init_s = initial_stats or {}
         self.stats = {
-            "processed": 0,
-            "emails_found": 0,
-            "captchas_encountered": 0,
-            "captchas_solved": 0,
-            "failed": 0,
+            "processed": int(init_s.get("processed", 0)),
+            "emails_found": int(init_s.get("emails_found", 0)),
+            "captchas_encountered": int(init_s.get("captchas_encountered", 0)),
+            "captchas_solved": int(init_s.get("captchas_solved", 0)),
+            "failed": int(init_s.get("failed", 0)),
         }
         PROGRESS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -299,10 +301,25 @@ class WorkingEmailExtractor:
 
         return fallback_url or ""
 
+    def accept_cookies(self) -> bool:
+        """Automatically detects and clicks 'Cookies akzeptieren' on the active page/platform."""
+        try:
+            from .cookie_handler import accept_cookies
+            return accept_cookies(getattr(self, "driver", None))
+        except Exception as exc:
+            logger.debug("Failed to accept cookies: %s", exc)
+            return False
+
     def open_job(self, job: Dict, delay_seconds: float = 3.0) -> None:
-        self.driver.get(job.get("url", ""))
-        if delay_seconds > 0:
-            time.sleep(delay_seconds)
+        url = job.get("url", "")
+        if url:
+            self.driver.get(url)
+            # 1. Immediately dismiss cookie banner upon opening any new platform
+            self.accept_cookies()
+            if delay_seconds > 0:
+                time.sleep(delay_seconds)
+            # 2. Check again after delay in case the consent modal animated in
+            self.accept_cookies()
 
     def process_job(
         self,
@@ -370,11 +387,13 @@ class WorkingEmailExtractor:
         # ----------------------------------------------------------------------
         try:
             self.open_job(job, delay_seconds=delay_seconds)
+            self.accept_cookies()
 
             if self.is_blocked_page() or self.check_for_captcha():
                 self.stats["captchas_encountered"] += 1
                 if self.handle_captcha():
                     time.sleep(2)
+                    self.accept_cookies()
                 else:
                     job["email"] = "CAPTCHA_FAILED"
                     job["phone"] = None

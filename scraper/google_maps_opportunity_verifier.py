@@ -819,6 +819,8 @@ class GoogleMapsOpportunityVerifier:
         if not homepage_html and driver is not None:
             try:
                 driver.get(website)
+                from .cookie_handler import accept_cookies
+                accept_cookies(driver)
                 homepage_html = driver.page_source
                 final_home_url = driver.current_url
             except Exception:

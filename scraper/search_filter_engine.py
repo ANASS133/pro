@@ -785,7 +785,8 @@ def filter_and_deduplicate_jobs(
         company = str(job.get("company") or "k. A.").strip()
 
         # 1. Profession Relevance Validation
-        if keyword and not is_profession_relevant(title, hauptberuf, keyword):
+        is_potential = job.get("opportunity_type") == "POTENTIAL_EMPLOYER" or bool(job.get("is_potential_employer"))
+        if keyword and not is_potential and not is_profession_relevant(title, hauptberuf, keyword):
             per_source_stats[src]["rejected_profession"] += 1
             exclusions.append({
                 "stage": "profession",

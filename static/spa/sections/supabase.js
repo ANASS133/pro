@@ -103,6 +103,7 @@
         const dDeleteBtn = document.getElementById("sp-d-delete-btn");
         const copyEmailBtn = document.getElementById("sp-copy-email");
         const copyWhatsappBtn = document.getElementById("sp-copy-whatsapp");
+        const copyIdBtn = document.getElementById("sp-copy-id");
         const dOnboardContainer = document.getElementById("sp-d-onboard-container");
         const dOnboardBtn = document.getElementById("sp-d-onboard-btn");
 
@@ -541,6 +542,608 @@
             renderView();
         }
 
+        // =====================================================================
+        // DATASET AVAILABILITY INTELLIGENCE & BADGE ENGINE
+        // Matches client profession against existing JobScout Ausbildung datasets.
+        // Statuses:
+        // - "available" (Green "Vorhanden"): Matching Ausbildung dataset exists.
+        // - "similar" (Yellow "Ähnlich"): Related profession dataset exists.
+        // - "missing" (Red "Nicht vorhanden"): No matching or related dataset exists.
+        // =====================================================================
+
+        const PROFESSION_CLUSTERS = {
+            it: {
+                name: "IT & Informatik",
+                tokens: ["fachinformatiker", "fachinformatikerin", "fachinformatik", "informatik", "informatiker", "informatikerin", "anwendungsentwicklung", "systemintegration", "daten- und prozessanalyse", "datenanalyse", "digitale vernetzung", "softwareentwickler", "softwareentwicklerin", "it-system", "it-system-management", "it-systemkaufmann", "it-systemkauffrau", "informatikkaufmann", "informatikkauffrau", "medieninformatik", "medieninformatiker", "fachberater", "webentwickler", "systemadministrator", "programmierer", "fachberater integrierte systeme"]
+            },
+            pflege_gesundheit: {
+                name: "Pflege & Gesundheit",
+                tokens: ["pflegefachmann", "pflegefachfrau", "pflegefachkraft", "altenpfleger", "altenpflegerin", "gesundheits- und krankenpfleger", "krankenpfleger", "krankenschwester", "pflegehelfer", "pflegehelferin", "pflegeassistent", "notfallsanitaeter", "notfallsanitaeterin", "notfallsanitäter", "mfa", "medizinische fachangestellte", "zfa", "zmfa", "zahnmedizinische fachangestellte", "physiotherapeut", "physiotherapeutin", "ergotherapeut", "hebamme", "ota", "operationstechnischer assistent"]
+            },
+            gastronomie_ernaehrung: {
+                name: "Gastronomie & Ernährung",
+                tokens: ["koch", "kochin", "koechin", "koche", "koeche", "beikoch", "beikoechin", "chefkoch", "jungkoch", "kuechenchef", "gastronomiekoch", "diaetkoch", "restaurantfachmann", "restaurantfachfrau", "hotelfachmann", "hotelfachfrau", "fachkraft gastgewerbe", "gastronom", "baecker", "baeckerin", "konditor", "konditorin", "fleischer", "fleischerin", "metzger", "metzgerin", "fachverkaeufer lebensmittel"]
+            },
+            lager_logistik: {
+                name: "Lager & Logistik",
+                tokens: ["fachkraft fuer lagerlogistik", "lagerlogistik", "fachlagerist", "fachlageristin", "lagerist", "lageristin", "kommissionierer", "logistik", "spedition", "kaufmann fuer spedition", "kauffrau fuer spedition", "spedition und logistikdienstleistung", "berufskraftfahrer", "berufskraftfahrerin", "fachkraft f r lagerlogistik"]
+            },
+            wirtschaft_kaufmaennisch: {
+                name: "Wirtschaft & Verwaltung",
+                tokens: ["kaufmann", "kauffrau", "kaufleute", "industriekaufmann", "industriekauffrau", "industriekaufleute", "bueromanagement", "einzelhandel", "verkaeufer", "verkaeuferin", "grosshandel", "aussenhandel", "bankkaufmann", "bankkauffrau", "immobilienkaufmann", "immobilienkauffrau", "automobilkaufmann", "automobilkauffrau", "e-commerce", "steuerfachangestellter", "steuerfachangestellte", "verwaltungsfachangestellter", "handelsfachwirt"]
+            },
+            technik_elektro: {
+                name: "Technik & Handwerk",
+                tokens: ["mechatroniker", "mechatronikerin", "kfz-mechatroniker", "kfz-mechatronikerin", "kraftfahrzeugmechatroniker", "industriemechaniker", "industriemechanikerin", "anlagenmechaniker", "anlagenmechanikerin", "konstruktionsmechaniker", "zerspanungsmechaniker", "elektroniker", "elektronikerin", "elektriker", "elektroinstallateur", "elektrotechnik", "schreiner", "schreinerin", "tischler", "tischlerin", "maler", "lackierer", "dachdecker", "zimmerer", "metallbauer", "feinwerkmechaniker"]
+            }
+        };
+
+        const GENERIC_AFFIXES = new Set([
+            "mann", "frau", "frauen", "leute", "fach", "kraft", "kraefte", "krafte",
+            "helfer", "helferin", "assistent", "assistentin", "beruf", "ausbildung",
+            "wesen", "dienst", "stelle"
+        ]);
+
+        const GERMAN_STOP_WORDS = new Set([
+            "ausbildung", "ausbildungsplatz", "ausbildungsplaetze", "auszubildende", "auszubildender",
+            "azubi", "azubis", "lehre", "lehrstelle", "duales", "studium", "stelle", "stellen",
+            "platz", "job", "jobs", "fachkraft", "facharbeiter", "geselle", "praktikum", "zum",
+            "zur", "als", "fur", "fuer", "im", "in", "am", "an", "der", "die", "das", "den",
+            "dem", "des", "ein", "eine", "einen", "mit", "ohne", "und", "oder", "ab", "mwd",
+            "wmd", "gn", "mfd"
+        ]);
+
+        let cachedDatasets = [];
+        let datasetsLoaded = false;
+        let lastDatasetFetchTime = 0;
+
+        function normalizeUmlauts(str) {
+            if (!str) return "";
+            return String(str)
+                .toLowerCase()
+                .replace(/ä/g, "ae")
+                .replace(/ö/g, "oe")
+                .replace(/ü/g, "ue")
+                .replace(/ß/g, "ss");
+        }
+
+        function cleanProfessionTokens(rawStr) {
+            if (!rawStr) return [];
+            const cleaned = normalizeUmlauts(
+                String(rawStr)
+                    .replace(/[\(\[\{][^\)\]\}]{1,10}[\)\]\}]/g, " ")
+                    .replace(/\b(m\/w\/d|w\/m\/d|d\/m\/w|m\/f\/d|gn|mwd|wmd|dmw|mfd)\b/gi, " ")
+                    .replace(/[^a-zA-Z0-9\-]+/g, " ")
+            );
+            return cleaned
+                .split(/\s+/)
+                .filter(w => w.length > 2 && !GERMAN_STOP_WORDS.has(w) && !GENERIC_AFFIXES.has(w));
+        }
+
+        function normalizeMorphology(w) {
+            if (w.endsWith("innen")) return w.slice(0, -5);
+            if (w.endsWith("in") && w.length > 4) return w.slice(0, -2);
+            if (w.endsWith("frauen")) return w.slice(0, -6) + "mann";
+            if (w.endsWith("frau")) return w.slice(0, -4) + "mann";
+            if (w.endsWith("leute")) return w.slice(0, -5) + "mann";
+            return w;
+        }
+
+        function isExactMorphologicalMatch(t1, t2) {
+            const n1 = normalizeMorphology(t1);
+            const n2 = normalizeMorphology(t2);
+            if (n1 === n2) return true;
+            if ((n1.startsWith("koch") || n1.startsWith("koech")) && (n2.startsWith("koch") || n2.startsWith("koech"))) return true;
+            if (n1.startsWith("pflegefach") && n2.startsWith("pflegefach")) return true;
+            if (n1.startsWith("fachinformatik") && n2.startsWith("fachinformatik")) return true;
+            if (n1.includes("lagerlogistik") && n2.includes("lagerlogistik")) return true;
+            return false;
+        }
+
+        function getClustersForTokens(tokens) {
+            const matched = new Set();
+            tokens.forEach(t => {
+                if (GENERIC_AFFIXES.has(t) || t.length < 3) return;
+                Object.entries(PROFESSION_CLUSTERS).forEach(([k, cl]) => {
+                    for (const kw of cl.tokens) {
+                        const normKw = normalizeUmlauts(kw);
+                        if (t === normKw || (t.length >= 5 && (t.includes(normKw) || normKw.includes(t)))) {
+                            matched.add(k);
+                            break;
+                        }
+                    }
+                });
+            });
+            return matched;
+        }
+
+        function formatProfessionTitle(str) {
+            if (!str) return "";
+            let s = String(str).trim();
+            s = s.replace(/_/g, " ");
+            s = s.replace(/\.[a-zA-Z0-9]+$/, "");
+            s = s.replace(/_[0-9a-fA-F]{6,12}$/, "");
+            s = s.replace(/\bf\s*r\b/gi, "für");
+            return s.split(/\s+/).map(word => {
+                if (/^(als|zum|zur|fuer|für|im|in|und|oder|von|der|die|das)$/i.test(word)) {
+                    return word.toLowerCase();
+                }
+                return word.charAt(0).toUpperCase() + word.slice(1);
+            }).join(" ");
+        }
+
+        function formatNumber(num) {
+            if (num === null || num === undefined || isNaN(num)) return "0";
+            return Number(num).toLocaleString("de-DE");
+        }
+
+        function formatDateDisplay(val) {
+            if (!val) return "k. A.";
+            if (typeof val === "string" && /^\d{2}\.\d{2}\.\d{4}/.test(val)) {
+                return val;
+            }
+            try {
+                const d = new Date(val);
+                if (!isNaN(d.getTime())) {
+                    const pad = n => String(n).padStart(2, "0");
+                    return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                }
+            } catch (_) {}
+            return String(val);
+        }
+
+        function getDatasetMatchForProfession(professionStr) {
+            const query = String(professionStr || "").trim();
+            if (!query || /^(k\.?\s*a\.?|n\/?a|undefined|null|bewerber)$/i.test(query)) {
+                return {
+                    status: "missing",
+                    label: "Nicht vorhanden",
+                    match_type: null,
+                    matched_profession: null,
+                    query_profession: query,
+                    matched_dataset: null,
+                    matched_datasets: [],
+                    total_listings: 0,
+                    details: "Kein passender Datensatz gefunden."
+                };
+            }
+
+            const clientTokens = cleanProfessionTokens(query);
+            if (!clientTokens.length) {
+                return {
+                    status: "missing",
+                    label: "Nicht vorhanden",
+                    match_type: null,
+                    matched_profession: null,
+                    query_profession: query,
+                    matched_dataset: null,
+                    matched_datasets: [],
+                    total_listings: 0,
+                    details: "Kein passender Datensatz gefunden."
+                };
+            }
+
+            if (!cachedDatasets || !cachedDatasets.length) {
+                return {
+                    status: "missing",
+                    label: "Nicht vorhanden",
+                    match_type: null,
+                    matched_profession: null,
+                    query_profession: query,
+                    matched_dataset: null,
+                    matched_datasets: [],
+                    total_listings: 0,
+                    details: "Kein passender Datensatz gefunden."
+                };
+            }
+
+            // PASS 1: Direct / Exact Match ("available" -> Green "Vorhanden")
+            const exactMatches = [];
+            const seenExactFiles = new Set();
+
+            for (const ds of cachedDatasets) {
+                const fn = String(ds.filename || "").trim();
+                if (fn && seenExactFiles.has(fn)) continue;
+
+                const domain = normalizeUmlauts(ds.domain_name || ds.filename || "");
+                const dsTokens = cleanProfessionTokens(domain);
+
+                let matched = false;
+                for (const cTok of clientTokens) {
+                    for (const dTok of dsTokens) {
+                        if (isExactMorphologicalMatch(cTok, dTok)) {
+                            matched = true;
+                            break;
+                        }
+                    }
+                    if (matched) break;
+                }
+
+                // Substring inclusion for core root (>= 6 chars)
+                if (!matched) {
+                    for (const cTok of clientTokens) {
+                        if (cTok.length >= 6 && domain.includes(cTok) && !GENERIC_AFFIXES.has(cTok)) {
+                            matched = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (matched) {
+                    exactMatches.push(ds);
+                    if (fn) seenExactFiles.add(fn);
+                }
+            }
+
+            if (exactMatches.length > 0) {
+                const totalListings = exactMatches.reduce((acc, d) => acc + (Number(d.row_count) || 0), 0);
+                const primaryDs = exactMatches[0];
+                const matchedProf = primaryDs.domain_name || primaryDs.filename || query;
+                return {
+                    status: "available",
+                    label: "Vorhanden",
+                    match_type: "Exakt",
+                    matched_profession: formatProfessionTitle(matchedProf),
+                    matched_dataset: primaryDs,
+                    matched_datasets: exactMatches,
+                    total_listings: totalListings,
+                    details: `Passender Datensatz vorhanden (${totalListings} Stellen in ${exactMatches.length} Datei(en))`
+                };
+            }
+
+            // PASS 2: Related / Cluster Match ("similar" -> Yellow "Ähnlich")
+            const clientClusters = getClustersForTokens(clientTokens);
+            const similarMatches = [];
+            const seenSimilarFiles = new Set();
+
+            for (const ds of cachedDatasets) {
+                const fn = String(ds.filename || "").trim();
+                if (fn && seenSimilarFiles.has(fn)) continue;
+
+                const domain = normalizeUmlauts(ds.domain_name || ds.filename || "");
+                const dsTokens = cleanProfessionTokens(domain);
+                const dsClusters = getClustersForTokens(dsTokens);
+
+                let matched = false;
+                for (const cl of clientClusters) {
+                    if (dsClusters.has(cl)) {
+                        matched = true;
+                        break;
+                    }
+                }
+
+                if (!matched) {
+                    for (const cTok of clientTokens) {
+                        for (const dTok of dsTokens) {
+                            if (cTok.length >= 5 && dTok.length >= 5 && (cTok.startsWith(dTok.slice(0, 5)) || dTok.startsWith(cTok.slice(0, 5)))) {
+                                matched = true;
+                                break;
+                            }
+                        }
+                        if (matched) break;
+                    }
+                }
+
+                if (matched) {
+                    similarMatches.push(ds);
+                    if (fn) seenSimilarFiles.add(fn);
+                }
+            }
+
+            if (similarMatches.length > 0) {
+                const totalListings = similarMatches.reduce((acc, d) => acc + (Number(d.row_count) || 0), 0);
+                const primaryDs = similarMatches[0];
+                const matchedProf = primaryDs.domain_name || primaryDs.filename || query;
+                return {
+                    status: "similar",
+                    label: "Ähnlich",
+                    match_type: "Ähnlich",
+                    matched_profession: formatProfessionTitle(matchedProf),
+                    matched_dataset: primaryDs,
+                    matched_datasets: similarMatches,
+                    total_listings: totalListings,
+                    details: `Ähnlicher Datensatz vorhanden (${totalListings} Stellen in ${similarMatches.length} Datei(en))`
+                };
+            }
+
+            // PASS 3: No Match ("missing" -> Red "Nicht vorhanden")
+            return {
+                status: "missing",
+                label: "Nicht vorhanden",
+                match_type: null,
+                matched_profession: null,
+                query_profession: query,
+                matched_dataset: null,
+                matched_datasets: [],
+                total_listings: 0,
+                details: "Kein passender Datensatz gefunden."
+            };
+        }
+
+        function renderDatasetAvailabilityBadge(fieldStr, extraId = "", locationStr = "") {
+            const match = getDatasetMatchForProfession(fieldStr);
+            const idAttr = extraId ? ` id="${escapeHtml(extraId)}"` : "";
+            const locAttr = locationStr ? ` data-location="${escapeHtml(locationStr)}"` : "";
+            const ariaLabel = `Datensatz: ${match.label} - ${match.details || ""}`;
+            return `
+                <span class="sp-dataset-badge sp-dataset-badge--${match.status}" data-profession="${escapeHtml(fieldStr || "")}"${locAttr}${idAttr} tabindex="0" role="button" aria-haspopup="dialog" aria-label="${escapeHtml(ariaLabel)}">
+                    <span class="sp-dataset-badge-dot"></span>
+                    <span>${escapeHtml(match.label)}</span>
+                </span>
+            `;
+        }
+
+        // --- Tooltip Controller Engine ---
+        let datasetTooltipEl = null;
+        let activeTooltipBadge = null;
+        let tooltipShowTimer = null;
+        let tooltipHideTimer = null;
+
+        function getOrCreateDatasetTooltip() {
+            if (!datasetTooltipEl) {
+                datasetTooltipEl = document.getElementById("sp-dataset-tooltip");
+                if (!datasetTooltipEl) {
+                    datasetTooltipEl = document.createElement("div");
+                    datasetTooltipEl.id = "sp-dataset-tooltip";
+                    datasetTooltipEl.className = "sp-dataset-tooltip";
+                    datasetTooltipEl.setAttribute("role", "tooltip");
+                    datasetTooltipEl.setAttribute("aria-hidden", "true");
+                    document.body.appendChild(datasetTooltipEl);
+
+                    datasetTooltipEl.addEventListener("mouseenter", () => {
+                        clearTimeout(tooltipHideTimer);
+                    });
+                    datasetTooltipEl.addEventListener("mouseleave", () => {
+                        scheduleHideTooltip(160);
+                    });
+                }
+            }
+            return datasetTooltipEl;
+        }
+
+        function renderTooltipContent(match, locationStr = "") {
+            if (match.status === "missing") {
+                const rawProfession = match.query_profession || "";
+                const displayProfession = formatProfessionTitle(rawProfession) || "Ausbildungsberuf";
+                const locAttr = locationStr ? ` data-location="${escapeHtml(locationStr)}"` : "";
+                return `
+                    <div class="sp-dt-card sp-dt-card--missing">
+                        <div class="sp-dt-header">
+                            <div class="sp-dt-prof-title" title="${escapeHtml(displayProfession)}">
+                                ${escapeHtml(displayProfession)}
+                            </div>
+                            <span class="sp-dt-badge sp-dt-badge--missing">
+                                <span class="sp-dt-dot"></span> Nicht vorhanden
+                            </span>
+                        </div>
+                        <div class="sp-dt-missing-body">
+                            <div class="sp-dt-empty-msg">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                                </svg>
+                                <span>Kein passender Datensatz gefunden.</span>
+                            </div>
+                            <button type="button" class="sp-dt-action-btn" data-action="search-ausbildung" data-profession="${escapeHtml(rawProfession || displayProfession)}"${locAttr}>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                <span>Jetzt Ausbildung suchen</span>
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }
+
+            const isAvailable = match.status === "available";
+            const badgeClass = isAvailable ? "sp-dt-badge--available" : "sp-dt-badge--similar";
+            const matchTypeLabel = match.match_type || (isAvailable ? "Exakt" : "Ähnlich");
+            const matchedProf = match.matched_profession || "Ausbildungsberuf";
+            const totalRows = Number(match.total_listings) || 0;
+            const datasets = match.matched_datasets || (match.matched_dataset ? [match.matched_dataset] : []);
+            const isMulti = datasets.length > 1;
+
+            let latestDate = "k. A.";
+            if (datasets.length > 0) {
+                const dates = datasets.map(d => d.modified_at).filter(Boolean);
+                if (dates.length > 0) {
+                    latestDate = formatDateDisplay(dates[0]);
+                }
+            }
+
+            let datasetsHtml = "";
+            if (isMulti) {
+                datasetsHtml = `
+                    <div class="sp-dt-section">
+                        <div class="sp-dt-section-title">Zugehörige Datensätze (${datasets.length}):</div>
+                        <div class="sp-dt-files-list">
+                            ${datasets.map(d => `
+                                <div class="sp-dt-file-item">
+                                    <div class="sp-dt-file-name" title="${escapeHtml(d.filename || "")}">
+                                        ${escapeHtml(d.filename || "Datensatz")}
+                                    </div>
+                                    <div class="sp-dt-file-meta">
+                                        <span class="sp-dt-file-rows">${formatNumber(d.row_count || 0)} Zeilen</span>
+                                        <span class="sp-dt-file-sep">&bull;</span>
+                                        <span class="sp-dt-file-date">${escapeHtml(formatDateDisplay(d.modified_at))}</span>
+                                    </div>
+                                </div>
+                            `).join("")}
+                        </div>
+                    </div>
+                `;
+            } else if (datasets.length === 1) {
+                const ds = datasets[0];
+                datasetsHtml = `
+                    <div class="sp-dt-row">
+                        <span class="sp-dt-label">Dateiname:</span>
+                        <span class="sp-dt-val sp-dt-val--file" title="${escapeHtml(ds.filename || "")}">
+                            ${escapeHtml(ds.filename || "k. A.")}
+                        </span>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="sp-dt-card sp-dt-card--${match.status}">
+                    <div class="sp-dt-header">
+                        <div class="sp-dt-prof-title" title="${escapeHtml(matchedProf)}">
+                            ${escapeHtml(matchedProf)}
+                        </div>
+                        <span class="sp-dt-badge ${badgeClass}">
+                            <span class="sp-dt-dot"></span> ${escapeHtml(matchTypeLabel)}
+                        </span>
+                    </div>
+
+                    <div class="sp-dt-body">
+                        <div class="sp-dt-row">
+                            <span class="sp-dt-label">Match-Typ:</span>
+                            <span class="sp-dt-val">${escapeHtml(matchTypeLabel)}</span>
+                        </div>
+                        <div class="sp-dt-row">
+                            <span class="sp-dt-label">Stellenangebote:</span>
+                            <span class="sp-dt-val sp-dt-val--highlight">
+                                ${formatNumber(totalRows)} Zeilen${isMulti ? " (Gesamt)" : ""}
+                            </span>
+                        </div>
+                        <div class="sp-dt-row">
+                            <span class="sp-dt-label">Letztes Update:</span>
+                            <span class="sp-dt-val">${escapeHtml(latestDate)}</span>
+                        </div>
+                        ${datasetsHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        function positionTooltip(badgeEl, tooltipEl) {
+            if (!badgeEl || !tooltipEl) return;
+            const rect = badgeEl.getBoundingClientRect();
+            const tipWidth = tooltipEl.offsetWidth || 300;
+            const tipHeight = tooltipEl.offsetHeight || 160;
+            const margin = 10;
+
+            let left = rect.left + (rect.width / 2) - (tipWidth / 2);
+            if (left < margin) {
+                left = margin;
+            } else if (left + tipWidth > window.innerWidth - margin) {
+                left = window.innerWidth - tipWidth - margin;
+            }
+
+            let top;
+            let placement = "top";
+            const spaceAbove = rect.top;
+            const spaceBelow = window.innerHeight - rect.bottom;
+
+            if (spaceAbove >= tipHeight + 10) {
+                top = rect.top - tipHeight - 6;
+                placement = "top";
+            } else if (spaceBelow >= tipHeight + 10) {
+                top = rect.bottom + 6;
+                placement = "bottom";
+            } else {
+                if (spaceAbove > spaceBelow) {
+                    top = Math.max(margin, rect.top - tipHeight - 6);
+                    placement = "top";
+                } else {
+                    top = Math.min(window.innerHeight - tipHeight - margin, rect.bottom + 6);
+                    placement = "bottom";
+                }
+            }
+
+            tooltipEl.style.left = `${Math.round(left)}px`;
+            tooltipEl.style.top = `${Math.round(top)}px`;
+            tooltipEl.dataset.placement = placement;
+        }
+
+        function showTooltip(badgeEl) {
+            if (!badgeEl) return;
+            const profession = badgeEl.dataset.profession || "";
+            const locationStr = badgeEl.dataset.location || "";
+            const match = getDatasetMatchForProfession(profession);
+            if (!match.query_profession) {
+                match.query_profession = profession;
+            }
+
+            const tooltipEl = getOrCreateDatasetTooltip();
+            tooltipEl.innerHTML = renderTooltipContent(match, locationStr);
+            tooltipEl.setAttribute("aria-hidden", "false");
+            tooltipEl.classList.add("is-visible");
+
+            activeTooltipBadge = badgeEl;
+            positionTooltip(badgeEl, tooltipEl);
+        }
+
+        function hideTooltip() {
+            clearTimeout(tooltipShowTimer);
+            clearTimeout(tooltipHideTimer);
+            if (datasetTooltipEl) {
+                datasetTooltipEl.classList.remove("is-visible");
+                datasetTooltipEl.setAttribute("aria-hidden", "true");
+            }
+            activeTooltipBadge = null;
+        }
+
+        function scheduleShowTooltip(badgeEl, delay = 80) {
+            clearTimeout(tooltipHideTimer);
+            clearTimeout(tooltipShowTimer);
+            tooltipShowTimer = setTimeout(() => {
+                showTooltip(badgeEl);
+            }, delay);
+        }
+
+        function scheduleHideTooltip(delay = 180) {
+            clearTimeout(tooltipShowTimer);
+            clearTimeout(tooltipHideTimer);
+            tooltipHideTimer = setTimeout(() => {
+                hideTooltip();
+            }, delay);
+        }
+
+        async function loadAvailableDatasets(force = false) {
+            const now = Date.now();
+            if (!force && datasetsLoaded && (now - lastDatasetFetchTime < 15000)) {
+                return cachedDatasets;
+            }
+
+            try {
+                const res = await fetch("/api/ausbildungen/files");
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.success && Array.isArray(data.files)) {
+                        cachedDatasets = data.files;
+                        datasetsLoaded = true;
+                        lastDatasetFetchTime = now;
+                        updateAllDatasetBadges();
+                    }
+                }
+            } catch (err) {
+                console.debug("Could not fetch ausbildungen datasets for badges", err);
+            }
+            return cachedDatasets;
+        }
+
+        function updateAllDatasetBadges() {
+            const badgeNodes = document.querySelectorAll(".sp-dataset-badge[data-profession]");
+            badgeNodes.forEach(node => {
+                const profession = node.dataset.profession || "";
+                const match = getDatasetMatchForProfession(profession);
+                node.className = `sp-dataset-badge sp-dataset-badge--${match.status}`;
+                node.setAttribute("aria-label", `Datensatz: ${match.label} - ${match.details || ""}`);
+                const labelSpan = node.querySelector("span:last-child");
+                if (labelSpan) {
+                    labelSpan.textContent = match.label;
+                }
+            });
+
+            // If a tooltip is currently visible, update its contents dynamically in real-time
+            if (activeTooltipBadge && datasetTooltipEl && datasetTooltipEl.classList.contains("is-visible")) {
+                showTooltip(activeTooltipBadge);
+            }
+        }
+
         // --- Render Main Views (Cards, Compact, Table) ---
         function renderView() {
             const filtered = getFilteredAndSortedApplications();
@@ -620,7 +1223,12 @@
                                 <div class="sp-avatar">${escapeHtml(initials)}</div>
                                 <div class="sp-card-names">
                                     <h3 class="sp-card-name" title="${escapeHtml(app.full_name)}">${escapeHtml(app.full_name)}</h3>
-                                    ${vis.field ? `<span class="sp-card-field">${escapeHtml(app.field)}</span>` : ""}
+                                    ${vis.field ? `
+                                        <div class="sp-card-field-line">
+                                            <span class="sp-card-field" title="${escapeHtml(app.field)}">${escapeHtml(app.field)}</span>
+                                            ${renderDatasetAvailabilityBadge(app.field, "", app.city || app.ort || app.location || (app.raw && (app.raw.city || app.raw.ort || app.raw.location)) || "")}
+                                        </div>
+                                    ` : ""}
                                 </div>
                             </div>
                             ${vis.status ? statusBadge : ""}
@@ -635,26 +1243,38 @@
                         <div class="sp-card-meta">
                             ${vis.pack ? `
                                 <div class="sp-meta-item">
-                                    <span class="sp-meta-key">Preis:</span>
+                                    <span class="sp-meta-key">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                                        Preis:
+                                    </span>
                                     <strong class="sp-meta-val sp-price-val">${escapeHtml(app.price)}</strong>
                                 </div>
                             ` : ""}
                             ${vis.bank && app.bank !== "k. A." ? `
                                 <div class="sp-meta-item">
-                                    <span class="sp-meta-key">Bank:</span>
+                                    <span class="sp-meta-key">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
+                                        Bank:
+                                    </span>
                                     <strong class="sp-meta-val">${escapeHtml(app.bank)}</strong>
                                 </div>
                             ` : ""}
                             ${vis.date ? `
                                 <div class="sp-meta-item">
-                                    <span class="sp-meta-key">Eingereicht:</span>
+                                    <span class="sp-meta-key">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                                        Eingereicht:
+                                    </span>
                                     <span class="sp-meta-val">${escapeHtml(app.created_at_display)}</span>
                                 </div>
                             ` : ""}
                         </div>
 
                         <div class="sp-card-actions">
-                            <button type="button" class="sp-btn-action-ghost" data-action="details" data-app-id="${escapeHtml(app.id)}">Details</button>
+                            <button type="button" class="sp-btn-action-ghost sp-btn-action-details" data-action="details" data-app-id="${escapeHtml(app.id)}">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                                <span>Details</span>
+                            </button>
                             <button type="button" class="sp-btn-action-primary" data-action="next-step" data-app-id="${escapeHtml(app.id)}">Next step</button>
                             ${renderOnboardingAction(app)}
                             ${!app.is_payed ? `
@@ -697,7 +1317,12 @@
                         </div>
 
                         <div class="sp-compact-mid">
-                            ${vis.field ? `<span class="sp-tag-pill">${escapeHtml(app.field)}</span>` : ""}
+                            ${vis.field ? `
+                                <div class="sp-compact-field-line">
+                                    <span class="sp-tag-pill">${escapeHtml(app.field)}</span>
+                                    ${renderDatasetAvailabilityBadge(app.field, "", app.city || app.ort || app.location || (app.raw && (app.raw.city || app.raw.ort || app.raw.location)) || "")}
+                                </div>
+                            ` : ""}
                             ${vis.language ? `<span class="sp-tag-pill sp-pill-lang">${escapeHtml(app.language_level)}</span>` : ""}
                             ${vis.pack ? `<strong class="sp-price-val">${escapeHtml(app.price)}</strong>` : ""}
                             ${vis.documents ? `<span class="sp-tag-pill sp-pill-doc">${app.document_count} Dok.</span>` : ""}
@@ -909,7 +1534,10 @@
                 dWhatsapp.href = cleanPhone ? `https://wa.me/${cleanPhone}` : "#";
             }
 
-            if (dField) dField.textContent = app.field;
+            if (dField) {
+                const appLoc = app.city || app.ort || app.location || (app.raw && (app.raw.city || app.raw.ort || app.raw.location)) || "";
+                dField.innerHTML = `${escapeHtml(app.field)} ${renderDatasetAvailabilityBadge(app.field, "sp-d-dataset-badge", appLoc)}`;
+            }
             if (dLanguage) dLanguage.textContent = app.language_level;
             if (dPack) dPack.textContent = app.pack;
             if (dPrice) dPrice.textContent = app.price;
@@ -1012,16 +1640,31 @@
         });
 
         // Copy buttons in drawer
+        function flashCopiedState(btn) {
+            if (!btn) return;
+            btn.classList.add("is-copied");
+            setTimeout(() => btn.classList.remove("is-copied"), 1800);
+        }
+
         copyEmailBtn?.addEventListener("click", () => {
             if (activeApplicant?.email) {
                 navigator.clipboard?.writeText(activeApplicant.email);
+                flashCopiedState(copyEmailBtn);
                 setStatus("E-Mail in Zwischenablage kopiert!");
             }
         });
         copyWhatsappBtn?.addEventListener("click", () => {
             if (activeApplicant?.whatsapp) {
                 navigator.clipboard?.writeText(activeApplicant.whatsapp);
+                flashCopiedState(copyWhatsappBtn);
                 setStatus("WhatsApp-Nummer kopiert!");
+            }
+        });
+        copyIdBtn?.addEventListener("click", () => {
+            if (activeApplicant?.id) {
+                navigator.clipboard?.writeText(activeApplicant.id);
+                flashCopiedState(copyIdBtn);
+                setStatus("Bewerber-ID kopiert!");
             }
         });
 
@@ -1218,10 +1861,6 @@
 
                 setStatus(`✓ Bewerber "${data.client_id}" erfolgreich importiert!`, false);
 
-                // Notify global client selector and SPA sections
-                window.dispatchEvent(new CustomEvent("activeClientChanged", {
-                    detail: { clientId: data.client_id }
-                }));
 
             } catch (err) {
                 console.error("Onboarding failed:", err);
@@ -1254,9 +1893,6 @@
                     body: JSON.stringify({ client_id: clientId })
                 }).catch(() => {});
 
-                window.dispatchEvent(new CustomEvent("activeClientChanged", {
-                    detail: { clientId: clientId }
-                }));
 
                 closeDetailsDrawer();
 
@@ -1611,6 +2247,7 @@
                 renderView();
                 setStatus("", false);
                 hasLoaded = true;
+                loadAvailableDatasets(false);
             } catch (error) {
                 console.error("Supabase load failed.", error);
                 if (emptyState) emptyState.hidden = true;
@@ -1623,15 +2260,170 @@
         refreshBtn?.addEventListener("click", () => {
             signedDocumentCache.clear();
             hasLoaded = false;
+            loadAvailableDatasets(true);
             loadApplications(true);
         });
 
+        // Auto-update dataset availability on dataset change events or window focus
+        window.addEventListener("ausbildungDatasetsChanged", (e) => {
+            if (e.detail && Array.isArray(e.detail.files)) {
+                cachedDatasets = e.detail.files;
+                datasetsLoaded = true;
+                lastDatasetFetchTime = Date.now();
+                updateAllDatasetBadges();
+            } else {
+                loadAvailableDatasets(true);
+            }
+        });
+
+        window.addEventListener("focus", () => {
+            if (cardsView && !cardsView.hidden) {
+                loadAvailableDatasets(false);
+            }
+        });
+
+        // -------------------------------------------------------------
+        // Tooltip Event Listeners (Hover, Focus, Mobile Tap, Dismiss)
+        // -------------------------------------------------------------
+        document.addEventListener("pointerover", (e) => {
+            const badge = e.target.closest(".sp-dataset-badge");
+            if (badge) {
+                scheduleShowTooltip(badge, 80);
+            }
+        });
+
+        document.addEventListener("pointerout", (e) => {
+            const badge = e.target.closest(".sp-dataset-badge");
+            if (badge) {
+                const related = e.relatedTarget;
+                if (datasetTooltipEl && datasetTooltipEl.contains(related)) {
+                    return;
+                }
+                scheduleHideTooltip(160);
+            }
+        });
+
+        document.addEventListener("focusin", (e) => {
+            const badge = e.target.closest(".sp-dataset-badge");
+            if (badge) {
+                showTooltip(badge);
+            }
+        });
+
+        document.addEventListener("focusout", (e) => {
+            const badge = e.target.closest(".sp-dataset-badge");
+            if (badge) {
+                scheduleHideTooltip(120);
+            }
+        });
+
+        function triggerAusbildungSearch(profession, location = "") {
+            hideTooltip();
+
+            // Navigate to Search section
+            const searchNav = document.querySelector('[data-section-link="search"]');
+            if (searchNav) {
+                searchNav.click();
+            } else {
+                window.history.pushState({}, "", "/");
+                window.dispatchEvent(new PopStateEvent("popstate"));
+            }
+
+            // Select Ausbildung mode, populate keyword and location, and start scraping
+            setTimeout(() => {
+                const modeAusbildung = document.getElementById("mode_ausbildung");
+                if (modeAusbildung) {
+                    modeAusbildung.checked = true;
+                    modeAusbildung.dispatchEvent(new Event("change"));
+                }
+
+                const kwInput = document.getElementById("keyword");
+                if (kwInput) {
+                    const clean = String(profession || "").replace(/[\(\[\{][^\)\]\}]{1,10}[\)\]\}]/g, "").trim();
+                    if (/^ausbildung\s+(als|zum|zur)?/i.test(clean)) {
+                        kwInput.value = clean;
+                    } else if (clean) {
+                        kwInput.value = `Ausbildung als ${clean}`;
+                    } else {
+                        kwInput.value = "Ausbildung als ";
+                    }
+                }
+
+                const locInput = document.getElementById("location");
+                if (locInput && location) {
+                    locInput.value = String(location).trim();
+                }
+
+                const searchForm = document.getElementById("search_form_1");
+                if (searchForm) {
+                    searchForm.scrollIntoView({ behavior: "smooth", block: "center" });
+                    // Automatically trigger search discovery and scraping for the missing profession
+                    setTimeout(() => {
+                        const submitBtn = document.getElementById("search_btn_1");
+                        if (submitBtn) {
+                            submitBtn.click();
+                        } else {
+                            searchForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+                        }
+                    }, 120);
+                } else if (kwInput) {
+                    kwInput.focus();
+                }
+            }, 100);
+        }
+
+        document.addEventListener("click", (e) => {
+            const actionBtn = e.target.closest('[data-action="search-ausbildung"]');
+            if (actionBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                const prof = actionBtn.dataset.profession || "";
+                const loc = actionBtn.dataset.location || "";
+                triggerAusbildungSearch(prof, loc);
+                return;
+            }
+
+            const badge = e.target.closest(".sp-dataset-badge");
+            if (badge) {
+                e.stopPropagation();
+                if (activeTooltipBadge === badge && datasetTooltipEl && datasetTooltipEl.classList.contains("is-visible")) {
+                    hideTooltip();
+                } else {
+                    showTooltip(badge);
+                }
+                return;
+            }
+            if (datasetTooltipEl && !datasetTooltipEl.contains(e.target)) {
+                hideTooltip();
+            }
+        });
+
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") {
+                hideTooltip();
+            }
+        });
+
+        window.addEventListener("scroll", () => {
+            if (activeTooltipBadge && datasetTooltipEl && datasetTooltipEl.classList.contains("is-visible")) {
+                positionTooltip(activeTooltipBadge, datasetTooltipEl);
+            }
+        }, { passive: true });
+
+        window.addEventListener("resize", () => {
+            if (activeTooltipBadge && datasetTooltipEl && datasetTooltipEl.classList.contains("is-visible")) {
+                positionTooltip(activeTooltipBadge, datasetTooltipEl);
+            }
+        }, { passive: true });
+
         return {
             show() {
+                loadAvailableDatasets(true);
                 loadApplications(false);
             },
             hide() {
                 closeDetailsDrawer();
+                hideTooltip();
             }
         };
     };

@@ -777,9 +777,6 @@
                     const result = await res.json();
                     if (res.ok && result.success) {
                         setStatus(`✓ Bewerber "${result.client_name}" erfolgreich aus Lebenslauf importiert!`);
-                        if (window.refreshGlobalClients) {
-                            window.refreshGlobalClients(result.client_id);
-                        }
                         await loadProfilesList(result.client_id);
                     } else {
                         setStatus("Import fehlgeschlagen: " + (result.error || "Unbekannter Fehler"), true);
@@ -806,9 +803,6 @@
                     });
                     if (res.ok) {
                         setStatus(`⭐ Profil "${currentProfileId}" ist jetzt der aktive Bewerber!`);
-                        if (window.refreshGlobalClients) {
-                            window.refreshGlobalClients(currentProfileId);
-                        }
                         await loadProfilesList(currentProfileId);
                     }
                 } catch (err) {
@@ -817,13 +811,6 @@
             });
         }
 
-        // Listen for global client change from header
-        window.addEventListener("activeClientChanged", (e) => {
-            const newId = e.detail && e.detail.clientId;
-            if (newId && newId !== currentProfileId) {
-                loadProfilesList(newId);
-            }
-        });
 
         // --- Corrections Memory ---
         async function loadCorrections() {
@@ -919,11 +906,6 @@
 
         btnRefreshHistory?.addEventListener("click", loadApplicationHistory);
 
-        window.addEventListener("activeClientChanged", (e) => {
-            if (e.detail?.clientId && root && !root.hidden) {
-                loadProfilesList(e.detail.clientId);
-            }
-        });
 
         return {
             show() {

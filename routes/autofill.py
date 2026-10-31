@@ -85,36 +85,25 @@ def save_applications(apps):
 @autofill_bp.route("/api/autofill/profiles", methods=["GET"])
 @autofill_bp.route("/api/profiles", methods=["GET"])
 def get_profiles():
-    """Returns all available candidate profiles."""
-    profiles = []
-    if os.path.exists(PROFILES_DIR):
-        for fname in os.listdir(PROFILES_DIR):
-            if fname.endswith(".json") and fname != "template.json":
-                pid = fname[:-5]
-                filepath = os.path.join(PROFILES_DIR, fname)
-                try:
-                    with open(filepath, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    applicant = data.get("applicant", {})
-                    personal = applicant.get("personal", {})
-                    contact = applicant.get("contact", {})
-                    prof = applicant.get("professional_profile", {})
-                    name = personal.get("full_name") or f"{personal.get('first_name', '')} {personal.get('last_name', '')}".strip() or pid
-                    profiles.append({
-                        "id": pid,
-                        "name": name,
-                        "email": contact.get("email", ""),
-                        "phone": contact.get("phone_display") or contact.get("phone", ""),
-                        "title": prof.get("current_title") or prof.get("headline", ""),
-                        "language": data.get("profile_language", "de"),
-                        "city": contact.get("address", {}).get("city", "")
-                    })
-                except Exception:
-                    profiles.append({"id": pid, "name": pid})
+    """Returns all available candidate profiles using ClientManager as single source of truth."""
     from services.client_manager import client_manager
+    clients = client_manager.list_clients()
     active_id = client_manager.get_active_client_id()
-    for p in profiles:
-        p["is_active"] = (p["id"] == active_id)
+    profiles = []
+    for c in clients:
+        pid = c["id"]
+        full_prof = client_manager.get_client(pid) or {}
+        profiles.append({
+            "id": pid,
+            "name": c.get("name", pid),
+            "email": c.get("email", ""),
+            "phone": c.get("phone", ""),
+            "title": c.get("title", ""),
+            "city": c.get("city", ""),
+            "language": full_prof.get("profile_language", "de"),
+            "is_active": (pid == active_id),
+            "doc_count": c.get("doc_count", 0)
+        })
     return jsonify({"profiles": profiles, "active_profile_id": active_id})
 
 
@@ -133,59 +122,45 @@ def autofill_ingest_cv():
 @autofill_bp.route("/api/autofill/profiles/<profile_id>", methods=["GET"])
 @autofill_bp.route("/api/profiles/<profile_id>", methods=["GET"])
 def get_profile_detail(profile_id):
-    """Returns the full JSON for a specific applicant profile."""
+    """Returns the full JSON for a specific applicant profile from ClientManager."""
+    from services.client_manager import client_manager
     clean_id = sanitize_profile_id(profile_id)
-    filepath = os.path.join(PROFILES_DIR, f"{clean_id}.json")
-    if not os.path.exists(filepath):
+    profile_data = client_manager.get_client(clean_id)
+    if not profile_data:
         return jsonify({"error": "Profile not found"}), 404
-    try:
-        with open(filepath, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return jsonify(data)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify(profile_data)
 
 
 @autofill_bp.route("/api/autofill/profiles/<profile_id>/matching-data", methods=["GET"])
 @autofill_bp.route("/api/profiles/<profile_id>/matching-data", methods=["GET"])
 def get_matching_data(profile_id):
-    """Returns applicant profile, documents list, and domain corrections."""
+    """Returns applicant profile, documents list, and domain corrections from ClientManager."""
+    from services.client_manager import client_manager
     clean_id = sanitize_profile_id(profile_id)
-    filepath = os.path.join(PROFILES_DIR, f"{clean_id}.json")
-    if not os.path.exists(filepath):
+    profile_data = client_manager.get_client(clean_id)
+    if not profile_data:
         return jsonify({"error": "Profile not found"}), 404
-
-    try:
-        with open(filepath, "r", encoding="utf-8") as f:
-            profile_data = json.load(f)
-    except Exception as e:
-        return jsonify({"error": f"Failed to load profile: {e}"}), 500
 
     applicant = profile_data.get("applicant", {})
 
-    # Discover documents in candidate directory
+    # Discover documents via ClientManager
+    docs_raw = client_manager.list_documents(clean_id)
     docs = []
-    pdir = get_safe_profile_dir(clean_id)
-    if pdir and os.path.exists(pdir):
-        for fname in sorted(os.listdir(pdir)):
-            ext = os.path.splitext(fname)[1].lower()
-            if ext in SUPPORTED_DOC_EXTS:
-                fpath = os.path.join(pdir, fname)
-                size = os.path.getsize(fpath)
-                lower_name = fname.lower()
-                is_sensitive = any(kw in lower_name for kw in ["cin", "passport", "id_card", "pass", "identity"])
-                category = "cv" if "cv" in lower_name or "resume" in lower_name or "lebenslauf" in lower_name else ("diploma" if "diplom" in lower_name or "certif" in lower_name else "other")
-                docs.append({
-                    "fileName": fname,
-                    "file_name": fname,
-                    "extension": ext.lstrip("."),
-                    "size": size,
-                    "category": category,
-                    "isSensitive": is_sensitive,
-                    "is_sensitive": is_sensitive,
-                    "downloadUrl": f"/api/autofill/profiles/{clean_id}/documents/{fname}",
-                    "previewUrl": f"/api/autofill/profiles/{clean_id}/documents/{fname}/preview"
-                })
+    for d in docs_raw:
+        fname = d.get("fileName") or d.get("file_name", "")
+        lower_name = fname.lower()
+        is_sensitive = any(kw in lower_name for kw in ["cin", "passport", "id_card", "pass", "identity"])
+        docs.append({
+            "fileName": fname,
+            "file_name": fname,
+            "extension": d.get("extension", ""),
+            "size": d.get("size", 0),
+            "category": d.get("category", "other"),
+            "isSensitive": is_sensitive,
+            "is_sensitive": is_sensitive,
+            "downloadUrl": f"/api/autofill/profiles/{clean_id}/documents/{fname}",
+            "previewUrl": f"/api/autofill/profiles/{clean_id}/documents/{fname}/preview"
+        })
 
     # Domain corrections
     domain = request.args.get("domain", "").strip()
@@ -207,66 +182,80 @@ def get_matching_data(profile_id):
 @autofill_bp.route("/api/autofill/profiles/<profile_id>/documents", methods=["GET"])
 @autofill_bp.route("/api/profiles/<profile_id>/documents", methods=["GET"])
 def get_documents(profile_id):
-    """Returns document list for an applicant."""
+    """Returns document list for an applicant via ClientManager."""
+    from services.client_manager import client_manager
     clean_id = sanitize_profile_id(profile_id)
-    pdir = get_safe_profile_dir(clean_id)
-    if not pdir or not os.path.exists(pdir):
-        return jsonify({"documents": []})
-
+    docs_raw = client_manager.list_documents(clean_id)
     docs = []
-    for fname in sorted(os.listdir(pdir)):
-        ext = os.path.splitext(fname)[1].lower()
-        if ext in SUPPORTED_DOC_EXTS:
-            fpath = os.path.join(pdir, fname)
-            size = os.path.getsize(fpath)
-            lower = fname.lower()
-            docs.append({
-                "fileName": fname,
-                "file_name": fname,
-                "extension": ext.lstrip("."),
-                "size": size,
-                "isSensitive": any(kw in lower for kw in ["cin", "pass", "id_card"]),
-                "downloadUrl": f"/api/autofill/profiles/{clean_id}/documents/{fname}",
-                "previewUrl": f"/api/autofill/profiles/{clean_id}/documents/{fname}/preview"
-            })
+    for d in docs_raw:
+        fname = d.get("fileName") or d.get("file_name", "")
+        lower = fname.lower()
+        docs.append({
+            "fileName": fname,
+            "file_name": fname,
+            "extension": d.get("extension", ""),
+            "size": d.get("size", 0),
+            "isSensitive": any(kw in lower for kw in ["cin", "pass", "id_card"]),
+            "downloadUrl": f"/api/autofill/profiles/{clean_id}/documents/{fname}",
+            "previewUrl": f"/api/autofill/profiles/{clean_id}/documents/{fname}/preview"
+        })
     return jsonify({"documents": docs})
 
 
 @autofill_bp.route("/api/autofill/profiles/<profile_id>/documents/<filename>", methods=["GET"])
 @autofill_bp.route("/api/profiles/<profile_id>/documents/<filename>", methods=["GET"])
 def download_document(profile_id, filename):
-    """Downloads a document."""
+    """Downloads a document from client dossier or autofill directory."""
+    from services.client_manager import client_manager
     clean_id = sanitize_profile_id(profile_id)
+    safe_filename = secure_filename(filename)
+
+    primary_file = client_manager.clients_dir / clean_id / "documents" / safe_filename
+    if primary_file.exists():
+        return send_from_directory(str(primary_file.parent), safe_filename, as_attachment=True)
+
     pdir = get_safe_profile_dir(clean_id)
-    if not pdir:
-        return jsonify({"error": "Invalid profile"}), 400
-    return send_from_directory(pdir, filename, as_attachment=True)
+    if pdir and os.path.exists(os.path.join(pdir, safe_filename)):
+        return send_from_directory(pdir, safe_filename, as_attachment=True)
+
+    return jsonify({"error": "Document not found"}), 404
 
 
 @autofill_bp.route("/api/autofill/profiles/<profile_id>/documents/<filename>/preview", methods=["GET"])
 @autofill_bp.route("/api/profiles/<profile_id>/documents/<filename>/preview", methods=["GET"])
 def preview_document(profile_id, filename):
     """Serves document inline for browser preview."""
+    from services.client_manager import client_manager
     clean_id = sanitize_profile_id(profile_id)
-    pdir = get_safe_profile_dir(clean_id)
-    if not pdir or not os.path.exists(os.path.join(pdir, filename)):
+    safe_filename = secure_filename(filename)
+
+    target_path = None
+    primary_file = client_manager.clients_dir / clean_id / "documents" / safe_filename
+    if primary_file.exists():
+        target_path = primary_file
+    else:
+        pdir = get_safe_profile_dir(clean_id)
+        if pdir and os.path.exists(os.path.join(pdir, safe_filename)):
+            target_path = Path(pdir) / safe_filename
+
+    if not target_path or not target_path.exists():
         return jsonify({"error": "Document not found"}), 404
-    ext = os.path.splitext(filename)[1].lower()
+
+    ext = target_path.suffix.lower()
     mime = MIME_TYPES.get(ext, "application/octet-stream")
-    with open(os.path.join(pdir, filename), "rb") as f:
+    with open(target_path, "rb") as f:
         content = f.read()
-    return Response(content, mimetype=mime, headers={"Content-Disposition": f"inline; filename={filename}"})
+    return Response(content, mimetype=mime, headers={"Content-Disposition": f"inline; filename={safe_filename}"})
 
 
 @autofill_bp.route("/api/autofill/profiles/<profile_id>/documents", methods=["POST"])
 @autofill_bp.route("/api/profiles/<profile_id>/documents", methods=["POST"])
 def upload_document(profile_id):
-    """Uploads a document for a profile."""
+    """Uploads a document for a profile and syncs through ClientManager."""
+    from services.client_manager import client_manager
     clean_id = sanitize_profile_id(profile_id)
-    pdir = get_safe_profile_dir(clean_id)
-    if not pdir:
+    if not clean_id:
         return jsonify({"error": "Invalid profile"}), 400
-    os.makedirs(pdir, exist_ok=True)
 
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded"}), 400
@@ -279,23 +268,20 @@ def upload_document(profile_id):
     if ext not in SUPPORTED_DOC_EXTS:
         return jsonify({"error": f"Unsupported format {ext}. Supported: PDF, JPG, PNG"}), 400
 
-    fpath = os.path.join(pdir, filename)
-    file.save(fpath)
+    file_bytes = file.read()
+    client_manager.save_document(clean_id, file_bytes, filename)
     return jsonify({"success": True, "fileName": filename, "message": "Document uploaded successfully"})
 
 
 @autofill_bp.route("/api/autofill/profiles/<profile_id>/documents/<filename>", methods=["DELETE"])
 @autofill_bp.route("/api/profiles/<profile_id>/documents/<filename>", methods=["DELETE"])
 def delete_document(profile_id, filename):
-    """Deletes a document from a profile."""
+    """Deletes a document from a profile using ClientManager."""
+    from services.client_manager import client_manager
     clean_id = sanitize_profile_id(profile_id)
-    pdir = get_safe_profile_dir(clean_id)
-    if not pdir:
-        return jsonify({"error": "Invalid profile"}), 400
     safe_filename = secure_filename(filename)
-    fpath = os.path.join(pdir, safe_filename)
-    if os.path.exists(fpath):
-        os.remove(fpath)
+    deleted = client_manager.delete_document(clean_id, safe_filename)
+    if deleted:
         return jsonify({"success": True, "message": f"{safe_filename} deleted"})
     return jsonify({"error": "File not found"}), 404
 
@@ -303,11 +289,11 @@ def delete_document(profile_id, filename):
 @autofill_bp.route("/api/autofill/profiles", methods=["POST"])
 @autofill_bp.route("/api/profiles", methods=["POST"])
 def save_profile():
-    """Creates or updates a profile."""
+    """Creates or updates a profile using ClientManager as the single source of truth."""
+    from services.client_manager import client_manager
     body = request.get_json(silent=True) or {}
     profile_id = body.get("profileId") or body.get("id") or body.get("profile_id")
     if not profile_id:
-        # Generate ID from name
         name = body.get("applicant", {}).get("personal", {}).get("full_name") or "new_applicant"
         profile_id = re.sub(r"[^a-zA-Z0-9_]", "_", name.strip().lower())
 
@@ -315,12 +301,9 @@ def save_profile():
     if not clean_id:
         return jsonify({"error": "Invalid profile ID"}), 400
 
-    target_file = os.path.join(PROFILES_DIR, f"{clean_id}.json")
-    target_dir = os.path.join(PROFILES_DIR, clean_id)
-    os.makedirs(target_dir, exist_ok=True)
-
-    with open(target_file, "w", encoding="utf-8") as f:
-        json.dump(body, f, indent=2, ensure_ascii=False)
+    success = client_manager.save_client(clean_id, body)
+    if not success:
+        return jsonify({"error": "Failed to save profile"}), 500
 
     return jsonify({"success": True, "profileId": clean_id, "message": "Profile saved successfully"})
 
@@ -378,61 +361,87 @@ def python_deterministic_matcher(field, applicant, documents):
     name = (field.get("name") or "").lower().strip()
     fid = (field.get("field_id") or field.get("id") or "").lower().strip()
     placeholder = (field.get("placeholder") or "").lower().strip()
-    combined = f"{label} {name} {fid} {placeholder}"
+    nearby = (field.get("nearby_question") or "").lower().strip()
+    combined = f"{label} {name} {fid} {placeholder} {nearby}"
 
     personal = applicant.get("personal", {})
     contact = applicant.get("contact", {})
     addr = contact.get("address", {})
+    prof = applicant.get("professional_profile", {})
 
-    # First Name
-    if any(k in combined for k in ["vorname", "first name", "firstname", "prénom", "prenom"]) and not any(k in combined for k in ["nachname", "last name", "nom"]):
+    # 1. First Name
+    if any(k in combined for k in ["vorname", "first name", "firstname", "prénom", "prenom", "given name"]) and not any(k in combined for k in ["nachname", "last name", "nom", "family"]):
         val = personal.get("first_name", "")
         if val:
             return {"value": val, "confidence": 0.98, "reason": "First name exact match", "source": "applicant.personal.first_name", "status": "approved"}
 
-    # Last Name
-    if any(k in combined for k in ["nachname", "last name", "lastname", "familienname", "nom de famille", "nom"]):
+    # 2. Last Name
+    if any(k in combined for k in ["nachname", "last name", "lastname", "familienname", "nom de famille", "nom", "surname"]):
         val = personal.get("last_name", "")
         if val:
             return {"value": val, "confidence": 0.98, "reason": "Last name exact match", "source": "applicant.personal.last_name", "status": "approved"}
 
-    # Full Name
+    # 3. Full Name
     if any(k in combined for k in ["vollständiger name", "full name", "fullname", "nom complet", "name"]) and not any(k in combined for k in ["vorname", "nachname", "unternehmensname", "firmenname"]):
         val = personal.get("full_name") or f"{personal.get('first_name', '')} {personal.get('last_name', '')}".strip()
         if val:
             return {"value": val, "confidence": 0.95, "reason": "Full name match", "source": "applicant.personal.full_name", "status": "approved"}
 
-    # Email
+    # 4. Email
     if "email" in combined or "e-mail" in combined or "courriel" in combined:
         val = contact.get("email", "")
         if val:
             return {"value": val, "confidence": 0.99, "reason": "Email address match", "source": "applicant.contact.email", "status": "approved"}
 
-    # Phone / Mobile
+    # 5. Phone / Mobile
     if any(k in combined for k in ["telefon", "phone", "mobile", "handy", "téléphone", "tel"]):
         val = contact.get("phone_display") or contact.get("phone", "")
         if val:
             return {"value": val, "confidence": 0.97, "reason": "Phone number match", "source": "applicant.contact.phone", "status": "approved"}
 
-    # City / Ort
+    # 6. Street / Strasse / Adresse
+    if any(k in combined for k in ["strasse", "straße", "street", "address", "adresse", "rue"]):
+        val = addr.get("street") or addr.get("line1", "")
+        if val:
+            return {"value": val, "confidence": 0.96, "reason": "Street address match", "source": "applicant.contact.address.street", "status": "approved"}
+
+    # 7. City / Ort
     if any(k in combined for k in ["stadt", "ort", "city", "ville", "wohnort"]):
         val = addr.get("city", "")
         if val:
             return {"value": val, "confidence": 0.95, "reason": "City match", "source": "applicant.contact.address.city", "status": "approved"}
 
-    # Postal Code / PLZ
+    # 8. Postal Code / PLZ
     if any(k in combined for k in ["plz", "postleitzahl", "postal code", "zip", "code postal"]):
         val = addr.get("postal_code") or addr.get("zip", "")
         if val:
             return {"value": str(val), "confidence": 0.96, "reason": "Postal code match", "source": "applicant.contact.address.postal_code", "status": "approved"}
 
-    # Country
+    # 9. Country
     if any(k in combined for k in ["land", "country", "pays"]):
         val = addr.get("country", "")
         if val:
             return {"value": val, "confidence": 0.95, "reason": "Country match", "source": "applicant.contact.address.country", "status": "approved"}
 
-    # CV / Resume Upload
+    # 10. Date of Birth / Geburtsdatum
+    if any(k in combined for k in ["geburtsdatum", "date of birth", "birthdate", "date de naissance", "geburtstag"]):
+        val = personal.get("date_of_birth", "")
+        if val:
+            return {"value": val, "confidence": 0.96, "reason": "Date of birth match", "source": "applicant.personal.date_of_birth", "status": "approved"}
+
+    # 11. Nationality / Staatsangehörigkeit
+    if any(k in combined for k in ["staatsangehörigkeit", "nationalität", "nationality", "nationalite"]):
+        val = personal.get("nationality", "")
+        if val:
+            return {"value": val, "confidence": 0.95, "reason": "Nationality match", "source": "applicant.personal.nationality", "status": "approved"}
+
+    # 12. LinkedIn / Xing / Website
+    if "linkedin" in combined:
+        val = contact.get("linkedin") or contact.get("social", {}).get("linkedin", "")
+        if val:
+            return {"value": val, "confidence": 0.98, "reason": "LinkedIn URL match", "source": "applicant.contact.linkedin", "status": "approved"}
+
+    # 13. CV / Resume Upload
     if field.get("type") == "file" or any(k in combined for k in ["cv", "lebenslauf", "resume"]):
         cv_doc = next((d for d in documents if d.get("category") == "cv" or "cv" in d.get("fileName", "").lower()), None)
         if cv_doc:
@@ -441,60 +450,188 @@ def python_deterministic_matcher(field, applicant, documents):
     return None
 
 
+def python_ai_answer_questions(unresolved_fields, applicant_data, page_context=None):
+    """
+    Uses the central AIProviderManager (OpenAI GPT or Gemini) to answer custom or open-ended
+    application questions strictly based on verified candidate profile data without hallucinations.
+    """
+    if not unresolved_fields:
+        return []
+
+    try:
+        from services.ai_provider_manager import ai_manager
+    except Exception as exc:
+        return []
+
+    system_prompt = (
+        "You are JobScout AI Job Autofill engine. Your task is to answer job application form questions "
+        "STRICTLY based on the provided candidate's real profile data.\n\n"
+        "CRITICAL RULES:\n"
+        "1. STRICT ANTI-HALLUCINATION: NEVER invent skills, degrees, certifications, or experience absent from the candidate data.\n"
+        "2. For open-ended questions like 'Why do you want this job?' or 'Tell us about your experience', "
+        "synthesize a concise, polite 1-3 sentence response based exclusively on the candidate's verified summary, target profession, and skills.\n"
+        "3. Output strictly valid JSON format with schema: {\"actions\": [{\"field_id\": \"...\", \"action\": \"fill|skip|review\", \"proposed_value\": \"...\", \"confidence\": 0.9, \"reason\": \"...\", \"review_required\": true|false}]}"
+    )
+
+    clean_fields = []
+    for f in unresolved_fields:
+        clean_fields.append({
+            "field_id": f.get("field_id") or f.get("id"),
+            "label": f.get("label") or f.get("name") or "",
+            "placeholder": f.get("placeholder") or "",
+            "type": f.get("type") or "text",
+            "nearby_question": f.get("nearby_question") or "",
+            "options": f.get("options") or []
+        })
+
+    prompt_data = {
+        "candidate_profile": applicant_data,
+        "page_context": page_context or {},
+        "fields_to_answer": clean_fields
+    }
+
+    try:
+        res = ai_manager.complete(
+            prompt=json.dumps(prompt_data, ensure_ascii=False),
+            system_prompt=system_prompt,
+            json_mode=True,
+            max_output_tokens=600,
+            temperature=0.2,
+            use_cache=True,
+        )
+
+        content = res.get("content") or ""
+        parsed = res.get("parsed_json")
+        if not parsed and content:
+            clean_text = content.replace("```json", "").replace("```", "").strip()
+            parsed = json.loads(clean_text)
+
+        if isinstance(parsed, dict) and "actions" in parsed:
+            return parsed["actions"]
+        elif isinstance(parsed, list):
+            return parsed
+    except Exception as exc:
+        logger = logging.getLogger(__name__) if "logging" in globals() else None
+        if logger:
+            logger.warning("Autofill AI question answering error: %s", exc)
+
+    return []
+
+
 @autofill_bp.route("/api/autofill/map-fields", methods=["POST"])
 @autofill_bp.route("/api/map-fields", methods=["POST"])
 def map_fields():
-    """Matches form fields against candidate profile."""
+    """
+    Matches form fields against candidate profile.
+    Uses deterministic matcher for standard fields and central AIProviderManager for custom questions.
+    Works natively without requiring the separate Node.js server on :8787.
+    """
     body = request.get_json(silent=True) or {}
     fields = body.get("fields", [])
     profile_id = body.get("profileId") or body.get("profile_id", "anass_sibbi")
+    page_context = body.get("pageContext") or {}
 
-    # 1. Try Node.js server on :8787 first if running
-    try:
-        req = urllib.request.Request(
-            "http://127.0.0.1:8787/api/map-fields",
-            data=json.dumps(body).encode("utf-8"),
-            headers={"Content-Type": "application/json"}
-        )
-        with urllib.request.urlopen(req, timeout=2.5) as resp:
-            if resp.status == 200:
-                node_data = json.loads(resp.read().decode("utf-8"))
-                return jsonify(node_data)
-    except Exception:
-        # Node server is not active on :8787, use Flask native matching engine
-        pass
-
-    # 2. Native Python matching engine
+    # 1. Load candidate profile via ClientManager / profiles
+    from services.client_manager import client_manager
     clean_id = sanitize_profile_id(profile_id)
-    filepath = os.path.join(PROFILES_DIR, f"{clean_id}.json")
-    if not os.path.exists(filepath):
-        # Fallback to first profile
-        all_json = [f for f in os.listdir(PROFILES_DIR) if f.endswith(".json") and f != "template.json"]
-        if all_json:
-            clean_id = all_json[0][:-5]
-            filepath = os.path.join(PROFILES_DIR, all_json[0])
+    client_data = client_manager.get_client(clean_id) or {}
 
     applicant = {}
-    if os.path.exists(filepath):
-        try:
-            with open(filepath, "r", encoding="utf-8") as f:
-                applicant = json.load(f).get("applicant", {})
-        except Exception:
-            pass
+    if client_data:
+        if "applicant" in client_data and isinstance(client_data["applicant"], dict):
+            applicant = client_data["applicant"]
+        else:
+            contact = client_data.get("contact", {})
+            profile_info = client_data.get("profile", {})
+            full_name = client_data.get("name") or contact.get("full_name") or ""
+            parts = full_name.split(None, 1) if full_name else ["", ""]
+            first_name = parts[0]
+            last_name = parts[1] if len(parts) > 1 else ""
 
-    # Load docs
+            applicant = {
+                "personal": {
+                    "first_name": first_name,
+                    "last_name": last_name,
+                    "full_name": full_name,
+                    "date_of_birth": contact.get("birth_date", ""),
+                    "nationality": contact.get("nationality", "Marokkanisch")
+                },
+                "contact": {
+                    "email": contact.get("email", ""),
+                    "phone": contact.get("phone", ""),
+                    "phone_display": contact.get("phone", ""),
+                    "address": {
+                        "street": contact.get("street", ""),
+                        "city": contact.get("city", ""),
+                        "postal_code": contact.get("zip", ""),
+                        "country": contact.get("country", "Deutschland")
+                    }
+                },
+                "professional_profile": {
+                    "target_profession": profile_info.get("field") or profile_info.get("target_title") or "",
+                    "skills": profile_info.get("skills") or [],
+                    "summary": profile_info.get("notes") or f"Motivierter Bewerber im Bereich {profile_info.get('field', 'Ausbildung')}."
+                }
+            }
+    else:
+        # Fallback to profiles JSON file if present
+        filepath = os.path.join(PROFILES_DIR, f"{clean_id}.json")
+        if os.path.exists(filepath):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    applicant = json.load(f).get("applicant", {})
+            except Exception:
+                pass
+
+    # Load documents
     docs = []
     pdir = get_safe_profile_dir(clean_id)
     if pdir and os.path.exists(pdir):
         for fname in os.listdir(pdir):
             docs.append({"fileName": fname, "category": "cv" if "cv" in fname.lower() else "other"})
+    if not docs and client_data.get("documents"):
+        for d in client_data["documents"]:
+            docs.append({"fileName": d.get("filename") or d.get("name", ""), "category": "cv" if d.get("is_cv") else "other"})
+
+    # Check saved corrections first
+    corrections = load_corrections()
+    domain = (body.get("domain") or "").lower().strip()
+    matching_corrections = [
+        c for c in corrections
+        if (c.get("domain") == domain or c.get("domain") == "*" or not domain)
+        and (c.get("profileId") == clean_id or c.get("profileId") == "global")
+    ]
 
     actions = []
+    unresolved = []
+
     for f in fields:
+        fid = f.get("field_id") or f.get("id")
+        fname = f.get("name") or ""
+        flabel = (f.get("label") or "").strip().lower()
+
+        # Check correction memory
+        corr = next(
+            (c for c in matching_corrections if c.get("fieldSignature") in (fid, fname) or (flabel and c.get("fieldLabel", "").lower() == flabel)),
+            None
+        )
+        if corr:
+            actions.append({
+                "field_id": fid,
+                "value": corr.get("correctionValue"),
+                "confidence": 1.0,
+                "reason": "Applied from saved correction memory",
+                "source": "correction_memory",
+                "status": "approved",
+                "is_file": False
+            })
+            continue
+
+        # Deterministic match
         matched = python_deterministic_matcher(f, applicant, docs)
         if matched:
             actions.append({
-                "field_id": f.get("field_id") or f.get("id"),
+                "field_id": fid,
                 "value": matched["value"],
                 "confidence": matched["confidence"],
                 "reason": matched["reason"],
@@ -502,8 +639,30 @@ def map_fields():
                 "status": matched["status"],
                 "is_file": matched.get("isFile", False)
             })
+        else:
+            unresolved.append(f)
 
-    return jsonify({"actions": actions, "unresolved": [], "engine": "flask_deterministic"})
+    # Use central AIProviderManager for custom / open-ended questions
+    if unresolved:
+        ai_answers = python_ai_answer_questions(unresolved, applicant, page_context)
+        for ans in ai_answers:
+            if ans.get("proposed_value") or ans.get("value"):
+                actions.append({
+                    "field_id": ans.get("field_id"),
+                    "value": ans.get("proposed_value") or ans.get("value"),
+                    "confidence": float(ans.get("confidence", 0.9)),
+                    "reason": ans.get("reason", "KI-Vorschlag basierend auf Bewerberprofil"),
+                    "source": "ai_provider_manager",
+                    "status": "review" if ans.get("review_required") else "approved",
+                    "is_file": False
+                })
+
+    return jsonify({
+        "success": True,
+        "actions": actions,
+        "unresolved": [u.get("field_id") or u.get("id") for u in unresolved if not any(a["field_id"] == (u.get("field_id") or u.get("id")) for a in actions)],
+        "engine": "central_ai_gateway"
+    })
 
 
 # --- Application Logging & Tracking ---

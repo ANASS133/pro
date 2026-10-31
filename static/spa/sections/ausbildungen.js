@@ -540,6 +540,9 @@
                 }
 
                 allFiles = payload.files;
+                window.dispatchEvent(new CustomEvent("ausbildungDatasetsChanged", {
+                    detail: { files: allFiles, updatedAt: payload.updated_at }
+                }));
                 renderGrid();
                 setStatus("", false);
 
@@ -912,12 +915,6 @@
             btnBatchMerge.addEventListener("click", runBatchMerge);
         }
 
-        // 4. Global Candidate Change Listener (from header dropdown)
-        window.addEventListener("activeClientChanged", async () => {
-            if (isVisible) {
-                await loadFiles();
-            }
-        });
 
         window.addEventListener("keydown", (e) => {
             if (e.key === "Escape" && previewModal && !previewModal.hidden) {

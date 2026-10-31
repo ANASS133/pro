@@ -246,6 +246,35 @@ class CandidateOnboardingService:
                 except Exception:
                     pass
 
+                # Automatically synchronize WhatsApp conversation relationship
+                if whatsapp:
+                    clean_wa_digits = re.sub(r"\D", "", str(whatsapp))
+                    if len(clean_wa_digits) >= 6:
+                        try:
+                            from services.whatsapp_store import whatsapp_store
+                            conv = whatsapp_store.get_conversation_by_wa_id(clean_wa_digits)
+                            if conv:
+                                whatsapp_store.update_conversation(
+                                    conv["id"],
+                                    {"client_id": client_id, "display_name": full_name}
+                                )
+                            else:
+                                whatsapp_store.get_or_create_conversation(
+                                    clean_wa_digits,
+                                    client_id=client_id,
+                                    display_name=full_name
+                                )
+                            logger.info("Synchronized WhatsApp conversation for candidate %s (%s)", client_id, clean_wa_digits)
+                        except Exception as wa_sync_err:
+                            logger.warning("WhatsApp conversation linking failed for %s: %s", client_id, wa_sync_err)
+
+                try:
+                    from services.conductor_engine import conductor_engine
+                    conductor_engine.on_client_onboarded(client_id, missing_fields=missing_fields)
+                except Exception as cond_err:
+                    logger.debug("Conductor onboarding hook skipped for %s: %s", client_id, cond_err)
+
+
                 logger.info(
                     "Successfully onboarded candidate '%s' (ID: %s) from application %s with status %s",
                     full_name,

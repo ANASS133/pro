@@ -203,10 +203,10 @@ class TestAIProviderManager(unittest.TestCase):
         self.assertIn("name", cand_default)
         self.assertIn("skills", cand_default)
 
-        # Test another candidate (mohamed_mohamed_elamrani)
-        cand_mohamed = load_candidate_info("mohamed_mohamed_elamrani")
-        self.assertIn("Mohamed", cand_mohamed["name"])
-        self.assertNotEqual(cand_mohamed["name"], "Anass Sibbi")
+        # Test another candidate (anouar_chelki)
+        cand_second = load_candidate_info("anouar_chelki")
+        self.assertIn("chelki", cand_second["name"].lower())
+        self.assertNotEqual(cand_second["name"], "Anass Sibbi")
 
         # Test non-existent candidate gracefully returns clean fallback
         cand_unknown = load_candidate_info("unknown_candidate_999")

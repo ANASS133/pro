@@ -111,6 +111,7 @@
             placeholderCounter: document.getElementById("as-placeholder-counter"),
             error: byId("error"),
             exportSelect: byId("exportSelect"),
+            clientSelect: byId("clientSelect"),
             loadExportBtn: byId("loadExportBtn"),
             sourcePrompt: byId("sourcePrompt"),
             fileInfo: byId("fileInfo"),
@@ -1204,6 +1205,122 @@
             setSaveStatus(true);
             updateReadiness();
             updateLivePreview(0, true).catch(() => {});
+        }
+
+        async function loadStudioClients() {
+            if (!els.clientSelect) return;
+            try {
+                const res = await fetch("/api/clients");
+                if (!res.ok) return;
+                const data = await res.json();
+                const clients = Array.isArray(data.clients) ? data.clients : [];
+                
+                const currentVal = els.clientSelect.value;
+                els.clientSelect.innerHTML = '<option value="">Select candidate profile...</option>';
+                clients.forEach((c) => {
+                    const opt = document.createElement("option");
+                    opt.value = c.id;
+                    const name = c.name || c.contact?.full_name || c.id;
+                    const field = c.profile?.field ? ` (${c.profile.field})` : "";
+                    opt.textContent = `${name}${field}`;
+                    els.clientSelect.appendChild(opt);
+                });
+                if (currentVal && clients.some(c => c.id === currentVal)) {
+                    els.clientSelect.value = currentVal;
+                } else if (state.clientId && clients.some(c => c.id === state.clientId)) {
+                    els.clientSelect.value = state.clientId;
+                }
+            } catch (_) {}
+        }
+
+        async function onStudioClientSelected(clientId) {
+            state.clientId = clientId || null;
+            if (!clientId) {
+                if (els.applicationSummary) els.applicationSummary.hidden = true;
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/clients/${encodeURIComponent(clientId)}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                const client = data.client || {};
+                const contact = client.contact || {};
+                const profile = client.profile || {};
+                const pkg = client.package || {};
+
+                // Update studio applicant banner if elements exist
+                if (els.summaryName) els.summaryName.textContent = client.name || contact.full_name || "Kandidat";
+                if (els.summaryBereich) els.summaryBereich.textContent = profile.field || "Allgemein";
+                if (els.summaryEmail) els.summaryEmail.textContent = contact.email || "";
+                if (els.summaryWhatsapp) els.summaryWhatsapp.textContent = contact.phone || "";
+                if (els.summaryDocuments) els.summaryDocuments.textContent = `${(client.documents || []).length} Dokumente`;
+                if (els.applicationSummary) els.applicationSummary.hidden = false;
+
+                // Candidate placeholders to inject into session
+                const candidateFields = {
+                    "Bewerber_Name": client.name || contact.full_name || "",
+                    "Bewerber_Email": contact.email || "",
+                    "Bewerber_Telefon": contact.phone || "",
+                    "Bewerber_Strasse": contact.street || "",
+                    "Bewerber_PLZ_Ort": `${contact.zip || ""} ${contact.city || ""}`.trim(),
+                    "Bewerber_Titel": profile.target_title || profile.field || "",
+                    "Bewerber_Erfahrung": profile.experience_years ? `${profile.experience_years} Jahre` : ""
+                };
+
+                // Add to state.columns if not present
+                Object.keys(candidateFields).forEach((key) => {
+                    if (!state.columns.includes(key)) {
+                        state.columns.push(key);
+                    }
+                });
+
+                // Update state.previewRows with candidate values
+                if (Array.isArray(state.previewRows)) {
+                    state.previewRows.forEach((row) => {
+                        Object.assign(row, candidateFields);
+                    });
+                }
+
+                // If active template is empty or default, provide a personalized intro
+                if (els.templateEditor) {
+                    let curText = els.templateEditor.value || "";
+                    if (!curText.includes("{{Bewerber_Name}}") && (curText === defaultTemplate || !curText.trim())) {
+                        els.templateEditor.value = `{{Bewerber_Name}}\n{{Bewerber_Strasse}}\n{{Bewerber_PLZ_Ort}}\n{{Bewerber_Telefon}} | {{Bewerber_Email}}\n\n` +
+                            `{{Unternehmen}}\n{{Strasse}}\n{{PLZ}} {{Ort}}\n\n` +
+                            `{{Ort}}, den {{heutigenDatum}}\n\n` +
+                            `Bewerbung als {{Position}}\n\n` +
+                            `Sehr geehrte Damen und Herren,\n\n` +
+                            `mit großem Interesse bewerbe ich mich bei {{Unternehmen}} auf die ausgeschriebene Position als {{Position}}.\n\n` +
+                            `Mit freundlichen Grüßen,\n{{Bewerber_Name}}`;
+                        persistActiveTemplateValue();
+                        renderTemplateList();
+                    }
+                }
+
+                renderColumns(state.columns);
+                renderPreview(state.previewRows);
+                renderPlaceholders(state.columns);
+                updateEditorStats();
+                scheduleLivePreviewUpdate();
+
+                // Sync candidate selection to active backend PDF session
+                if (state.sessionId) {
+                    fetch(`${API_BASE}/create-anschreibens/direct-jobs-bootstrap`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            session_id: state.sessionId,
+                            client_id: clientId,
+                            jobs: state.previewRows
+                        })
+                    }).catch(() => {});
+                }
+
+                showToast(`Kandidat ${client.name || clientId} für Anschreiben ausgewählt`);
+            } catch (err) {
+                showToast("Fehler beim Laden des Kandidatenprofils");
+            }
         }
 
         function buildAutoloadDisplayName(source) {
@@ -2343,6 +2460,12 @@
                 });
             }
 
+            if (els.clientSelect) {
+                els.clientSelect.addEventListener("change", (e) => {
+                    onStudioClientSelected(e.target.value).catch(() => {});
+                });
+            }
+
             if (els.extractBtn) {
                 els.extractBtn.addEventListener("click", async () => {
                     const pageStr = els.extractPageInput ? els.extractPageInput.value : "1";
@@ -2621,6 +2744,22 @@
         return {
             show() {
                 ensureInitialized();
+                loadStudioClients().catch(() => {});
+
+                // Check for direct session transferred from Search results
+                const directSessionRaw = window.sessionStorage.getItem("anschreiben:direct-session");
+                if (directSessionRaw) {
+                    try {
+                        window.sessionStorage.removeItem("anschreiben:direct-session");
+                        const directSession = JSON.parse(directSessionRaw);
+                        if (directSession && directSession.session_id) {
+                            applyLoadedSession(directSession, directSession.display_name || "Direct from Search");
+                            showToast(`⚡ ${directSession.row_count || directSession.preview?.length || 0} Stellen aus der Suche geladen`);
+                            return;
+                        }
+                    } catch (_) {}
+                }
+
                 const exportPromise = ensureExportOptionsLoaded(false)
                     .catch((error) => {
                         showInlineError(error.message || "Exportdateien konnten nicht geladen werden.");

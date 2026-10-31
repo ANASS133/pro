@@ -9,9 +9,11 @@
         { key: "google-maps", href: "/google-maps", label: "Google Maps", icon: '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle>' },
         { key: "anschreiben", href: "/create-anschreibens", label: "Anschreiben", icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>' },
         { key: "send", href: "/send-emails", label: "E-Mails senden", icon: '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline>' },
+        { key: "conductor", href: "/conductor", label: "Conductor", icon: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>' },
         { key: "dashboard", href: "/dashboard", label: "Dashboard", icon: '<rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect>' },
         { key: "supabase", href: "/supabase", label: "Supabase", icon: '<ellipse cx="12" cy="5" rx="9" ry="3"></ellipse><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>' },
         { key: "money", href: "/money", label: "Money", icon: '<line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>' },
+        { key: "whatsapp", href: "/whatsapp", label: "WhatsApp AI", icon: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>' },
     ];
 
     function getActiveKey(pathname) {
@@ -19,6 +21,8 @@
         if (path.startsWith("/ausbildungen")) return "ausbildungen";
         if (path.startsWith("/google-maps")) return "google-maps";
         if (path.startsWith("/money")) return "money";
+        if (path.startsWith("/whatsapp")) return "whatsapp";
+        if (path.startsWith("/conductor") || path.startsWith("/autopilot")) return "conductor";
         if (path.startsWith("/dashboard")) return "dashboard";
         if (path.startsWith("/supabase") || path.startsWith("/firebase")) return "supabase";
         if (path.startsWith("/send-emails")) return "send";

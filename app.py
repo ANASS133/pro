@@ -74,6 +74,8 @@ from routes import (
     clients_bp,
     supabase_onboarding_bp,
     ai_settings_bp,
+    whatsapp_bp,
+    conductor_bp,
 )
 from services.job_store import job_store
 from services.ai_provider_manager import ai_manager
@@ -89,6 +91,16 @@ app.register_blueprint(campaigns_bp)
 app.register_blueprint(clients_bp)
 app.register_blueprint(supabase_onboarding_bp)
 app.register_blueprint(ai_settings_bp)
+app.register_blueprint(whatsapp_bp)
+app.register_blueprint(conductor_bp)
+
+import sys
+from services.conductor_engine import conductor_engine
+if "unittest" not in sys.modules and "pytest" not in sys.modules and os.getenv("DISABLE_CONDUCTOR_DAEMON", "false").lower() not in ("true", "1", "yes"):
+    try:
+        conductor_engine.start()
+    except Exception as _cond_err:
+        logger.warning(f"Could not start JobScout Conductor daemon: {_cond_err}")
 
 # Reset any uncompleted jobs from previous server run
 try:
@@ -344,30 +356,80 @@ def _format_auto_export_domain_name(file_path: Path) -> str:
     return normalized or stem.replace("_", " ").strip().lower() or "unbekannt"
 
 
+_EXPORT_ROW_COUNT_CACHE: Dict[Tuple[str, int, int], int] = {}
+_EXPORT_CACHE_LOCK = threading.Lock()
+_EXPORT_FILES_LIST_CACHE: Dict[str, Any] = {"timestamp": 0.0, "result": []}
+
+
 def _count_auto_export_rows(file_path: Path) -> Optional[int]:
     try:
+        stat = file_path.stat()
+        cache_key = (str(file_path.resolve()), stat.st_mtime_ns, stat.st_size)
+        with _EXPORT_CACHE_LOCK:
+            if cache_key in _EXPORT_ROW_COUNT_CACHE:
+                return _EXPORT_ROW_COUNT_CACHE[cache_key]
+
         suffix = str(file_path.suffix or "").lower()
+        count = None
+
         if suffix == ".csv":
-            return int(pd.read_csv(file_path).shape[0])
-        if suffix in {".xlsx", ".xls"}:
-            return int(pd.read_excel(file_path).shape[0])
+            try:
+                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                    lines = sum(1 for line in f if line.strip())
+                    count = max(0, lines - 1)
+            except Exception:
+                count = int(pd.read_csv(file_path).shape[0])
+
+        elif suffix in {".xlsx", ".xls"}:
+            try:
+                import openpyxl
+                wb = openpyxl.load_workbook(file_path, read_only=True, keep_links=False)
+                sheet = wb.active
+                if sheet and sheet.max_row is not None:
+                    count = max(0, sheet.max_row - 1)
+                wb.close()
+            except Exception:
+                pass
+
+            if count is None:
+                try:
+                    df = pd.read_excel(file_path)
+                    count = int(df.shape[0])
+                except Exception:
+                    pass
+
+        if count is not None:
+            with _EXPORT_CACHE_LOCK:
+                _EXPORT_ROW_COUNT_CACHE[cache_key] = count
+            return count
+
     except Exception as exc:
         logger.warning("Could not count rows for auto extraction export %s: %s", file_path, exc)
     return None
 
 
 def _list_auto_extraction_export_files() -> List[Dict]:
+    now = time.time()
+    with _EXPORT_CACHE_LOCK:
+        if now - _EXPORT_FILES_LIST_CACHE["timestamp"] < 3.0:
+            return [dict(item) for item in _EXPORT_FILES_LIST_CACHE["result"]]
+
     exports: List[Dict] = []
     supported_suffixes = {".xlsx", ".xls", ".csv"}
 
     if not AUTO_EXTRACTION_EXPORT_DIR.exists():
         return exports
 
-    for file_path in sorted(
-        AUTO_EXTRACTION_EXPORT_DIR.iterdir(),
-        key=lambda path: path.stat().st_mtime,
-        reverse=True,
-    ):
+    try:
+        paths = sorted(
+            AUTO_EXTRACTION_EXPORT_DIR.iterdir(),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+    except Exception:
+        paths = []
+
+    for file_path in paths:
         if not file_path.is_file():
             continue
         if str(file_path.suffix or "").lower() not in supported_suffixes:
@@ -384,6 +446,10 @@ def _list_auto_extraction_export_files() -> List[Dict]:
                 "size_kb": round(file_path.stat().st_size / 1024, 1),
             }
         )
+
+    with _EXPORT_CACHE_LOCK:
+        _EXPORT_FILES_LIST_CACHE["timestamp"] = now
+        _EXPORT_FILES_LIST_CACHE["result"] = exports
 
     return exports
 
@@ -2918,6 +2984,28 @@ def ausbildungen_files_api():
     )
 
 
+@app.route("/api/ausbildungen/availability", methods=["GET", "POST"])
+def ausbildungen_availability_api():
+    from services.profession_matcher import evaluate_profession_match
+
+    export_files = _list_auto_extraction_export_files()
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        professions = data.get("professions")
+        if isinstance(professions, list):
+            results = {
+                prof: evaluate_profession_match(prof, export_files)
+                for prof in professions
+            }
+            return jsonify({"success": True, "results": results})
+        profession = data.get("profession")
+    else:
+        profession = request.args.get("profession")
+
+    result = evaluate_profession_match(str(profession or "").strip(), export_files)
+    return jsonify({"success": True, "result": result, "profession": profession})
+
+
 @app.route("/api/ausbildungen/update", methods=["POST"])
 def start_ausbildungen_update():
     data = request.get_json(silent=True) or {}
@@ -3630,10 +3718,27 @@ def load_campaign_anschreiben_editor(campaign_id: str):
 
 @app.route("/api/create-anschreibens/bootstrap", methods=["GET"])
 def create_anschreibens_bootstrap_api():
+    session_id_arg = (request.args.get("session_id") or "").strip()
     edit_campaign_id = (request.args.get("edit_campaign") or "").strip()
     autoload_source = (request.args.get("autoload") or "").strip()
     filename = (request.args.get("filename") or "").strip()
     application_id = (request.args.get("application_id") or "").strip()
+
+    if session_id_arg and session_id_arg in _pdf_sessions:
+        session_data = _pdf_sessions[session_id_arg]
+        payload = {
+            "session_id": session_id_arg,
+            "columns": session_data.get("columns", []),
+            "preview": session_data.get("rows", [])[:20],
+            "row_count": len(session_data.get("rows", [])),
+            "templates": session_data.get("templates", [""]),
+            "active_template_index": session_data.get("active_template_index", 0),
+            "filename_format": session_data.get("filename_format", "{{Unternehmen}}"),
+            "layout_options": session_data.get("layout_options", {}),
+            "client_id": session_data.get("client_id", ""),
+            "client_name": session_data.get("client_name", ""),
+        }
+        return jsonify({"success": True, "mode": "direct_session", "session": payload})
 
     if edit_campaign_id:
         payload, status_code = _build_pdf_campaign_editor_session_payload(edit_campaign_id)
@@ -3668,6 +3773,107 @@ def create_anschreibens_bootstrap_api():
             return jsonify({"success": True, "mode": "firebase_only", "session": payload})
 
     return jsonify({"success": True, "mode": "empty", "session": None})
+
+
+@app.route("/api/create-anschreibens/direct-jobs-bootstrap", methods=["POST"])
+def create_anschreibens_direct_jobs_bootstrap_api():
+    """
+    Directly transfers selected job listings from Search to Cover Letter Studio
+    without requiring manual export to Excel and re-upload.
+    Also links client candidate profile data if client_id is provided.
+    """
+    data = request.get_json(silent=True) or {}
+    raw_jobs = data.get("jobs") or []
+    client_id = str(data.get("client_id") or "").strip()
+
+    if not raw_jobs:
+        return jsonify({"success": False, "error": "Keine Stellen zur Übertragung ausgewählt."}), 400
+
+    prepared_jobs = _prepare_download_jobs(raw_jobs)
+    if not prepared_jobs:
+        prepared_jobs = []
+        for j in raw_jobs:
+            if isinstance(j, dict):
+                prepared_jobs.append({
+                    "Unternehmen": j.get("company") or j.get("Unternehmen") or "Unternehmen",
+                    "Position": j.get("title") or j.get("Position") or j.get("Titel") or "Fachkraft",
+                    "Titel": j.get("title") or j.get("Position") or j.get("Titel") or "Fachkraft",
+                    "Ort": j.get("location") or j.get("city") or j.get("Ort") or "",
+                    "E-Mail": j.get("email") or j.get("E-Mail") or "",
+                    "EMail": j.get("email") or j.get("E-Mail") or "",
+                    "Bewerbungslink": j.get("apply_url") or j.get("bewerbung_link") or j.get("url") or "",
+                    "Quelle": j.get("source") or j.get("Quelle") or "Suche",
+                })
+
+    client_name = ""
+    client_profile = None
+    if client_id:
+        from services.client_manager import client_manager
+        client_profile = client_manager.get_client(client_id)
+        if client_profile:
+            applicant = client_profile.get("applicant", {})
+            personal = applicant.get("personal", {})
+            contact = applicant.get("contact", {})
+            address = contact.get("address", {})
+            prof = applicant.get("professional_profile", {})
+
+            client_name = personal.get("full_name") or f"{personal.get('first_name', '')} {personal.get('last_name', '')}".strip()
+            applicant_street = f"{address.get('street', '')} {address.get('house_number', '')}".strip()
+            applicant_city = f"{address.get('postal_code', '')} {address.get('city', '')}".strip()
+            applicant_email = contact.get("email", "")
+            applicant_phone = contact.get("phone_display") or contact.get("phone", "")
+            applicant_title = prof.get("current_title") or prof.get("headline", "")
+
+            for r in prepared_jobs:
+                r["Bewerber_Name"] = client_name
+                r["Bewerber_Strasse"] = applicant_street
+                r["Bewerber_PLZ_Ort"] = applicant_city
+                r["Bewerber_Email"] = applicant_email
+                r["Bewerber_Telefon"] = applicant_phone
+                r["Bewerber_Titel"] = applicant_title
+
+    payload = _create_pdf_session_from_rows(prepared_jobs)
+    session_id = payload["session_id"]
+
+    if client_profile and client_name:
+        default_tpl = (
+            f"{{{{Bewerber_Name}}}}\n"
+            f"{{{{Bewerber_Strasse}}}}\n"
+            f"{{{{Bewerber_PLZ_Ort}}}}\n"
+            f"{{{{Bewerber_Email}}}} | {{{{Bewerber_Telefon}}}}\n\n"
+            f"{{{{Unternehmen}}}}\n"
+            f"{{{{Ort}}}}\n\n"
+            f"Bewerbung als {{{{Position}}}}\n\n"
+            f"Sehr geehrte Damen und Herren,\n\n"
+            f"mit großem Interesse bewerbe ich mich bei {{{{Unternehmen}}}} auf die offene Stelle als {{{{Position}}}} in {{{{Ort}}}}.\n\n"
+            f"Als engagierter Kandidat bringe ich fundierte Fachkenntnisse und Begeisterung für diesen Aufgabenbereich mit. "
+            f"Gerne möchte ich meine Fähigkeiten aktiv in Ihr Team einbringen und zum Erfolg Ihres Unternehmens beitragen.\n\n"
+            f"Über die Gelegenheit zu einem persönlichen Kennenlernen freue ich mich sehr.\n\n"
+            f"Mit freundlichen Grüßen\n\n"
+            f"{{{{Bewerber_Name}}}}"
+        )
+        if session_id in _pdf_sessions:
+            _pdf_sessions[session_id]["templates"] = [default_tpl]
+            _pdf_sessions[session_id]["template"] = default_tpl
+            _pdf_sessions[session_id]["client_id"] = client_id
+            _pdf_sessions[session_id]["client_name"] = client_name
+        payload["templates"] = [default_tpl]
+        payload["template"] = default_tpl
+
+    if session_id in _pdf_sessions:
+        _pdf_sessions[session_id]["client_id"] = client_id
+        _pdf_sessions[session_id]["client_name"] = client_name
+
+    payload["client_id"] = client_id
+    payload["client_name"] = client_name
+    payload["row_count"] = len(prepared_jobs)
+
+    return jsonify({
+        "success": True,
+        "session_id": session_id,
+        "session": payload,
+        "redirect_url": f"/create-anschreibens?session_id={session_id}",
+    })
 
 
 @app.route("/api/create-anschreibens/exports", methods=["GET"])
@@ -6481,6 +6687,19 @@ def api_search():
     search_cache["last_search_audit"] = audit
     _save_search_cache_to_disk(jobs, keyword, location, published_since)
 
+    # Save newly discovered results to corresponding Ausbildung dataset when mode is ausbildung
+    saved_dataset_file = None
+    if mode == "ausbildung" and jobs:
+        try:
+            saved_path = _save_auto_extraction_export_records(
+                jobs,
+                keyword,
+                fallback_slug="ausbildung_suche",
+            )
+            saved_dataset_file = saved_path.name if saved_path else None
+        except Exception as save_err:
+            logger.warning("Could not automatically save search results to Ausbildung dataset: %s", save_err)
+
     return jsonify(
         {
             "status": "success",
@@ -6596,6 +6815,17 @@ def api_search_stream():
                 search_cache["published_since"] = published_since
                 search_cache["last_search_audit"] = audit
                 _save_search_cache_to_disk(jobs, keyword, location, published_since)
+
+                # Save newly discovered results to corresponding Ausbildung dataset when mode is ausbildung
+                if mode == "ausbildung" and jobs:
+                    try:
+                        _save_auto_extraction_export_records(
+                            jobs,
+                            keyword,
+                            fallback_slug="ausbildung_suche",
+                        )
+                    except Exception as save_err:
+                        logger.warning("Could not automatically save stream search results to Ausbildung dataset: %s", save_err)
 
                 q.put(("complete", {
                     "status": "success",
@@ -7258,6 +7488,17 @@ def pdf_generate_pdfs():
                     )
                     continue
                 generated_files.append(str(pdf_path))
+
+                # Sync generated document to candidate dossier & autofill
+                target_client_id = session_data.get("client_id") or data.get("client_id")
+                if target_client_id:
+                    try:
+                        from services.client_manager import client_manager
+                        with open(pdf_path, "rb") as pf:
+                            client_manager.save_document(target_client_id, pf.read(), f"Anschreiben_{filename}")
+                    except Exception as sync_exc:
+                        logger.warning("Could not sync generated PDF to client %s: %s", target_client_id, sync_exc)
+
                 generated_records.append(
                     {
                         "row_index": idx,

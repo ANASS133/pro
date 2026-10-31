@@ -59,36 +59,90 @@ class ClientManager:
         self.autofill_dir = Path(autofill_dir)
         self.clients_dir.mkdir(parents=True, exist_ok=True)
         self.autofill_dir.mkdir(parents=True, exist_ok=True)
+        self._profile_cache: Dict[str, Tuple[int, Dict[str, Any]]] = {}
         self._bootstrap_existing_profiles()
 
-    def _bootstrap_existing_profiles(self):
-        """Syncs existing profiles from ai-job-autofill into data/clients/ if missing."""
+    def _load_profile_cached(self, profile_path: Path) -> Optional[Dict[str, Any]]:
+        if not profile_path.exists():
+            return None
+        try:
+            mtime_ns = profile_path.stat().st_mtime_ns
+            cached = self._profile_cache.get(str(profile_path))
+            if cached and cached[0] == mtime_ns:
+                return cached[1]
+            with open(profile_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self._profile_cache[str(profile_path)] = (mtime_ns, data)
+            return data
+        except Exception:
+            return None
+
+    def sync_all_profiles_with_autofill(self):
+        """
+        Bi-directionally synchronizes data/clients/ and ai-job-autofill/server/profiles/.
+        ClientManager is the single source of truth:
+        1. Ensures all data/clients dossiers exist in autofill profiles dir.
+        2. Ensures all documents in data/clients/{id}/documents/ are mirrored to autofill/{id}/.
+        3. Imports any profiles found only in autofill into data/clients/.
+        """
         if not self.autofill_dir.exists():
-            return
+            self.autofill_dir.mkdir(parents=True, exist_ok=True)
+
+        # 1. Mirror from clients_dir -> autofill_dir
+        for cdir in self.clients_dir.iterdir():
+            if not cdir.is_dir():
+                continue
+            cid = cdir.name
+            profile_file = cdir / "profile.json"
+            if profile_file.exists():
+                af_target = self.autofill_dir / f"{cid}.json"
+                if not af_target.exists() or af_target.stat().st_mtime_ns < profile_file.stat().st_mtime_ns:
+                    try:
+                        shutil.copy2(profile_file, af_target)
+                    except Exception:
+                        pass
+
+            doc_dir = cdir / "documents"
+            if doc_dir.is_dir():
+                af_doc_dir = self.autofill_dir / cid
+                af_doc_dir.mkdir(parents=True, exist_ok=True)
+                for doc in doc_dir.iterdir():
+                    if doc.is_file():
+                        af_doc_target = af_doc_dir / doc.name
+                        if not af_doc_target.exists() or af_doc_target.stat().st_mtime_ns < doc.stat().st_mtime_ns:
+                            try:
+                                shutil.copy2(doc, af_doc_target)
+                            except Exception:
+                                pass
+
+        # 2. Mirror from autofill_dir -> clients_dir (if missing)
         for item in self.autofill_dir.glob("*.json"):
             if item.name == "template.json":
                 continue
-            client_id = item.stem
-            client_folder = self.clients_dir / client_id
-            client_folder.mkdir(parents=True, exist_ok=True)
+            cid = item.stem
+            client_folder = self.clients_dir / cid
             target_profile = client_folder / "profile.json"
             if not target_profile.exists():
+                client_folder.mkdir(parents=True, exist_ok=True)
                 try:
                     shutil.copy2(item, target_profile)
                 except Exception as exc:
-                    logger.warning("Failed to bootstrap client %s: %s", client_id, exc)
+                    logger.warning("Failed to bootstrap client %s: %s", cid, exc)
 
-            # Copy documents folder if exists
-            source_doc_dir = self.autofill_dir / client_id
-            if source_doc_dir.is_dir():
+            af_doc_dir = self.autofill_dir / cid
+            if af_doc_dir.is_dir():
                 target_docs = client_folder / "documents"
                 target_docs.mkdir(parents=True, exist_ok=True)
-                for doc in source_doc_dir.glob("*"):
+                for doc in af_doc_dir.glob("*"):
                     if doc.is_file() and not (target_docs / doc.name).exists():
                         try:
                             shutil.copy2(doc, target_docs / doc.name)
                         except Exception:
                             pass
+
+    def _bootstrap_existing_profiles(self):
+        """Syncs existing profiles from ai-job-autofill into data/clients/ and vice-versa."""
+        self.sync_all_profiles_with_autofill()
 
     def get_active_client_id(self) -> str:
         """Returns the ID of the currently active client."""
@@ -152,24 +206,20 @@ class ClientManager:
                 "created_at": datetime.fromtimestamp(cdir.stat().st_ctime, timezone.utc).isoformat()
             }
 
-            if profile_path.exists():
-                try:
-                    with open(profile_path, "r", encoding="utf-8") as f:
-                        pdata = json.load(f)
-                    applicant = pdata.get("applicant", {})
-                    personal = applicant.get("personal", {})
-                    contact = applicant.get("contact", {})
-                    prof = applicant.get("professional_profile", {})
+            pdata = self._load_profile_cached(profile_path)
+            if pdata:
+                applicant = pdata.get("applicant", {})
+                personal = applicant.get("personal", {})
+                contact = applicant.get("contact", {})
+                prof = applicant.get("professional_profile", {})
 
-                    full_name = personal.get("full_name") or f"{personal.get('first_name', '')} {personal.get('last_name', '')}".strip()
-                    if full_name:
-                        meta["name"] = full_name
-                    meta["email"] = contact.get("email", "")
-                    meta["phone"] = contact.get("phone_display") or contact.get("phone", "")
-                    meta["city"] = contact.get("address", {}).get("city", "")
-                    meta["title"] = prof.get("current_title") or prof.get("headline", "")
-                except Exception:
-                    pass
+                full_name = personal.get("full_name") or f"{personal.get('first_name', '')} {personal.get('last_name', '')}".strip()
+                if full_name:
+                    meta["name"] = full_name
+                meta["email"] = contact.get("email", "")
+                meta["phone"] = contact.get("phone_display") or contact.get("phone", "")
+                meta["city"] = contact.get("address", {}).get("city", "")
+                meta["title"] = prof.get("current_title") or prof.get("headline", "")
 
             # Count documents
             doc_dir = cdir / "documents"
@@ -196,6 +246,10 @@ class ClientManager:
             else:
                 return None
 
+        data = self._load_profile_cached(profile_path)
+        if data is not None:
+            return data
+
         try:
             with open(profile_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -203,6 +257,10 @@ class ClientManager:
         except Exception as exc:
             logger.error("Error reading client %s: %s", clean_id, exc)
             return None
+
+    def get_client_profile(self, client_id: str) -> Optional[Dict[str, Any]]:
+        """Alias for get_client."""
+        return self.get_client(client_id)
 
     def save_client(self, client_id: str, profile_data: Dict[str, Any]) -> bool:
         """Saves a client profile and synchronizes it with the autofill directory."""
@@ -217,6 +275,8 @@ class ClientManager:
         try:
             with open(profile_path, "w", encoding="utf-8") as f:
                 json.dump(profile_data, f, ensure_ascii=False, indent=2)
+
+            self._profile_cache[str(profile_path)] = (profile_path.stat().st_mtime_ns, profile_data)
 
             # Mirror to ai-job-autofill/server/profiles/
             af_path = self.autofill_dir / f"{clean_id}.json"
@@ -325,6 +385,104 @@ class ClientManager:
             "size": len(file_bytes),
             "download_url": f"/api/clients/{clean_id}/documents/{clean_filename}"
         }
+
+    def delete_document(self, client_id: str, filename: str) -> bool:
+        """Deletes a document from the client dossier and mirrors deletion in autofill directory."""
+        clean_id = _slugify(client_id)
+        clean_filename = Path(filename).name
+        deleted = False
+
+        target_file = self.clients_dir / clean_id / "documents" / clean_filename
+        if target_file.exists():
+            try:
+                target_file.unlink()
+                deleted = True
+            except Exception as e:
+                logger.error("Failed to delete %s: %s", target_file, e)
+
+        af_target = self.autofill_dir / clean_id / clean_filename
+        if af_target.exists():
+            try:
+                af_target.unlink()
+                deleted = True
+            except Exception as e:
+                logger.error("Failed to delete %s: %s", af_target, e)
+
+        return deleted
+
+    def find_client_by_phone(self, phone: str) -> Optional[Dict[str, Any]]:
+        """
+        Finds a client by matching normalized phone digits against client dossiers.
+        """
+        if not phone:
+            return None
+        clean_digits = re.sub(r"\D", "", str(phone))
+        if len(clean_digits) < 6:
+            return None
+
+        search_suffix = clean_digits[-8:] if len(clean_digits) >= 8 else clean_digits
+
+        for client_info in self.list_clients():
+            cid = client_info["id"]
+            profile = self.get_client(cid)
+            if not profile:
+                continue
+
+            contact = profile.get("applicant", {}).get("contact", {})
+            phone_candidates = [
+                contact.get("phone", ""),
+                contact.get("phone_display", ""),
+                contact.get("whatsapp", ""),
+                client_info.get("phone", "")
+            ]
+
+            for cand in phone_candidates:
+                if not cand:
+                    continue
+                cand_digits = re.sub(r"\D", "", str(cand))
+                if cand_digits and (cand_digits == clean_digits or cand_digits.endswith(search_suffix) or clean_digits.endswith(cand_digits[-8:])):
+                    return {
+                        "id": cid,
+                        "name": client_info.get("name", cid),
+                        "profile": profile
+                    }
+        return None
+
+    def sync_verified_whatsapp(self, client_id: str, wa_id: str) -> bool:
+        """
+        Synchronizes verified WhatsApp number to candidate dossier and Supabase.
+        """
+        clean_id = _slugify(client_id)
+        profile = self.get_client(clean_id)
+        if not profile:
+            return False
+
+        clean_wa = re.sub(r"\D", "", str(wa_id))
+        if not clean_wa:
+            return False
+
+        contact = profile.setdefault("applicant", {}).setdefault("contact", {})
+        contact["phone"] = clean_wa
+        contact["whatsapp"] = clean_wa
+        contact["phone_display"] = f"+{clean_wa}"
+
+        saved = self.save_client(clean_id, profile)
+
+        # Sync to Supabase if linked application exists
+        supabase_app_id = (
+            profile.get("metadata", {}).get("supabase_application_id")
+            or profile.get("applicant", {}).get("metadata", {}).get("supabase_application_id")
+        )
+        if supabase_app_id:
+            try:
+                from services.supabase_service import supabase_service
+                supabase_service.update_application(supabase_app_id, {"whatsapp": f"+{clean_wa}"})
+                logger.info("Synchronized verified WhatsApp +%s to Supabase app %s", clean_wa, supabase_app_id)
+            except Exception as exc:
+                logger.warning("Could not sync verified WhatsApp to Supabase app %s: %s", supabase_app_id, exc)
+
+        return saved
+
 
     def ingest_cv(self, pdf_bytes: bytes, filename: str = "Lebenslauf.pdf", client_id: Optional[str] = None) -> Dict[str, Any]:
         """

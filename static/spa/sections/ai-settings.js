@@ -79,7 +79,7 @@
                 }
             } catch (err) {
                 console.error("Failed to load AI settings:", err);
-                showAlert("Fehler beim Laden der AI-Einstellungen.", false);
+                showAlert("Error loading AI settings.", false);
             }
         }
 
@@ -97,11 +97,11 @@
             if (openaiKeyInput) {
                 openaiKeyInput.value = "";
                 openaiKeyInput.placeholder = settings.openai_has_key
-                    ? `${settings.openai_masked_key} (Gespeichert)`
+                    ? `${settings.openai_masked_key} (Saved)`
                     : "sk-proj-...";
             }
             if (openaiKeyBadge) {
-                openaiKeyBadge.textContent = settings.openai_has_key ? "Gespeichert & Aktiv" : "Nicht konfiguriert";
+                openaiKeyBadge.textContent = settings.openai_has_key ? "Saved & Active" : "Not configured";
                 openaiKeyBadge.className = `ai-status-pill ${settings.openai_has_key ? "pill-active" : "pill-inactive"}`;
             }
             if (openaiModelSelect && settings.openai_model) {
@@ -110,19 +110,19 @@
             updateStatusBadge(openaiStatusBadge, settings.openai_status);
             if (openaiLastTested) {
                 openaiLastTested.textContent = settings.last_tested_openai
-                    ? new Date(settings.last_tested_openai).toLocaleString("de-DE")
-                    : "Noch nicht getestet";
+                    ? new Date(settings.last_tested_openai).toLocaleString("en-US")
+                    : "Not tested yet";
             }
 
             // 3. Gemini Section
             if (geminiKeyInput) {
                 geminiKeyInput.value = "";
                 geminiKeyInput.placeholder = settings.gemini_has_key
-                    ? `${settings.gemini_masked_key} (Gespeichert)`
+                    ? `${settings.gemini_masked_key} (Saved)`
                     : "AIzaSy...";
             }
             if (geminiKeyBadge) {
-                geminiKeyBadge.textContent = settings.gemini_has_key ? "Gespeichert & Aktiv" : "Nicht konfiguriert";
+                geminiKeyBadge.textContent = settings.gemini_has_key ? "Saved & Active" : "Not configured";
                 geminiKeyBadge.className = `ai-status-pill ${settings.gemini_has_key ? "pill-active" : "pill-inactive"}`;
             }
             if (geminiModelSelect && settings.gemini_model) {
@@ -131,13 +131,13 @@
             updateStatusBadge(geminiStatusBadge, settings.gemini_status);
             if (geminiLastTested) {
                 geminiLastTested.textContent = settings.last_tested_gemini
-                    ? new Date(settings.last_tested_gemini).toLocaleString("de-DE")
-                    : "Noch nicht getestet";
+                    ? new Date(settings.last_tested_gemini).toLocaleString("en-US")
+                    : "Not tested yet";
             }
 
             // 4. Update usage summary widget
             if (usageProviderEl) {
-                const provLabels = { openai: "Official OpenAI (GPT Luna)", gemini: "Google Gemini", offline: "Lokale Heuristik (Offline)" };
+                const provLabels = { openai: "Official OpenAI (GPT Luna)", gemini: "Google Gemini", offline: "Local Heuristics (Offline)" };
                 usageProviderEl.textContent = provLabels[settings.primary_provider] || settings.primary_provider;
             }
             if (usageModelEl) {
@@ -150,13 +150,13 @@
             badgeEl.className = "ai-status-pill";
             if (status === "connected") {
                 badgeEl.classList.add("pill-connected");
-                badgeEl.textContent = "Verbunden ✓";
+                badgeEl.textContent = "Connected ✓";
             } else if (status === "error") {
                 badgeEl.classList.add("pill-error");
-                badgeEl.textContent = "Fehler ✕";
+                badgeEl.textContent = "Error ✕";
             } else {
                 badgeEl.classList.add("pill-untested");
-                badgeEl.textContent = "Ungetestet";
+                badgeEl.textContent = "Untested";
             }
         }
 
@@ -191,7 +191,7 @@
             if (usageCacheRateEl) {
                 const totalReqs = (usage.total_requests || 0) + (usage.cache_hits || 0);
                 const rate = totalReqs > 0 ? Math.round(((usage.cache_hits || 0) / totalReqs) * 100) : 0;
-                usageCacheRateEl.textContent = `${rate}% (0-Kosten)`;
+                usageCacheRateEl.textContent = `${rate}% (Zero Cost)`;
             }
 
             // Daily usage breakdown
@@ -199,7 +199,7 @@
                 const daily = usage.daily_breakdown || {};
                 const keys = Object.keys(daily).sort().reverse().slice(0, 7);
                 if (keys.length === 0) {
-                    usageDailyTableBody.innerHTML = '<tr><td colspan="5" class="ai-table-empty">Noch keine API-Aufrufe verzeichnet.</td></tr>';
+                    usageDailyTableBody.innerHTML = '<tr><td colspan="5" class="ai-table-empty">No API calls recorded yet.</td></tr>';
                 } else {
                     usageDailyTableBody.innerHTML = keys.map(day => {
                         const row = daily[day];
@@ -223,7 +223,7 @@
             openaiToggleBtn.addEventListener("click", () => {
                 const isPassword = openaiKeyInput.type === "password";
                 openaiKeyInput.type = isPassword ? "text" : "password";
-                openaiToggleBtn.textContent = isPassword ? "Verbergen" : "Anzeigen";
+                openaiToggleBtn.textContent = isPassword ? "Hide" : "Show";
             });
         }
 
@@ -231,7 +231,7 @@
             geminiToggleBtn.addEventListener("click", () => {
                 const isPassword = geminiKeyInput.type === "password";
                 geminiKeyInput.type = isPassword ? "text" : "password";
-                geminiToggleBtn.textContent = isPassword ? "Verbergen" : "Anzeigen";
+                geminiToggleBtn.textContent = isPassword ? "Hide" : "Show";
             });
         }
 
@@ -247,7 +247,7 @@
 
                 try {
                     openaiSaveBtn.disabled = true;
-                    openaiSaveBtn.textContent = "Speichern...";
+                    openaiSaveBtn.textContent = "Saving...";
                     const res = await fetch("/api/ai/settings", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -255,16 +255,16 @@
                     });
                     const data = await res.json();
                     if (data.success) {
-                        showAlert("OpenAI-Konfiguration erfolgreich aktualisiert!");
+                        showAlert("OpenAI configuration updated successfully!");
                         if (data.settings) renderSettings(data.settings);
                     } else {
-                        showAlert(`Fehler: ${data.error || "Speichern fehlgeschlagen"}`, false);
+                        showAlert(`Error: ${data.error || "Failed to save"}`, false);
                     }
                 } catch (err) {
-                    showAlert(`Netzwerkfehler: ${err.message}`, false);
+                    showAlert(`Network error: ${err.message}`, false);
                 } finally {
                     openaiSaveBtn.disabled = false;
-                    openaiSaveBtn.textContent = "OpenAI-Einstellungen Speichern";
+                    openaiSaveBtn.textContent = "Save OpenAI Settings";
                 }
             });
         }
@@ -275,8 +275,8 @@
                 const testKey = openaiKeyInput && openaiKeyInput.value.trim() ? openaiKeyInput.value.trim() : undefined;
                 try {
                     openaiTestBtn.disabled = true;
-                    openaiTestBtn.textContent = "Prüfe Verbindung...";
-                    if (openaiStatusMsg) openaiStatusMsg.textContent = "Verbindung wird ohne Inferenzkosten getestet...";
+                    openaiTestBtn.textContent = "Testing connection...";
+                    if (openaiStatusMsg) openaiStatusMsg.textContent = "Testing connection with zero inference cost...";
 
                     const res = await fetch("/api/ai/test-connection", {
                         method: "POST",
@@ -285,20 +285,20 @@
                     });
                     const data = await res.json();
                     if (data.success && data.status === "connected") {
-                        showAlert("OpenAI-Verbindung erfolgreich hergestellt! (0 Tokens verbraucht)");
+                        showAlert("OpenAI connection successful! (0 tokens used)");
                         if (openaiStatusBadge) updateStatusBadge(openaiStatusBadge, "connected");
-                        if (openaiStatusMsg) openaiStatusMsg.textContent = data.message || "Verbindung aktiv und einsatzbereit.";
-                        if (openaiLastTested) openaiLastTested.textContent = new Date().toLocaleString("de-DE");
+                        if (openaiStatusMsg) openaiStatusMsg.textContent = data.message || "Connection active and ready.";
+                        if (openaiLastTested) openaiLastTested.textContent = new Date().toLocaleString("en-US");
                     } else {
-                        showAlert(`OpenAI-Verbindungsfehler: ${data.error || "Keine Antwort"}`, false);
+                        showAlert(`OpenAI connection error: ${data.error || "No response"}`, false);
                         if (openaiStatusBadge) updateStatusBadge(openaiStatusBadge, "error");
-                        if (openaiStatusMsg) openaiStatusMsg.textContent = data.error || "Authentifizierung fehlgeschlagen.";
+                        if (openaiStatusMsg) openaiStatusMsg.textContent = data.error || "Authentication failed.";
                     }
                 } catch (err) {
-                    showAlert(`Test fehlgeschlagen: ${err.message}`, false);
+                    showAlert(`Test failed: ${err.message}`, false);
                 } finally {
                     openaiTestBtn.disabled = false;
-                    openaiTestBtn.textContent = "Verbindung testen (0 Kosten)";
+                    openaiTestBtn.textContent = "Test Connection (0 Cost)";
                 }
             });
         }
@@ -315,7 +315,7 @@
 
                 try {
                     geminiSaveBtn.disabled = true;
-                    geminiSaveBtn.textContent = "Speichern...";
+                    geminiSaveBtn.textContent = "Saving...";
                     const res = await fetch("/api/ai/settings", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -323,16 +323,16 @@
                     });
                     const data = await res.json();
                     if (data.success) {
-                        showAlert("Google Gemini-Konfiguration erfolgreich aktualisiert!");
+                        showAlert("Google Gemini configuration updated successfully!");
                         if (data.settings) renderSettings(data.settings);
                     } else {
-                        showAlert(`Fehler: ${data.error || "Speichern fehlgeschlagen"}`, false);
+                        showAlert(`Error: ${data.error || "Failed to save"}`, false);
                     }
                 } catch (err) {
-                    showAlert(`Netzwerkfehler: ${err.message}`, false);
+                    showAlert(`Network error: ${err.message}`, false);
                 } finally {
                     geminiSaveBtn.disabled = false;
-                    geminiSaveBtn.textContent = "Gemini-Einstellungen Speichern";
+                    geminiSaveBtn.textContent = "Save Gemini Settings";
                 }
             });
         }
@@ -343,8 +343,8 @@
                 const testKey = geminiKeyInput && geminiKeyInput.value.trim() ? geminiKeyInput.value.trim() : undefined;
                 try {
                     geminiTestBtn.disabled = true;
-                    geminiTestBtn.textContent = "Prüfe Verbindung...";
-                    if (geminiStatusMsg) geminiStatusMsg.textContent = "Verbindung wird getestet...";
+                    geminiTestBtn.textContent = "Testing connection...";
+                    if (geminiStatusMsg) geminiStatusMsg.textContent = "Testing connection...";
 
                     const res = await fetch("/api/ai/test-connection", {
                         method: "POST",
@@ -353,20 +353,20 @@
                     });
                     const data = await res.json();
                     if (data.success && data.status === "connected") {
-                        showAlert("Google Gemini API erfolgreich verbunden!");
+                        showAlert("Google Gemini API connected successfully!");
                         if (geminiStatusBadge) updateStatusBadge(geminiStatusBadge, "connected");
-                        if (geminiStatusMsg) geminiStatusMsg.textContent = data.message || "Verbindung aktiv.";
-                        if (geminiLastTested) geminiLastTested.textContent = new Date().toLocaleString("de-DE");
+                        if (geminiStatusMsg) geminiStatusMsg.textContent = data.message || "Connection active.";
+                        if (geminiLastTested) geminiLastTested.textContent = new Date().toLocaleString("en-US");
                     } else {
-                        showAlert(`Gemini-Verbindungsfehler: ${data.error || "Keine Antwort"}`, false);
+                        showAlert(`Gemini connection error: ${data.error || "No response"}`, false);
                         if (geminiStatusBadge) updateStatusBadge(geminiStatusBadge, "error");
-                        if (geminiStatusMsg) geminiStatusMsg.textContent = data.error || "Verbindung fehlgeschlagen.";
+                        if (geminiStatusMsg) geminiStatusMsg.textContent = data.error || "Connection failed.";
                     }
                 } catch (err) {
-                    showAlert(`Test fehlgeschlagen: ${err.message}`, false);
+                    showAlert(`Test failed: ${err.message}`, false);
                 } finally {
                     geminiTestBtn.disabled = false;
-                    geminiTestBtn.textContent = "Verbindung testen";
+                    geminiTestBtn.textContent = "Test Connection";
                 }
             });
         }
@@ -384,11 +384,11 @@
                     });
                     const data = await res.json();
                     if (data.success) {
-                        showAlert(`Primärer AI-Provider gewechselt auf: ${prov.toUpperCase()}`);
+                        showAlert(`Primary AI provider changed to: ${prov.toUpperCase()}`);
                         if (data.settings) renderSettings(data.settings);
                     }
                 } catch (err) {
-                    showAlert(`Fehler beim Wechseln: ${err.message}`, false);
+                    showAlert(`Error switching provider: ${err.message}`, false);
                 }
             });
         });
@@ -404,10 +404,10 @@
                     });
                     const data = await res.json();
                     if (data.success) {
-                        showAlert(`Gemini-Fallback ${fallbackToggle.checked ? "aktiviert" : "deaktiviert"}.`);
+                        showAlert(`Gemini fallback ${fallbackToggle.checked ? "enabled" : "disabled"}.`);
                     }
                 } catch (err) {
-                    showAlert(`Fehler: ${err.message}`, false);
+                    showAlert(`Error: ${err.message}`, false);
                 }
             });
         }
@@ -415,18 +415,18 @@
         // Reset Cache
         if (btnResetCache) {
             btnResetCache.addEventListener("click", async () => {
-                if (!confirm("Möchten Sie den Antwort-Cache wirklich leeren? Zukünftige identische Anfragen werden erneut an die API gesendet.")) {
+                if (!confirm("Are you sure you want to clear the AI response cache? Subsequent identical prompts will be sent to the API again.")) {
                     return;
                 }
                 try {
                     const res = await fetch("/api/ai/reset-cache", { method: "POST" });
                     const data = await res.json();
                     if (data.success) {
-                        showAlert("KI-Cache erfolgreich geleert!");
+                        showAlert("AI cache cleared successfully!");
                         fetchUsage();
                     }
                 } catch (err) {
-                    showAlert("Fehler beim Leeren des Caches", false);
+                    showAlert("Error clearing cache", false);
                 }
             });
         }
@@ -435,7 +435,7 @@
         if (btnRefreshUsage) {
             btnRefreshUsage.addEventListener("click", () => {
                 fetchUsage();
-                showAlert("Nutzungsdaten aktualisiert.");
+                showAlert("Usage metrics refreshed.");
             });
         }
 

@@ -249,6 +249,9 @@
                 if (exportBtn) {
                     exportBtn.style.display = "none";
                 }
+                if (ui.generateCoverLettersBtn) {
+                    ui.generateCoverLettersBtn.style.display = "none";
+                }
 
                 if (ui.loadingEl) {
                     ui.loadingEl.style.display = "none";
@@ -380,10 +383,12 @@
                 ui.listEl.innerHTML = '<div class="job-item">No matching job listings found for these search criteria gefunden.</div>';
                 ui.autoBtn.style.display = "none";
                 if (exportBtn) exportBtn.style.display = "none";
+                if (ui.generateCoverLettersBtn) ui.generateCoverLettersBtn.style.display = "none";
                 return;
             }
 
             ui.autoBtn.style.display = "inline-flex";
+            if (ui.generateCoverLettersBtn) ui.generateCoverLettersBtn.style.display = "inline-flex";
 
             // Update filter bar counts
             const counts = { all: ui.lastJobs.length, email: 0, form: 0, both: 0, missing: 0 };
@@ -465,6 +470,7 @@
                 }
 
                 const aiButtonsHtml = `
+                    <button type="button" class="job-link job-single-anschreiben-btn" data-index="${idx}" title="⚡ Direktes Anschreiben für diese Stelle im Cover Letter Studio erstellen">⚡ Anschreiben</button>
                     <button type="button" class="job-link job-vibe-btn" data-company="${company}" data-title="${title}" title="Unternehmenskultur, Vibe & Du/Sie Formel prüfen (~$0.00001)">🧭 Vibe</button>
                     <button type="button" class="job-link job-heatmap-btn" data-company="${company}" data-title="${title}" title="Visual ATS Match & Skill Heatmap anzeigen (~$0.00002)">📊 Heatmap</button>
                 `;
@@ -506,13 +512,18 @@
 
                 return `
                     <article class="job-item">
-                        <div class="job-item-header">
-                            <h4 class="job-title">${title}</h4>
-                            <div class="job-badges-wrap">
-                                ${sourceBadge}
-                                ${oppBadge}
-                                ${catBadge}
-                                ${contactBadge}
+                        <div class="job-item-header" style="display:flex; align-items:flex-start; gap:10px;">
+                            <input type="checkbox" class="job-select-checkbox" data-index="${idx}" title="Select for cover letter generation" style="margin-top:5px; width:17px; height:17px; cursor:pointer; accent-color:#6366f1;">
+                            <div style="flex:1;">
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+                                    <h4 class="job-title" style="margin:0;">${title}</h4>
+                                    <div class="job-badges-wrap">
+                                        ${sourceBadge}
+                                        ${oppBadge}
+                                        ${catBadge}
+                                        ${contactBadge}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div class="job-meta">
@@ -535,6 +546,7 @@
             ui.metaEl.textContent = "";
             ui.listEl.innerHTML = "";
             ui.autoBtn.style.display = "none";
+            if (ui.generateCoverLettersBtn) ui.generateCoverLettersBtn.style.display = "none";
             ui.errorEl.textContent = message || "Suche fehlgeschlagen.";
             ui.errorEl.style.display = "block";
         }
@@ -734,6 +746,58 @@
             }
         }
 
+        async function transferJobsToCoverLetterStudio(ui, jobsToTransfer) {
+            const jobs = Array.isArray(jobsToTransfer) && jobsToTransfer.length > 0
+                ? jobsToTransfer
+                : (ui.lastJobs || []);
+
+            if (!jobs.length) {
+                showError(ui, "Keine Stellenanzeigen zum Übertragen vorhanden.");
+                return;
+            }
+
+            const btn = ui.generateCoverLettersBtn;
+            const originalText = btn ? btn.textContent : "";
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = `⚡ Übertrage ${jobs.length} Stellen...`;
+            }
+
+            try {
+                const response = await fetch("/api/create-anschreibens/direct-jobs-bootstrap", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        jobs: jobs,
+                        source_label: "JobScout Suche"
+                    })
+                });
+
+                const data = await response.json();
+                if (!response.ok || !data.success || !data.session) {
+                    throw new Error(data.error || "Fehler beim Vorbereiten der Stellen für das Cover Letter Studio");
+                }
+
+                // Store direct session for Cover Letter Studio to adopt seamlessly
+                window.sessionStorage.setItem("anschreiben:direct-session", JSON.stringify(data.session));
+
+                // Switch section to Cover Letter Studio
+                const studioLink = document.querySelector('[data-section-link="create-anschreibens"]');
+                if (studioLink) {
+                    studioLink.click();
+                } else {
+                    window.location.href = "/create-anschreibens";
+                }
+            } catch (err) {
+                showError(ui, err.message || "Übertragung ins Cover Letter Studio fehlgeschlagen.");
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                }
+            }
+        }
+
         async function runInlineSearch(ui) {
             const keyword = ui.keywordEl.value.trim();
             const location = ui.locationEl.value.trim();
@@ -924,6 +988,7 @@
             continueBtn: document.getElementById("continue_btn_1"),
             downloadBtn: document.getElementById("download_btn_1"),
             anschreibenBtn: document.getElementById("anschreiben_btn_1"),
+            generateCoverLettersBtn: document.getElementById("btn_generate_cover_letters_1"),
             filterBar: document.getElementById("results_filter_bar_1"),
             activeFilter: "all",
             lastJobs: [],
@@ -1028,6 +1093,26 @@
                 window.location.href = data.redirect_url || "/create-anschreibens?autoload=auto";
             }
         });
+
+        if (searchUi1.generateCoverLettersBtn) {
+            searchUi1.generateCoverLettersBtn.addEventListener("click", async () => {
+                const checkedBoxes = Array.from(searchUi1.listEl.querySelectorAll(".job-select-checkbox:checked"));
+                let selectedJobs = [];
+                if (checkedBoxes.length > 0) {
+                    selectedJobs = checkedBoxes.map((cb) => {
+                        const idx = parseInt(cb.dataset.index, 10);
+                        return searchUi1.lastJobs[idx];
+                    }).filter(Boolean);
+                } else {
+                    const activeFilter = searchUi1.activeFilter || "all";
+                    selectedJobs = searchUi1.lastJobs.filter((job) => {
+                        if (activeFilter === "all") return true;
+                        return getJobMethodCategory(job) === activeFilter;
+                    });
+                }
+                await transferJobsToCoverLetterStudio(searchUi1, selectedJobs);
+            });
+        }
 
         if (searchUi2) {
             searchUi2.form.addEventListener("submit", async (event) => {
@@ -1449,6 +1534,25 @@
                     `;
                 } catch (err) {
                     panel.innerHTML = `<span style="color:#ef4444;">${escapeHtml(err.message)}</span>`;
+                }
+            });
+
+            // Single Job "⚡ Anschreiben" button handler
+            ui.listEl.addEventListener("click", async (e) => {
+                const btn = e.target.closest(".job-single-anschreiben-btn");
+                if (!btn) return;
+                const idx = parseInt(btn.dataset.index, 10);
+                const job = ui.lastJobs && ui.lastJobs[idx];
+                if (!job) return;
+
+                const orig = btn.textContent;
+                btn.disabled = true;
+                btn.textContent = "⚡ Übertrage...";
+                try {
+                    await transferJobsToCoverLetterStudio(ui, [job]);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = orig;
                 }
             });
         }

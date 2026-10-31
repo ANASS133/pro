@@ -8,6 +8,8 @@ from .campaigns import campaigns_bp
 from .clients import clients_bp
 from .supabase_onboarding import supabase_onboarding_bp
 from .ai_settings import ai_settings_bp
+from .whatsapp import whatsapp_bp
+from .conductor import conductor_bp
 
 __all__ = [
     "health_bp",
@@ -19,5 +21,7 @@ __all__ = [
     "clients_bp",
     "supabase_onboarding_bp",
     "ai_settings_bp",
+    "whatsapp_bp",
+    "conductor_bp",
 ]
 

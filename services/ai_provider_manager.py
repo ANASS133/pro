@@ -107,15 +107,26 @@ class AIProviderManager:
         # Environment variable overrides
         if os.environ.get("OPENAI_API_KEY"):
             defaults["openai_api_key"] = os.environ.get("OPENAI_API_KEY", "").strip()
-        if os.environ.get("OPENAI_MODEL"):
-            defaults["openai_model"] = os.environ.get("OPENAI_MODEL", "").strip()
-        if os.environ.get("GEMINI_API_KEY"):
-            defaults["gemini_api_key"] = os.environ.get("GEMINI_API_KEY", "").strip()
+        # Import from ai-job-autofill/server/.env if openai_api_key is still empty
+        if not defaults["openai_api_key"]:
+            autofill_env = BASE_DIR / "ai-job-autofill" / "server" / ".env"
+            if autofill_env.exists():
+                try:
+                    with open(autofill_env, "r", encoding="utf-8") as f:
+                        for line in f:
+                            line = line.strip()
+                            if line.startswith("OPENAI_API_KEY=") and not line.startswith("#"):
+                                val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                                if val and not val.startswith("replace_with"):
+                                    defaults["openai_api_key"] = val
+                                    break
+                except Exception as e:
+                    logger.debug("Could not read autofill .env: %s", e)
 
         self.config = defaults
 
     def save_config(self, updates: Dict[str, Any]) -> Dict[str, Any]:
-        """Saves configuration updates safely to disk."""
+        """Saves configuration updates safely to disk and unifies across all modules."""
         with self.lock:
             for k, v in updates.items():
                 if k in self.config:
@@ -138,6 +149,29 @@ class AIProviderManager:
                 os.environ["OPENAI_MODEL"] = self.config["openai_model"]
             if self.config.get("gemini_api_key"):
                 os.environ["GEMINI_API_KEY"] = self.config["gemini_api_key"]
+
+            # Synchronize with Autofill server .env so both Node and Python read identical keys
+            if self.config.get("openai_api_key"):
+                autofill_env = BASE_DIR / "ai-job-autofill" / "server" / ".env"
+                try:
+                    autofill_env.parent.mkdir(parents=True, exist_ok=True)
+                    with open(autofill_env, "w", encoding="utf-8") as f:
+                        f.write(f"OPENAI_API_KEY={self.config['openai_api_key']}\n")
+                except Exception as env_err:
+                    logger.debug("Could not sync to autofill .env: %s", env_err)
+
+            # Synchronize with WhatsApp store settings if available
+            try:
+                from services.whatsapp_store import whatsapp_store
+                wa_updates = {}
+                if self.config.get("primary_provider"):
+                    wa_updates["ai_provider"] = self.config["primary_provider"]
+                if self.config.get("openai_model"):
+                    wa_updates["ai_model"] = self.config["openai_model"]
+                if wa_updates:
+                    whatsapp_store.update_settings(wa_updates)
+            except Exception as wa_err:
+                logger.debug("Could not sync AI settings to WhatsApp store: %s", wa_err)
 
             return {"success": True, "public_config": self.get_public_status()}
 

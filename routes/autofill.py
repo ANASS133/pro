@@ -5,9 +5,8 @@ Integrates the Chrome extension and candidate profile management directly on por
 
 import os
 import json
+import logging
 import re
-import urllib.request
-import urllib.error
 from datetime import datetime
 from pathlib import Path
 from flask import Blueprint, jsonify, request, send_from_directory, Response
@@ -367,7 +366,6 @@ def python_deterministic_matcher(field, applicant, documents):
     personal = applicant.get("personal", {})
     contact = applicant.get("contact", {})
     addr = contact.get("address", {})
-    prof = applicant.get("professional_profile", {})
 
     # 1. First Name
     if any(k in combined for k in ["vorname", "first name", "firstname", "prénom", "prenom", "given name"]) and not any(k in combined for k in ["nachname", "last name", "nom", "family"]):
@@ -460,7 +458,7 @@ def python_ai_answer_questions(unresolved_fields, applicant_data, page_context=N
 
     try:
         from services.ai_provider_manager import ai_manager
-    except Exception as exc:
+    except Exception:
         return []
 
     system_prompt = (
@@ -748,7 +746,7 @@ def upload_and_parse_cv():
             return jsonify({"success": False, "error": "Could not extract text from PDF"}), 400
 
         parsed_data = CVParser.parse_cv_text(extracted_text)
-        updated_profile = CVParser.update_profile_from_cv(profile_path, parsed_data)
+        CVParser.update_profile_from_cv(profile_path, parsed_data)
 
         return jsonify({
             "success": True,

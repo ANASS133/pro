@@ -1,4 +1,3 @@
-import io
 from flask import Blueprint, jsonify, request, send_file
 from pdf_generator.services.pdf_service import DIN_5008_PRESETS, PDFService
 from pdf_generator.services.background_templates import get_template_pdf_path

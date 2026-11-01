@@ -13,7 +13,7 @@ import hashlib
 import logging
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from services.client_manager import client_manager
 from services.conductor_store import conductor_store
@@ -141,7 +141,7 @@ class ConductorWhatsAppLiaison:
 
         try:
             res = self.wa_service.send_text_message(phone, msg)
-            if not res.get("success"):
+            if not res.get("success") or res.get("simulated") or not res.get("provider_message_id"):
                 return False
 
             # Record in WhatsApp conversation transcript

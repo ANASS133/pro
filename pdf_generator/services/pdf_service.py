@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import re
 import tempfile
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 from fpdf import FPDF

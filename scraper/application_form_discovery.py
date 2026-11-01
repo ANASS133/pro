@@ -240,8 +240,6 @@ class ApplicationFormDiscovery:
 
         evidence: List[str] = []
         parsed = urlparse(url)
-        url_lower = url.lower()
-        netloc_lower = (parsed.netloc or "").lower()
         path_lower = (parsed.path or "").lower()
 
         # Portals like Arbeitsagentur jobdetail are NOT application forms
@@ -449,7 +447,6 @@ class ApplicationFormDiscovery:
         job_url = str(job.get("url") or "").strip()
         start_url = original_apply_url or job_url
         company = str(job.get("company") or "").strip()
-        title = str(job.get("title") or "").strip()
 
         result = FormDiscoveryResult(
             apply_url=original_apply_url or job_url,

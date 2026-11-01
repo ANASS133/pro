@@ -6,7 +6,6 @@ protecting sender reputation and avoiding spam complaints.
 
 import json
 import logging
-import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Optional, Tuple

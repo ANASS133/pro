@@ -425,7 +425,6 @@ class CVParser:
                     postal_code = ai_data["postal_code"]
                 if not city and ai_data.get("city"):
                     city = ai_data["city"]
-                country = ai_data.get("country") or "Deutschland"
 
                 if (not current_title or current_title in ["Bewerber", "Softwareentwickler"]) and ai_data.get("current_title"):
                     current_title = ai_data["current_title"]

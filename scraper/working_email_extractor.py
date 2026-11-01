@@ -8,14 +8,12 @@ from typing import Dict, List, Optional, Set
 
 import pandas as pd
 import requests
-from selenium import webdriver
 from selenium.webdriver.common.by import By
 
 from .browser_driver import find_browser, new_options, start_driver
 from .true_captcha_solver import TrueCaptchaSolver
 from .application_form_discovery import (
     ApplicationFormDiscovery,
-    classify_application_method,
     normalize_job_opportunity_row,
 )
 

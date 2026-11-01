@@ -12,8 +12,7 @@ Orchestrates AI-powered conversational turns for WhatsApp customer support:
 import json
 import logging
 import re
-import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from services.ai_provider_manager import ai_manager
 from services.whatsapp_service import whatsapp_service

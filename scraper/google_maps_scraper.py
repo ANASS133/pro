@@ -14,14 +14,12 @@ import threading
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Dict, List, Optional, Set
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 
 import requests
 from requests.adapters import HTTPAdapter
 from bs4 import BeautifulSoup
-from selenium import webdriver
 from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import (
@@ -924,7 +922,6 @@ class GoogleMapsBusinessScraper:
         if not businesses:
             return businesses
 
-        total = len(businesses)
         completed_count = 0
         progress_lock = threading.Lock()
 

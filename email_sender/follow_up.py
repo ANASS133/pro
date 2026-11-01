@@ -6,7 +6,7 @@ Identifies past outreach candidates eligible for a gentle German follow-up
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 

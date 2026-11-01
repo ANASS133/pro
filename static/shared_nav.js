@@ -6,7 +6,6 @@
     const NAV_ITEMS = [
         { key: "search", href: "/", label: "E-Mails finden", icon: '<circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>' },
         { key: "ausbildungen", href: "/ausbildungen", label: "Ausbildungen", icon: '<path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path>' },
-        { key: "google-maps", href: "/google-maps", label: "Google Maps", icon: '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle>' },
         { key: "anschreiben", href: "/create-anschreibens", label: "Anschreiben", icon: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line>' },
         { key: "send", href: "/send-emails", label: "E-Mails senden", icon: '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline>' },
         { key: "conductor", href: "/conductor", label: "Conductor", icon: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>' },
@@ -19,7 +18,7 @@
     function getActiveKey(pathname) {
         const path = String(pathname || "/");
         if (path.startsWith("/ausbildungen")) return "ausbildungen";
-        if (path.startsWith("/google-maps")) return "google-maps";
+        if (path.startsWith("/google-maps")) return "search";
         if (path.startsWith("/money")) return "money";
         if (path.startsWith("/whatsapp")) return "whatsapp";
         if (path.startsWith("/conductor") || path.startsWith("/autopilot")) return "conductor";

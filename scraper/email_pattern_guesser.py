@@ -6,7 +6,7 @@ accurately handling German umlauts, academic titles, and common company naming c
 
 import re
 import unicodedata
-from typing import Dict, List, Optional
+from typing import Dict, List
 from urllib.parse import urlparse
 
 UMLAUT_MAP = {

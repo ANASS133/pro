@@ -1,0 +1,3453 @@
+diff --git a/ai-job-autofill/extension/popup.js b/ai-job-autofill/extension/popup.js
+--- a/ai-job-autofill/extension/popup.js
++++ b/ai-job-autofill/extension/popup.js
+@@ -1,7 +1,6 @@
+ // popup.js - Compact Single-Column Review Screen, Multi-step forms, Correction Memory & Safeguards
+ 
+ let BACKEND_BASE = "http://localhost:5000";
+-let MAP_FIELDS_URL = `${BACKEND_BASE}/api/map-fields`;
+ let PROFILES_URL = `${BACKEND_BASE}/api/profiles`;
+ let TEMPLATE_URL = `${BACKEND_BASE}/api/template`;
+ let CORRECTIONS_URL = `${BACKEND_BASE}/api/corrections`;
+@@ -13,7 +12,6 @@
+       const res = await fetch(`${base}/api/profiles`, { method: "GET", signal: AbortSignal.timeout(800) });
+       if (res.ok) {
+         BACKEND_BASE = base;
+-        MAP_FIELDS_URL = `${BACKEND_BASE}/api/map-fields`;
+         PROFILES_URL = `${BACKEND_BASE}/api/profiles`;
+         TEMPLATE_URL = `${BACKEND_BASE}/api/template`;
+         CORRECTIONS_URL = `${BACKEND_BASE}/api/corrections`;
+diff --git a/app.py b/app.py
+--- a/app.py
++++ b/app.py
+@@ -8,7 +8,6 @@
+ import threading
+ import time
+ import json
+-import smtplib
+ import queue
+ import re
+ import shutil
+@@ -18,10 +17,6 @@
+ from pathlib import Path
+ from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+ from concurrent.futures import ThreadPoolExecutor, as_completed
+-from email.mime.base import MIMEBase
+-from email.mime.multipart import MIMEMultipart
+-from email.mime.text import MIMEText
+-from email import encoders
+ 
+ import pandas as pd
+ from dotenv import load_dotenv
+@@ -454,18 +449,6 @@
+     return exports
+ 
+ 
+-def _list_available_ausbildung_domains() -> List[str]:
+-    domains: List[str] = []
+-    seen: Set[str] = set()
+-
+-    for item in _list_auto_extraction_export_files():
+-        domain_name = str(item.get("domain_name") or "").strip()
+-        if not domain_name or domain_name in seen:
+-            continue
+-        seen.add(domain_name)
+-        domains.append(domain_name)
+-
+-    return domains
+ 
+ 
+ def _resolve_auto_extraction_export_path(filename: str) -> Optional[Path]:
+@@ -1715,20 +1698,8 @@
+     return re.sub(r"\s+", " ", match.group(0)).strip().lower()
+ 
+ 
+-def _extract_arbeitsgeber_from_text(value: str) -> str:
+-    if not value:
+-        return ""
+-    match = ARBEITGEBER_PATTERN.search(value)
+-    return _normalize_arbeitsgeber_value(match.group(0) if match else "")
+-
+-
+-def _build_anrede(arbeitsgeber: str) -> str:
+-    contact = str(arbeitsgeber or "").strip().lower()
+-    if contact.startswith("herr") or contact.startswith("herrn"):
+-        return "Sehr geehrter"
+-    if contact.startswith("frau"):
+-        return "Sehr geehrte"
+-    return "Sehr geehrte Damen und Herren"
++
++
+ 
+ 
+ def _prepare_download_jobs(
+@@ -1784,38 +1755,6 @@
+     return filtered
+ 
+ 
+-def _load_previously_collected_emails() -> Set[str]:
+-    known: Set[str] = set()
+-    candidates = [
+-        DOWNLOAD_EXPORT_DIR / "extraction_results.xlsx",
+-        DOWNLOAD_EXPORT_DIR / "auto_extraction_results.xlsx",
+-        PROGRESS_DIR / "extraction_progress.csv",
+-        PROGRESS_DIR / "auto_extraction_progress.csv",
+-        Path("extraction_results.csv"),
+-        Path("auto_extraction_results.csv"),
+-        Path("auto_extraction_progress.csv"),
+-    ]
+-    for file_path in candidates:
+-        if not file_path.exists():
+-            continue
+-        try:
+-            if file_path.suffix.lower() == ".xlsx":
+-                df = pd.read_excel(file_path)
+-            else:
+-                df = pd.read_csv(file_path)
+-            if "email" in df.columns:
+-                for value in df["email"].dropna().tolist():
+-                    email = _normalize_email(value)
+-                    if (
+-                        email
+-                        and "@" in email
+-                        and not email.startswith("error:")
+-                        and email != "captcha_failed"
+-                    ):
+-                        known.add(email)
+-        except Exception as exc:
+-            logger.warning("Could not load previous emails from %s: %s", file_path, exc)
+-    return known
+ 
+ 
+ def _save_search_cache_to_disk(
+@@ -1867,189 +1806,16 @@
+     return jobs
+ 
+ 
+-def _create_email_message(
+-    sender_email: str,
+-    recipient_email: str,
+-    subject: str,
+-    body: str,
+-    attachment_path: str = "",
+-):
+-    message = MIMEMultipart()
+-    message["From"] = sender_email
+-    message["To"] = recipient_email
+-    message["Subject"] = subject
+-    message.attach(MIMEText(body, "plain", "utf-8"))
+-
+-    if attachment_path:
+-        file_path = Path(attachment_path)
+-        if file_path.is_file():
+-            with file_path.open("rb") as attachment:
+-                part = MIMEBase("application", "octet-stream")
+-                part.set_payload(attachment.read())
+-            encoders.encode_base64(part)
+-            part.add_header(
+-                "Content-Disposition",
+-                "attachment",
+-                filename=("utf-8", "", file_path.name),
+-            )
+-            message.attach(part)
+-    return message
+-
+-
+-def _send_single_email(
+-    smtp_server: str,
+-    smtp_port: int,
+-    sender_email: str,
+-    sender_password: str,
+-    recipient: str,
+-    subject: str,
+-    body: str,
+-    attachment_path: str = "",
+-) -> Tuple[bool, str]:
+-    try:
+-        message = _create_email_message(
+-            sender_email=sender_email,
+-            recipient_email=recipient,
+-            subject=subject,
+-            body=body,
+-            attachment_path=attachment_path,
+-        )
+-        with smtplib.SMTP(smtp_server, smtp_port, timeout=30) as server:
+-            server.starttls()
+-            server.login(sender_email, sender_password)
+-            server.send_message(message)
+-        return True, ""
+-    except Exception as exc:
+-        return False, str(exc)
+-
+-
+-def _parse_recipient_lines(text: str) -> List[str]:
+-    if not text:
+-        return []
+-    candidates: List[str] = []
+-    for line in text.replace(",", "\n").splitlines():
+-        email = line.strip().lower()
+-        if email:
+-            candidates.append(email)
+-    deduped: List[str] = []
+-    seen = set()
+-    for email in candidates:
+-        if email in seen:
+-            continue
+-        seen.add(email)
+-        if "@" in email and "." in email.split("@")[-1]:
+-            deduped.append(email)
+-    return deduped
+-
+-
+-def _send_bulk_email_jobs(
+-    smtp_server: str,
+-    smtp_port: int,
+-    sender_email: str,
+-    sender_password: str,
+-    jobs: List[Dict],
+-    attachment_path: str = "",
+-    max_workers: int = 3,
+-    submit_delay_sec: float = 0.0,
+-) -> Dict:
+-    total = len(jobs)
+-    details = []
+-    sent = 0
+-    failed = 0
+-
+-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+-        future_to_recipient = {}
+-        for job in jobs:
+-            recipient = job.get("recipient", "")
+-            subject = job.get("subject", "")
+-            body = job.get("body", "")
+-            future = executor.submit(
+-                _send_single_email,
+-                smtp_server,
+-                smtp_port,
+-                sender_email,
+-                sender_password,
+-                recipient,
+-                subject,
+-                body,
+-                attachment_path,
+-            )
+-            future_to_recipient[future] = recipient
+-            if submit_delay_sec > 0:
+-                time.sleep(submit_delay_sec)
+-
+-        for future in as_completed(future_to_recipient):
+-            recipient = future_to_recipient[future]
+-            ok, error = future.result()
+-            details.append({"recipient": recipient, "ok": ok, "error": error})
+-            if ok:
+-                sent += 1
+-            else:
+-                failed += 1
+-
+-    return {"total": total, "sent": sent, "failed": failed, "details": details}
+-
+-
+-def _render_template_with_context(template_text: str, context: Dict) -> str:
+-    if not template_text:
+-        return ""
+-
+-    context_map = {str(k).strip().lower(): str(v) for k, v in context.items() if v is not None}
+-
+-    def _replace(match):
+-        key = match.group(1).strip().lower()
+-        return context_map.get(key, "")
+-
+-    return PLACEHOLDER_PATTERN.sub(_replace, template_text)
+-
+-
+-def _load_recipients_from_spreadsheet(file_storage) -> Tuple[List[Dict], List[str]]:
+-    filename = (file_storage.filename or "").strip()
+-    suffix = Path(filename).suffix.lower()
+-    if suffix == ".csv":
+-        df = pd.read_csv(file_storage)
+-    elif suffix in {".xlsx", ".xls"}:
+-        df = pd.read_excel(file_storage)
+-    else:
+-        raise ValueError("Unsupported file type. Use .csv, .xlsx, or .xls")
+-
+-    if df.empty:
+-        return [], []
+-
+-    original_columns = [str(c) for c in df.columns]
+-    col_lookup = {str(c).strip().lower(): str(c) for c in df.columns}
+-    email_candidates = ["email", "emails", "e-mail", "mail", "recipient", "to"]
+-    email_col = ""
+-    for candidate in email_candidates:
+-        if candidate in col_lookup:
+-            email_col = col_lookup[candidate]
+-            break
+-
+-    if not email_col:
+-        raise ValueError(
+-            f"No email column found. Expected one of: {', '.join(email_candidates)}"
+-        )
+-
+-    rows: List[Dict] = []
+-    seen = set()
+-    for _, row in df.iterrows():
+-        email_value = _normalize_email(row.get(email_col))
+-        if not email_value or "@" not in email_value:
+-            continue
+-        if email_value in seen:
+-            continue
+-        seen.add(email_value)
+-
+-        context: Dict[str, str] = {}
+-        for col in df.columns:
+-            value = row.get(col)
+-            if pd.isna(value):
+-                continue
+-            context[str(col).strip()] = str(value).strip()
+-        context["email"] = email_value
+-        rows.append({"recipient": email_value, "context": context})
+-
+-    return rows, original_columns
++
++
++
++
++
++
++
++
++
++
+ 
+ 
+ def _set_status(**kwargs):
+@@ -2124,11 +1890,6 @@
+     return _normalize_pdf_base_name(value, str(fallback or "").strip() or "dokument")
+ 
+ 
+-def _company_name_from_row(row_data: Dict, index: int) -> str:
+-    company_name = _extract_company_from_row(row_data)
+-    if company_name:
+-        return _sanitize_pdf_name(company_name, f"firma_{index + 1}")
+-    return _sanitize_pdf_name("", f"firma_{index + 1}")
+ 
+ 
+ def _read_binary_file_as_base64(path_value: str) -> Dict[str, str]:
+@@ -4209,8 +3970,6 @@
+     return latest_job
+ 
+ 
+-def _get_running_email_send_job_for_campaign(campaign_id: str) -> Optional[Dict]:
+-    return _get_active_email_send_job_for_campaign(campaign_id)
+ 
+ 
+ def _list_dashboard_campaigns_with_jobs() -> List[Dict]:
+diff --git a/email_sender/follow_up.py b/email_sender/follow_up.py
+--- a/email_sender/follow_up.py
++++ b/email_sender/follow_up.py
+@@ -6,7 +6,7 @@
+ 
+ import json
+ import logging
+-from datetime import datetime, timedelta
++from datetime import datetime
+ from pathlib import Path
+ from typing import Dict, List, Optional
+ 
+diff --git a/email_sender/throttler.py b/email_sender/throttler.py
+--- a/email_sender/throttler.py
++++ b/email_sender/throttler.py
+@@ -6,7 +6,6 @@
+ 
+ import json
+ import logging
+-import os
+ from datetime import datetime, timedelta
+ from pathlib import Path
+ from typing import Dict, Optional, Tuple
+diff --git a/pdf_generator/services/ats_service.py b/pdf_generator/services/ats_service.py
+--- a/pdf_generator/services/ats_service.py
++++ b/pdf_generator/services/ats_service.py
+@@ -11,7 +11,6 @@
+ import hashlib
+ import json
+ import logging
+-import os
+ from pathlib import Path
+ import re
+ 
+diff --git a/pdf_generator/services/background_templates.py b/pdf_generator/services/background_templates.py
+--- a/pdf_generator/services/background_templates.py
++++ b/pdf_generator/services/background_templates.py
+@@ -3,7 +3,6 @@
+ Generates and manages beautiful, professional A4 letterhead/stationery templates.
+ """
+ 
+-import os
+ from pathlib import Path
+ from typing import Dict, List, Optional
+ from fpdf import FPDF
+diff --git a/pdf_generator/services/browser_pool.py b/pdf_generator/services/browser_pool.py
+--- a/pdf_generator/services/browser_pool.py
++++ b/pdf_generator/services/browser_pool.py
+@@ -5,12 +5,10 @@
+ 
+ import atexit
+ import base64
+-import io
+ import logging
+ import threading
+-import time
+ from contextlib import contextmanager
+-from typing import Optional, Tuple
++from typing import Optional
+ 
+ from pypdf import PdfReader, PdfWriter
+ from scraper.browser_driver import find_browser, new_options, start_driver
+diff --git a/pdf_generator/services/pdf_service.py b/pdf_generator/services/pdf_service.py
+--- a/pdf_generator/services/pdf_service.py
++++ b/pdf_generator/services/pdf_service.py
+@@ -7,7 +7,7 @@
+ from pathlib import Path
+ import re
+ import tempfile
+-from typing import Any, Dict, List, Optional, Tuple, Union
++from typing import Any, Dict, List, Tuple
+ 
+ logger = logging.getLogger(__name__)
+ from fpdf import FPDF
+diff --git a/routes/clients.py b/routes/clients.py
+--- a/routes/clients.py
++++ b/routes/clients.py
+@@ -3,11 +3,8 @@
+ Provides endpoints for client intake, CV parsing, document management, and active client switching.
+ """
+ 
+-import io
+-import json
+ import logging
+ from datetime import datetime
+-from pathlib import Path
+ from flask import Blueprint, Response, jsonify, request, send_file
+ from werkzeug.utils import secure_filename
+ 
+diff --git a/routes/pdf_routes.py b/routes/pdf_routes.py
+--- a/routes/pdf_routes.py
++++ b/routes/pdf_routes.py
+@@ -1,4 +1,3 @@
+-import io
+ from flask import Blueprint, jsonify, request, send_file
+ from pdf_generator.services.pdf_service import DIN_5008_PRESETS, PDFService
+ from pdf_generator.services.background_templates import get_template_pdf_path
+diff --git a/routes/whatsapp.py b/routes/whatsapp.py
+--- a/routes/whatsapp.py
++++ b/routes/whatsapp.py
+@@ -16,8 +16,6 @@
+ import logging
+ import queue
+ import time
+-from datetime import datetime, timezone
+-from typing import Any, Dict, Optional
+ 
+ from flask import Blueprint, Response, jsonify, render_template, request, stream_with_context
+ 
+diff --git a/scraper/azubiyo_scraper.py b/scraper/azubiyo_scraper.py
+--- a/scraper/azubiyo_scraper.py
++++ b/scraper/azubiyo_scraper.py
+@@ -1,6 +1,5 @@
+ import logging
+ import re
+-import time
+ import urllib.parse
+ from datetime import datetime
+ from typing import Dict, List, Optional
+diff --git a/scraper/career_crawler.py b/scraper/career_crawler.py
+--- a/scraper/career_crawler.py
++++ b/scraper/career_crawler.py
+@@ -7,7 +7,7 @@
+ 
+ import logging
+ import re
+-from typing import Dict, List, Optional, Set
++from typing import Dict, List, Set
+ from urllib.parse import urljoin, urlparse
+ 
+ from bs4 import BeautifulSoup
+diff --git a/scraper/cookie_handler.py b/scraper/cookie_handler.py
+--- a/scraper/cookie_handler.py
++++ b/scraper/cookie_handler.py
+@@ -10,7 +10,6 @@
+ 
+ import logging
+ import time
+-from typing import Optional
+ from selenium.webdriver.common.by import By
+ from selenium.common.exceptions import (
+     ElementClickInterceptedException,
+diff --git a/scraper/email_pattern_guesser.py b/scraper/email_pattern_guesser.py
+--- a/scraper/email_pattern_guesser.py
++++ b/scraper/email_pattern_guesser.py
+@@ -6,7 +6,7 @@
+ 
+ import re
+ import unicodedata
+-from typing import Dict, List, Optional
++from typing import Dict, List
+ from urllib.parse import urlparse
+ 
+ UMLAUT_MAP = {
+diff --git a/scraper/google_maps_ausbildung_verifier.py b/scraper/google_maps_ausbildung_verifier.py
+--- a/scraper/google_maps_ausbildung_verifier.py
++++ b/scraper/google_maps_ausbildung_verifier.py
+@@ -28,7 +28,7 @@
+ import re
+ import time
+ from datetime import datetime
+-from typing import Dict, List, Optional, Set, Tuple
++from typing import Dict, List, Optional, Set
+ from urllib.parse import urljoin, urlparse
+ 
+ import requests
+diff --git a/scraper/tech_detector.py b/scraper/tech_detector.py
+--- a/scraper/tech_detector.py
++++ b/scraper/tech_detector.py
+@@ -6,7 +6,7 @@
+ 
+ import logging
+ import re
+-from typing import Dict, List, Optional
++from typing import Dict, Optional
+ from bs4 import BeautifulSoup
+ 
+ logger = logging.getLogger(__name__)
+diff --git a/services/ai_provider_manager.py b/services/ai_provider_manager.py
+--- a/services/ai_provider_manager.py
++++ b/services/ai_provider_manager.py
+@@ -26,7 +26,7 @@
+ import time
+ from datetime import datetime
+ from pathlib import Path
+-from typing import Any, Dict, List, Optional, Tuple, Union
++from typing import Any, Dict, Optional
+ 
+ import requests
+ 
+diff --git a/services/campaign_store.py b/services/campaign_store.py
+--- a/services/campaign_store.py
++++ b/services/campaign_store.py
+@@ -8,12 +8,11 @@
+ import hashlib
+ import json
+ import logging
+-import os
+ import sqlite3
+ import threading
+ from datetime import datetime, timezone
+ from pathlib import Path
+-from typing import Any, Dict, List, Optional, Tuple
++from typing import Any, Dict, List, Optional
+ 
+ logger = logging.getLogger(__name__)
+ 
+diff --git a/services/client_manager.py b/services/client_manager.py
+--- a/services/client_manager.py
++++ b/services/client_manager.py
+@@ -4,10 +4,8 @@
+ Maintains bi-directional compatibility with ai-job-autofill/server/profiles/.
+ """
+ 
+-import io
+ import json
+ import logging
+-import os
+ import re
+ import shutil
+ from datetime import datetime, timezone
+diff --git a/services/conductor_store.py b/services/conductor_store.py
+--- a/services/conductor_store.py
++++ b/services/conductor_store.py
+@@ -11,13 +11,12 @@
+ """
+ 
+ import hashlib
+-import json
+ import logging
+ import sqlite3
+ import threading
+ from datetime import datetime, timezone
+ from pathlib import Path
+-from typing import Any, Dict, List, Optional, Tuple
++from typing import Any, Dict, List, Optional
+ 
+ logger = logging.getLogger(__name__)
+ 
+diff --git a/services/conductor_whatsapp_liaison.py b/services/conductor_whatsapp_liaison.py
+--- a/services/conductor_whatsapp_liaison.py
++++ b/services/conductor_whatsapp_liaison.py
+@@ -13,7 +13,7 @@
+ import logging
+ import re
+ from datetime import datetime, timezone
+-from typing import Any, Dict, List, Optional, Tuple
++from typing import List, Optional, Tuple
+ 
+ from services.client_manager import client_manager
+ from services.conductor_store import conductor_store
+diff --git a/services/daily_search_runner.py b/services/daily_search_runner.py
+--- a/services/daily_search_runner.py
++++ b/services/daily_search_runner.py
+@@ -6,10 +6,7 @@
+ and Cover Letter PDF generation.
+ """
+ 
+-import hashlib
+-import json
+ import logging
+-import os
+ import re
+ from datetime import datetime, timezone
+ from pathlib import Path
+diff --git a/services/email_reply_monitor.py b/services/email_reply_monitor.py
+--- a/services/email_reply_monitor.py
++++ b/services/email_reply_monitor.py
+@@ -13,9 +13,8 @@
+ import json
+ import logging
+ import os
+-import re
+ from datetime import datetime, timezone
+-from typing import Any, Dict, List, Optional, Tuple
++from typing import Any, Dict, Optional, Tuple
+ 
+ from services.ai_provider_manager import ai_manager
+ from services.client_manager import client_manager
+diff --git a/services/geographic_batching.py b/services/geographic_batching.py
+--- a/services/geographic_batching.py
++++ b/services/geographic_batching.py
+@@ -6,7 +6,7 @@
+ """
+ 
+ import logging
+-from typing import Any, Dict, List, Optional, Tuple
++from typing import Any, Dict, Optional
+ 
+ logger = logging.getLogger(__name__)
+ 
+diff --git a/services/onboarding_service.py b/services/onboarding_service.py
+--- a/services/onboarding_service.py
++++ b/services/onboarding_service.py
+@@ -10,7 +10,6 @@
+ import re
+ import threading
+ from datetime import datetime, timezone
+-from pathlib import Path
+ from typing import Any, Dict, List, Optional, Tuple
+ 
+ from services.client_manager import ClientManager, _slugify, client_manager
+diff --git a/services/profession_intelligence.py b/services/profession_intelligence.py
+--- a/services/profession_intelligence.py
++++ b/services/profession_intelligence.py
+@@ -17,11 +17,10 @@
+ import difflib
+ import json
+ import logging
+-import os
+ import re
+ import threading
+ from pathlib import Path
+-from typing import Any, Dict, List, Optional, Set, Tuple
++from typing import Any, Dict, List, Optional, Set
+ 
+ logger = logging.getLogger(__name__)
+ 
+diff --git a/services/profession_matcher.py b/services/profession_matcher.py
+--- a/services/profession_matcher.py
++++ b/services/profession_matcher.py
+@@ -9,8 +9,7 @@
+ - "missing" (Nicht vorhanden, Red): No matching or related dataset exists.
+ """
+ 
+-import re
+-from typing import Any, Dict, List, Optional, Set, Tuple
++from typing import Any, Dict, List, Set
+ 
+ from scraper.search_filter_engine import (
+     extract_profession_tokens,
+diff --git a/services/supabase_service.py b/services/supabase_service.py
+--- a/services/supabase_service.py
++++ b/services/supabase_service.py
+@@ -7,7 +7,6 @@
+ 
+ import logging
+ import mimetypes
+-import os
+ import re
+ from pathlib import Path
+ from typing import Any, Dict, List, Optional, Tuple
+diff --git a/services/whatsapp_ai_engine.py b/services/whatsapp_ai_engine.py
+--- a/services/whatsapp_ai_engine.py
++++ b/services/whatsapp_ai_engine.py
+@@ -12,8 +12,7 @@
+ import json
+ import logging
+ import re
+-import time
+-from typing import Any, Dict, List, Optional, Tuple
++from typing import Any, Dict, List, Optional
+ 
+ from services.ai_provider_manager import ai_manager
+ from services.whatsapp_service import whatsapp_service
+diff --git a/services/whatsapp_service.py b/services/whatsapp_service.py
+--- a/services/whatsapp_service.py
++++ b/services/whatsapp_service.py
+@@ -15,15 +15,12 @@
+ 
+ import hashlib
+ import hmac
+-import json
+ import logging
+ import os
+ import queue
+-import re
+ import threading
+ import time
+-from datetime import datetime, timedelta, timezone
+-from pathlib import Path
++from datetime import datetime, timezone
+ from typing import Any, Callable, Dict, List, Optional, Tuple
+ 
+ import requests
+diff --git a/services/whatsapp_store.py b/services/whatsapp_store.py
+--- a/services/whatsapp_store.py
++++ b/services/whatsapp_store.py
+@@ -14,7 +14,7 @@
+ import uuid
+ from datetime import datetime, timezone
+ from pathlib import Path
+-from typing import Any, Dict, List, Optional, Tuple, Union
++from typing import Any, Dict, List, Optional, Tuple
+ 
+ logger = logging.getLogger(__name__)
+ 
+diff --git a/services/whatsapp_tools.py b/services/whatsapp_tools.py
+--- a/services/whatsapp_tools.py
++++ b/services/whatsapp_tools.py
+@@ -14,9 +14,7 @@
+    SupabaseService, ProfessionMatcher, KnowledgeBase).
+ """
+ 
+-import json
+ import logging
+-import re
+ from typing import Any, Callable, Dict, List, Optional, Tuple
+ 
+ from services.client_manager import client_manager
+diff --git a/static/spa/app.css b/static/spa/app.css
+--- a/static/spa/app.css
++++ b/static/spa/app.css
+@@ -477,10 +477,6 @@
+     background: linear-gradient(135deg, #ffffff 0%, #f5f8ff 100%);
+     border: 1px solid var(--border);
+     box-shadow: var(--shadow);
+-}
+-
+-.firebase-hero {
+-    background: linear-gradient(135deg, #f4fffb 0%, #ffffff 100%);
+ }
+ 
+ .section-hero h2 {
+diff --git a/static/spa/app.js b/static/spa/app.js
+--- a/static/spa/app.js
++++ b/static/spa/app.js
+@@ -218,53 +218,4 @@
+             });
+     }
+ 
+-    // Live Task Monitoring via SQLite & SSE
+-    const liveJobWidget = document.getElementById("sidebar-live-job");
+-    const jobTitle = document.getElementById("sidebar-job-title");
+-    const jobPercent = document.getElementById("sidebar-job-percent");
+-    const jobFill = document.getElementById("sidebar-job-fill");
+-    const jobMeta = document.getElementById("sidebar-job-meta");
+-
+-    function checkActiveJobs() {
+-        fetch("/api/jobs?limit=5")
+-            .then((res) => res.json())
+-            .then((data) => {
+-                const jobs = (data && data.jobs) || [];
+-                const runningJob = jobs.find((j) => j.is_running);
+-                if (runningJob && liveJobWidget) {
+-                    liveJobWidget.hidden = false;
+-                    const pct = runningJob.total > 0 ? Math.round((runningJob.progress / runningJob.total) * 100) : 0;
+-                    if (jobTitle) jobTitle.textContent = runningJob.job_type.replace(/_/g, " ");
+-                    if (jobPercent) jobPercent.textContent = pct + "%";
+-                    if (jobFill) jobFill.style.width = pct + "%";
+-                    if (jobMeta) jobMeta.textContent = `${runningJob.progress} / ${runningJob.total} (${runningJob.phase})`;
+-
+-                    if (!window._activeJobEventSource && window.EventSource) {
+-                        const es = new EventSource(`/api/jobs/${runningJob.job_id}/stream`);
+-                        window._activeJobEventSource = es;
+-                        es.onmessage = (e) => {
+-                            try {
+-                                const update = JSON.parse(e.data);
+-                                const uPct = update.total > 0 ? Math.round((update.progress / update.total) * 100) : 0;
+-                                if (jobPercent) jobPercent.textContent = uPct + "%";
+-                                if (jobFill) jobFill.style.width = uPct + "%";
+-                                if (jobMeta) jobMeta.textContent = `${update.progress} / ${update.total} (${update.phase})`;
+-                            } catch (_) {}
+-                        };
+-                        es.addEventListener("close", () => {
+-                            es.close();
+-                            window._activeJobEventSource = null;
+-                            setTimeout(checkActiveJobs, 2000);
+-                        });
+-                        es.onerror = () => {
+-                            es.close();
+-                            window._activeJobEventSource = null;
+-                        };
+-                    }
+-                } else if (liveJobWidget) {
+-                    liveJobWidget.hidden = true;
+-                }
+-            })
+-            .catch(() => {});
+-    }
+ })();
+diff --git a/static/spa/sections/create-anschreibens.js b/static/spa/sections/create-anschreibens.js
+--- a/static/spa/sections/create-anschreibens.js
++++ b/static/spa/sections/create-anschreibens.js
+@@ -2298,10 +2298,6 @@
+             }
+         }
+ 
+-        function getCachedFirebaseApplication(applicationId) {
+-            return getCachedApplication(applicationId);
+-        }
+-
+         function getFirebaseBootstrapInfo() {
+             const params = new URLSearchParams(window.location.search);
+             const queryApplicationId = String(params.get("application_id") || "").trim();
+diff --git a/static/spa/sections/google-maps.js b/static/spa/sections/google-maps.js
+--- a/static/spa/sections/google-maps.js
++++ b/static/spa/sections/google-maps.js
+@@ -56,7 +56,6 @@
+ 
+         // Two-step UI elements
+         const discoverySummary = document.getElementById("gmaps-discovery-summary");
+-        const discoveryCount = document.getElementById("gmaps-discovery-count");
+         const startExtractBtn = document.getElementById("gmaps-start-extract-btn");
+ 
+         if (!form) {
+@@ -416,50 +415,6 @@
+         }
+ 
+         // ── API calls ────────────────────────────────────────────────
+-        async function discoverBusinesses() {
+-            const payload = buildPayload();
+-            if (!payload.query) {
+-                if (progressError) {
+-                    progressError.textContent = "Bitte einen Suchbegriff eingeben.";
+-                    progressError.hidden = false;
+-                }
+-                return;
+-            }
+-
+-            setLoading(true);
+-            if (progressError) { progressError.textContent = ""; progressError.hidden = true; }
+-            if (resultsPanel) resultsPanel.hidden = true;
+-            if (exportBar) exportBar.hidden = true;
+-            if (discoverySummary) discoverySummary.hidden = true;
+-            if (startExtractBtn) startExtractBtn.hidden = true;
+-
+-            try {
+-                const response = await fetch("/api/google-maps/discover", {
+-                    method: "POST",
+-                    headers: { "Content-Type": "application/json" },
+-                    body: JSON.stringify(payload),
+-                });
+-                const data = await response.json();
+-
+-                if (!response.ok || !data.success) {
+-                    throw new Error(data.message || "Discovery fehlgeschlagen");
+-                }
+-
+-                jobId = data.job_id || "";
+-                if (!jobId) throw new Error("Keine Job-ID erhalten");
+-
+-                if (progressPanel) progressPanel.hidden = false;
+-                startPolling();
+-            } catch (error) {
+-                if (progressError) {
+-                    progressError.textContent = error.message || "Discovery fehlgeschlagen";
+-                    progressError.hidden = false;
+-                }
+-            } finally {
+-                setLoading(false);
+-            }
+-        }
+-
+         async function startExtraction() {
+             if (!jobId) return;
+ 
+diff --git a/static/spa/sections/money.js b/static/spa/sections/money.js
+--- a/static/spa/sections/money.js
++++ b/static/spa/sections/money.js
+@@ -62,13 +62,6 @@
+             var d = new Date(value);
+             if (isNaN(d.getTime())) return "\u2014";
+             return new Intl.DateTimeFormat("de-DE", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" }).format(d);
+-        }
+-
+-        function fmtDateShort(value) {
+-            if (!value) return "\u2014";
+-            var d = new Date(value);
+-            if (isNaN(d.getTime())) return "\u2014";
+-            return new Intl.DateTimeFormat("de-DE", { day:"2-digit", month:"2-digit", year:"numeric" }).format(d);
+         }
+ 
+         function fmtDateISO(value) {
+diff --git a/static/spa/sections/search.js b/static/spa/sections/search.js
+--- a/static/spa/sections/search.js
++++ b/static/spa/sections/search.js
+@@ -1236,7 +1236,6 @@
+         const profSummaryBadge = document.getElementById("prof_summary_badge");
+ 
+         let activeCategoriesList = [];
+-        let defaultCategoriesList = [];
+         let classifyDebounceTimer = null;
+ 
+         if (aiProfToggle && aiProfContent) {
+@@ -1304,7 +1303,6 @@
+                 if (profSearchTermsPreview) profSearchTermsPreview.textContent = "Geben Sie oben einen Beruf ein.";
+                 if (profSummaryBadge) profSummaryBadge.textContent = "Bereit für Eingabe";
+                 activeCategoriesList = [];
+-                defaultCategoriesList = [];
+                 renderCategoryChips();
+                 return;
+             }
+@@ -1340,8 +1338,6 @@
+                         }
+                     }
+                 }
+-
+-                defaultCategoriesList = cats;
+                 activeCategoriesList = [...cats];
+                 renderCategoryChips();
+                 updateSearchTermsPreview();
+diff --git a/templates/ausbildungen.html b/templates/ausbildungen.html
+--- a/templates/ausbildungen.html
++++ /dev/null
+@@ -1,442 +0,0 @@
+-<!DOCTYPE html>
+-<html lang="de">
+-<head>
+-    <meta charset="UTF-8">
+-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+-    <title>Ausbildungen</title>
+-    <style>
+-        body {
+-            font-family: Arial, sans-serif;
+-            background: #f5f5f5;
+-            margin: 0;
+-            padding: 100px 20px 20px;
+-        }
+-        .navbar {
+-            max-width: 1100px;
+-            margin: 0 auto 20px;
+-            background: #fff;
+-            border-radius: 10px;
+-            display: flex;
+-            gap: 10px;
+-            padding: 10px 14px;
+-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+-            position: fixed;
+-            top: 16px;
+-            left: 50%;
+-            transform: translateX(-50%);
+-            z-index: 1000;
+-            flex-wrap: wrap;
+-        }
+-        .nav-link {
+-            color: #2f3a56;
+-            text-decoration: none;
+-            font-weight: 700;
+-            padding: 8px 12px;
+-            border-radius: 6px;
+-        }
+-        .nav-link.active {
+-            background: #667eea;
+-            color: #fff;
+-        }
+-        .container {
+-            max-width: 1100px;
+-            margin: 0 auto;
+-        }
+-        .header {
+-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+-            color: #fff;
+-            padding: 28px;
+-            border-radius: 10px;
+-            margin-bottom: 20px;
+-        }
+-        .header p {
+-            margin: 8px 0 0;
+-        }
+-        .empty {
+-            background: #fff;
+-            border-radius: 10px;
+-            padding: 22px;
+-            color: #555;
+-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+-        }
+-        .files-grid {
+-            display: grid;
+-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+-            gap: 16px;
+-        }
+-        .file-card {
+-            background: #fff;
+-            border-radius: 12px;
+-            padding: 18px;
+-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+-            border: 1px solid #e1e6f0;
+-            display: flex;
+-            flex-direction: column;
+-            gap: 12px;
+-        }
+-        .file-top {
+-            display: flex;
+-            align-items: center;
+-            justify-content: space-between;
+-            gap: 12px;
+-        }
+-        .file-pill {
+-            display: inline-flex;
+-            align-items: center;
+-            justify-content: center;
+-            min-width: 54px;
+-            padding: 6px 10px;
+-            border-radius: 999px;
+-            background: #eef2ff;
+-            color: #3f51b5;
+-            font-size: 12px;
+-            font-weight: 700;
+-            letter-spacing: 0.04em;
+-        }
+-        .line-count {
+-            font-size: 14px;
+-            font-weight: 700;
+-            color: #2f3a56;
+-        }
+-        .domain-name {
+-            margin: 0;
+-            color: #1f2a44;
+-            font-size: 1.1rem;
+-            line-height: 1.4;
+-            word-break: break-word;
+-        }
+-        .file-meta {
+-            color: #69728a;
+-            font-size: 13px;
+-            line-height: 1.5;
+-            word-break: break-word;
+-        }
+-        .file-actions {
+-            display: flex;
+-            align-items: center;
+-            gap: 10px;
+-            margin-top: 4px;
+-        }
+-        .update-btn {
+-            border: none;
+-            border-radius: 8px;
+-            background: #667eea;
+-            color: #fff;
+-            padding: 10px 14px;
+-            font-size: 14px;
+-            font-weight: 700;
+-            cursor: pointer;
+-            transition: background 0.15s ease, transform 0.15s ease;
+-        }
+-        .update-btn:hover {
+-            background: #556cd6;
+-            transform: translateY(-1px);
+-        }
+-        .update-btn:disabled {
+-            background: #c7d0ea;
+-            cursor: wait;
+-            transform: none;
+-        }
+-        .stop-btn {
+-            border: none;
+-            border-radius: 8px;
+-            background: #dc2626;
+-            color: #fff;
+-            padding: 10px 14px;
+-            font-size: 14px;
+-            font-weight: 700;
+-            cursor: pointer;
+-            transition: background 0.15s ease, transform 0.15s ease;
+-        }
+-        .stop-btn:hover {
+-            background: #b91c1c;
+-            transform: translateY(-1px);
+-        }
+-        .stop-btn:disabled {
+-            background: #f0a7a7;
+-            cursor: wait;
+-            transform: none;
+-        }
+-        .solver-link {
+-            display: inline-flex;
+-            align-items: center;
+-            justify-content: center;
+-            text-decoration: none;
+-            border-radius: 8px;
+-            background: #f59e0b;
+-            color: #fff;
+-            padding: 10px 14px;
+-            font-size: 14px;
+-            font-weight: 700;
+-        }
+-        .solver-link:hover {
+-            background: #d97706;
+-        }
+-        [hidden] {
+-            display: none !important;
+-        }
+-        .update-status {
+-            min-height: 18px;
+-            color: #4d5a79;
+-            font-size: 13px;
+-            line-height: 1.5;
+-        }
+-        .update-status.error {
+-            color: #b42318;
+-        }
+-        .update-status.success {
+-            color: #0b6e4f;
+-        }
+-    </style>
+-    <link rel="stylesheet" href="{{ url_for('static', filename='shared_nav.css') }}">
+-    <script src="{{ url_for('static', filename='shared_nav.js') }}" defer></script>
+-</head>
+-<body>
+-    <nav class="navbar">
+-        <a href="{{ url_for('index') }}" class="nav-link">E-Mails finden</a>
+-        <a href="{{ url_for('firebase_page') }}" class="nav-link">Firebase</a>
+-        <a href="{{ url_for('money') }}" class="nav-link">Money</a>
+-        <a href="{{ url_for('create_anschreibens') }}" class="nav-link">Anschreiben erstellen</a>
+-        <a href="{{ url_for('send_emails') }}" class="nav-link">E-Mails senden</a>
+-        <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+-        <a href="{{ url_for('ausbildungen') }}" class="nav-link active">Ausbildungen</a>
+-    </nav>
+-
+-    <div class="container">
+-        <div class="header">
+-            <h1>Ausbildungen</h1>
+-            <p>Exportierte Dateien aus <code>data/auto_extraction_exports</code> mit Ausbildungsname und Zeilenanzahl.</p>
+-        </div>
+-
+-        {% if not export_files %}
+-        <div class="empty">
+-            Keine exportierten Ausbildungsdateien gefunden.
+-        </div>
+-        {% else %}
+-        <div class="files-grid">
+-            {% for item in export_files %}
+-            <div class="file-card" data-export-card data-filename="{{ item.filename }}">
+-                <div class="file-top">
+-                    <span class="file-pill">FILE</span>
+-                    <span class="line-count" data-line-count>{{ item.row_count_display }} Zeilen</span>
+-                </div>
+-                <h2 class="domain-name">{{ item.domain_name }}</h2>
+-                <div class="file-meta" data-file-meta>
+-                    Geaendert: {{ item.modified_at }}<br>
+-                </div>
+-                <div class="file-actions">
+-                    <button type="button" class="update-btn" data-update-button>
+-                        Update
+-                    </button>
+-                    <button type="button" class="stop-btn" data-stop-button hidden>
+-                        Stop updating
+-                    </button>
+-                    <a href="/captcha_solve" target="_blank" class="solver-link" data-solver-link hidden>
+-                        Open CAPTCHA
+-                    </a>
+-                </div>
+-                <div class="update-status" data-update-status></div>
+-            </div>
+-            {% endfor %}
+-        </div>
+-        {% endif %}
+-    </div>
+-    <script>
+-        (() => {
+-            const activePolls = new Map();
+-
+-            function setIdleState(button, stopButton, solverLink) {
+-                button.hidden = false;
+-                button.disabled = false;
+-                button.textContent = 'Update';
+-                stopButton.hidden = true;
+-                stopButton.disabled = false;
+-                stopButton.textContent = 'Stop updating';
+-                solverLink.hidden = true;
+-            }
+-
+-            function setRunningState(button, stopButton) {
+-                button.hidden = true;
+-                button.disabled = true;
+-                stopButton.hidden = false;
+-                stopButton.disabled = false;
+-                stopButton.textContent = 'Stop updating';
+-            }
+-
+-            function buildStatusText(job) {
+-                const phase = String(job.phase || '');
+-                if (phase === 'searching') {
+-                    return 'Suche nach neuen Stellen...';
+-                }
+-                if (phase === 'extracting') {
+-                    const current = Number(job.current_index || 0);
+-                    const total = Number(job.total_jobs || 0);
+-                    const found = Number(job.emails_found || 0);
+-                    const duplicates = Number(job.duplicate_emails || 0);
+-                    return `Suche ${current}/${total} | neue E-Mails: ${found} | Duplikate: ${duplicates}`;
+-                }
+-                if (phase === 'saving') {
+-                    return 'Datei wird aktualisiert...';
+-                }
+-                if (phase === 'captcha') {
+-                    return 'CAPTCHA gefunden. Bitte im Selenium-Fenster loesen und dann bestaetigen.';
+-                }
+-                if (phase === 'stopping') {
+-                    return 'Update wird gestoppt...';
+-                }
+-                if (phase === 'stopped') {
+-                    return 'Update gestoppt.';
+-                }
+-                return 'Update laeuft...';
+-            }
+-
+-            async function pollJob(jobId, card, button, statusNode) {
+-                if (activePolls.has(jobId)) {
+-                    window.clearInterval(activePolls.get(jobId));
+-                }
+-
+-                const poll = async () => {
+-                    try {
+-                        const response = await fetch(`/api/ausbildungen/update/${encodeURIComponent(jobId)}`);
+-                        const payload = await response.json();
+-                        if (!response.ok || !payload.success || !payload.job) {
+-                            throw new Error(payload.message || 'Status konnte nicht geladen werden');
+-                        }
+-
+-                        const job = payload.job;
+-                        const lineCount = card.querySelector('[data-line-count]');
+-                        const stopButton = card.querySelector('[data-stop-button]');
+-                        const solverLink = card.querySelector('[data-solver-link]');
+-
+-                        if (job.phase === 'completed' && !job.is_running) {
+-                            const newRows = Number(job.new_rows_added || 0);
+-                            const totalRows = Number(job.result_rows || 0);
+-                            if (lineCount) {
+-                                lineCount.textContent = `${totalRows} Zeilen`;
+-                            }
+-                            statusNode.className = 'update-status success';
+-                            statusNode.textContent = `Fertig. ${newRows} neue E-Mails hinzugefuegt. Seite wird neu geladen...`;
+-                            setIdleState(button, stopButton, solverLink);
+-                            window.clearInterval(activePolls.get(jobId));
+-                            activePolls.delete(jobId);
+-                            window.setTimeout(() => window.location.reload(), 1200);
+-                            return;
+-                        }
+-
+-                        if (job.phase === 'stopped' && !job.is_running) {
+-                            const newRows = Number(job.new_rows_added || 0);
+-                            const totalRows = Number(job.result_rows || 0);
+-                            if (lineCount && totalRows) {
+-                                lineCount.textContent = `${totalRows} Zeilen`;
+-                            }
+-                            statusNode.className = 'update-status';
+-                            statusNode.textContent = newRows > 0
+-                                ? `Gestoppt. ${newRows} neue E-Mails wurden bereits gespeichert.`
+-                                : 'Update gestoppt.';
+-                            setIdleState(button, stopButton, solverLink);
+-                            window.clearInterval(activePolls.get(jobId));
+-                            activePolls.delete(jobId);
+-                            if (newRows > 0) {
+-                                window.setTimeout(() => window.location.reload(), 1200);
+-                            }
+-                            return;
+-                        }
+-
+-                        if (job.phase === 'failed' && !job.is_running) {
+-                            statusNode.className = 'update-status error';
+-                            statusNode.textContent = job.last_error || 'Update fehlgeschlagen.';
+-                            setIdleState(button, stopButton, solverLink);
+-                            window.clearInterval(activePolls.get(jobId));
+-                            activePolls.delete(jobId);
+-                            return;
+-                        }
+-
+-                        setRunningState(button, stopButton);
+-                        if (job.phase === 'stopping') {
+-                            stopButton.disabled = true;
+-                            stopButton.textContent = 'Stopping...';
+-                        }
+-                        solverLink.hidden = job.phase !== 'captcha';
+-                        statusNode.className = 'update-status';
+-                        statusNode.textContent = buildStatusText(job);
+-                    } catch (error) {
+-                        const stopButton = card.querySelector('[data-stop-button]');
+-                        const solverLink = card.querySelector('[data-solver-link]');
+-                        statusNode.className = 'update-status error';
+-                        statusNode.textContent = error.message || 'Update-Status konnte nicht geladen werden.';
+-                        setIdleState(button, stopButton, solverLink);
+-                        window.clearInterval(activePolls.get(jobId));
+-                        activePolls.delete(jobId);
+-                    }
+-                };
+-
+-                await poll();
+-                activePolls.set(jobId, window.setInterval(poll, 2500));
+-            }
+-
+-            document.querySelectorAll('[data-export-card]').forEach((card) => {
+-                const button = card.querySelector('[data-update-button]');
+-                const stopButton = card.querySelector('[data-stop-button]');
+-                const solverLink = card.querySelector('[data-solver-link]');
+-                const statusNode = card.querySelector('[data-update-status]');
+-                const filename = String(card.dataset.filename || '').trim();
+-                if (!button || !stopButton || !solverLink || !statusNode || !filename) {
+-                    return;
+-                }
+-
+-                button.addEventListener('click', async () => {
+-                    setRunningState(button, stopButton);
+-                    statusNode.className = 'update-status';
+-                    statusNode.textContent = 'Update wird gestartet...';
+-
+-                    try {
+-                        const response = await fetch('/api/ausbildungen/update', {
+-                            method: 'POST',
+-                            headers: { 'Content-Type': 'application/json' },
+-                            body: JSON.stringify({ filename }),
+-                        });
+-                        const payload = await response.json();
+-                        if (!response.ok || !payload.success || !payload.job_id) {
+-                            throw new Error(payload.message || 'Update konnte nicht gestartet werden');
+-                        }
+-
+-                        card.dataset.jobId = String(payload.job_id);
+-                        await pollJob(String(payload.job_id), card, button, statusNode);
+-                    } catch (error) {
+-                        setIdleState(button, stopButton, solverLink);
+-                        statusNode.className = 'update-status error';
+-                        statusNode.textContent = error.message || 'Update konnte nicht gestartet werden.';
+-                    }
+-                });
+-
+-                stopButton.addEventListener('click', async () => {
+-                    const jobId = String(card.dataset.jobId || '').trim();
+-                    if (!jobId) {
+-                        return;
+-                    }
+-
+-                    stopButton.disabled = true;
+-                    stopButton.textContent = 'Stopping...';
+-
+-                    try {
+-                        const response = await fetch(`/api/ausbildungen/update/${encodeURIComponent(jobId)}/stop`, {
+-                            method: 'POST',
+-                        });
+-                        const payload = await response.json();
+-                        if (!response.ok || !payload.success) {
+-                            throw new Error(payload.message || 'Stop konnte nicht angefordert werden');
+-                        }
+-                        statusNode.className = 'update-status';
+-                        statusNode.textContent = 'Stop wird angefordert...';
+-                    } catch (error) {
+-                        stopButton.disabled = false;
+-                        stopButton.textContent = 'Stop updating';
+-                        statusNode.className = 'update-status error';
+-                        statusNode.textContent = error.message || 'Stop konnte nicht angefordert werden.';
+-                    }
+-                });
+-            });
+-        })();
+-    </script>
+-</body>
+-</html>
+diff --git a/templates/create_anschreibens.html b/templates/create_anschreibens.html
+--- a/templates/create_anschreibens.html
++++ /dev/null
+@@ -1,73 +0,0 @@
+-<!DOCTYPE html>
+-<html lang="de">
+-<head>
+-    <meta charset="UTF-8">
+-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+-    <title>Create Anschreibens</title>
+-    <style>
+-        body {
+-            font-family: Arial, sans-serif;
+-            background: #f5f5f5;
+-            margin: 0;
+-            padding: 100px 20px 20px;
+-        }
+-        .navbar {
+-            max-width: 900px;
+-            margin: 0 auto 20px;
+-            background: #fff;
+-            border-radius: 10px;
+-            display: flex;
+-            gap: 10px;
+-            padding: 10px 14px;
+-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+-            position: fixed;
+-            top: 16px;
+-            left: 50%;
+-            transform: translateX(-50%);
+-            z-index: 1000;
+-        }
+-        .nav-link {
+-            color: #2f3a56;
+-            text-decoration: none;
+-            font-weight: 700;
+-            padding: 8px 12px;
+-            border-radius: 6px;
+-        }
+-        .nav-link.active {
+-            background: #667eea;
+-            color: #fff;
+-        }
+-        .container {
+-            max-width: 900px;
+-            margin: 0 auto;
+-            background: #fff;
+-            padding: 24px;
+-            border-radius: 10px;
+-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+-        }
+-        h1 {
+-            margin-top: 0;
+-        }
+-        p {
+-            color: #666;
+-        }
+-    </style>
+-    <link rel="stylesheet" href="{{ url_for('static', filename='shared_nav.css') }}">
+-    <script src="{{ url_for('static', filename='shared_nav.js') }}" defer></script>
+-</head>
+-<body>
+-    <nav class="navbar">
+-        <a href="{{ url_for('index') }}" class="nav-link">E-Mails finden</a>
+-        <a href="{{ url_for('firebase_page') }}" class="nav-link">Firebase</a>
+-        <a href="{{ url_for('money') }}" class="nav-link">Money</a>
+-        <a href="{{ url_for('create_anschreibens') }}" class="nav-link active">Anschreiben erstellen</a>
+-        <a href="{{ url_for('send_emails') }}" class="nav-link">E-Mails senden</a>
+-        <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+-        <a href="{{ url_for('ausbildungen') }}" class="nav-link">Ausbildungen</a>
+-    </nav>
+-    <div class="container">
+-        <h1>Create Anschreibens</h1>
+-        <p>This section is ready for generating and managing anschreiben templates.</p>
+-    </div>
+-</body>
+-</html>
+diff --git a/templates/dashboard.html b/templates/dashboard.html
+--- a/templates/dashboard.html
++++ /dev/null
+@@ -1,737 +0,0 @@
+-<!DOCTYPE html>
+-<html lang="de">
+-<head>
+-    <meta charset="UTF-8">
+-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+-    <title>Dashboard</title>
+-    <style>
+-        body {
+-            font-family: Arial, sans-serif;
+-            background: #f5f5f5;
+-            margin: 0;
+-            padding: 100px 20px 20px;
+-        }
+-        .navbar {
+-            max-width: 1100px;
+-            margin: 0 auto 20px;
+-            background: #fff;
+-            border-radius: 10px;
+-            display: flex;
+-            gap: 10px;
+-            padding: 10px 14px;
+-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+-            position: fixed;
+-            top: 16px;
+-            left: 50%;
+-            transform: translateX(-50%);
+-            z-index: 1000;
+-            flex-wrap: wrap;
+-        }
+-        .nav-link {
+-            color: #2f3a56;
+-            text-decoration: none;
+-            font-weight: 700;
+-            padding: 8px 12px;
+-            border-radius: 6px;
+-        }
+-        .nav-link.active {
+-            background: #667eea;
+-            color: #fff;
+-        }
+-        .container {
+-            max-width: 1100px;
+-            margin: 0 auto;
+-        }
+-        .header {
+-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+-            color: #fff;
+-            padding: 28px;
+-            border-radius: 10px;
+-            margin-bottom: 20px;
+-        }
+-        .header p {
+-            margin: 8px 0 0;
+-        }
+-        .header-actions {
+-            margin-top: 12px;
+-        }
+-        .new-template-link {
+-            display: inline-block;
+-            text-decoration: none;
+-            background: rgba(255, 255, 255, 0.2);
+-            color: #fff;
+-            font-weight: 700;
+-            padding: 8px 12px;
+-            border: 1px solid rgba(255, 255, 255, 0.4);
+-            border-radius: 8px;
+-        }
+-        .new-template-link:hover {
+-            background: rgba(255, 255, 255, 0.3);
+-        }
+-        .flash-messages {
+-            display: grid;
+-            gap: 10px;
+-            margin-bottom: 18px;
+-        }
+-        .flash {
+-            border-radius: 10px;
+-            padding: 12px 14px;
+-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+-            font-weight: 700;
+-        }
+-        .flash.success {
+-            background: #dcfce7;
+-            border: 1px solid #86efac;
+-            color: #166534;
+-        }
+-        .flash.error {
+-            background: #fee2e2;
+-            border: 1px solid #fca5a5;
+-            color: #b91c1c;
+-        }
+-        .empty {
+-            background: #fff;
+-            border-radius: 10px;
+-            padding: 20px;
+-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+-            color: #555;
+-        }
+-        .cards {
+-            display: grid;
+-            grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+-            gap: 14px;
+-        }
+-        .card {
+-            background: #fff;
+-            border-radius: 10px;
+-            padding: 18px;
+-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+-            display: flex;
+-            flex-direction: column;
+-            gap: 10px;
+-        }
+-        .card h3 {
+-            margin: 0;
+-            font-size: 1.1rem;
+-            color: #1f2a44;
+-        }
+-        .meta {
+-            color: #606b85;
+-            font-size: 14px;
+-            line-height: 1.4;
+-        }
+-        .stats {
+-            display: grid;
+-            grid-template-columns: repeat(3, 1fr);
+-            gap: 8px;
+-        }
+-        .stat {
+-            background: #f8f9ff;
+-            border: 1px solid #d8ddff;
+-            border-radius: 8px;
+-            padding: 8px;
+-            text-align: center;
+-        }
+-        .stat strong {
+-            display: block;
+-            font-size: 1rem;
+-            color: #2f3a56;
+-        }
+-        .stat span {
+-            font-size: 12px;
+-            color: #69728a;
+-        }
+-        .actions {
+-            display: grid;
+-            grid-template-columns: repeat(2, minmax(0, 1fr));
+-            gap: 10px;
+-        }
+-        .actions > * {
+-            min-width: 0;
+-        }
+-        .open-btn,
+-        .edit-btn,
+-        .pause-btn,
+-        .delete-btn,
+-        .firebase-delete-btn {
+-            display: flex;
+-            align-items: center;
+-            justify-content: center;
+-            width: 100%;
+-            min-height: 46px;
+-            box-sizing: border-box;
+-            border-radius: 10px;
+-            padding: 11px 14px;
+-            font-size: 14px;
+-            font-weight: 700;
+-            line-height: 1.2;
+-            text-align: center;
+-            text-decoration: none;
+-            transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+-            white-space: nowrap;
+-            cursor: pointer;
+-        }
+-        .open-btn:hover,
+-        .edit-btn:hover,
+-        .pause-btn:hover,
+-        .delete-btn:hover,
+-        .firebase-delete-btn:hover {
+-            transform: translateY(-1px);
+-            box-shadow: 0 8px 18px rgba(47, 58, 86, 0.14);
+-        }
+-        .open-btn {
+-            border: 1px solid #5b73e6;
+-            background: linear-gradient(135deg, #667eea 0%, #5b73e6 100%);
+-            color: #fff;
+-        }
+-        .open-btn:hover {
+-            background: linear-gradient(135deg, #5b73e6 0%, #5069dd 100%);
+-        }
+-        .edit-btn {
+-            border: 1px solid #cfd6e6;
+-            background: #eef2ff;
+-            color: #2f3a56;
+-            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+-        }
+-        .edit-btn:hover {
+-            background: #e1e8ff;
+-        }
+-        .edit-btn.disabled {
+-            background: #e5e7eb;
+-            border-color: #d6dae3;
+-            color: #7a8397;
+-            pointer-events: none;
+-            cursor: not-allowed;
+-            box-shadow: none;
+-        }
+-        .pause-btn {
+-            border: 1px solid #d97706;
+-            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+-            color: #fff;
+-        }
+-        .pause-btn:hover {
+-            background: linear-gradient(135deg, #ea9206 0%, #b45309 100%);
+-        }
+-        .pause-btn.is-continue {
+-            border-color: #15803d;
+-            background: linear-gradient(135deg, #22c55e 0%, #15803d 100%);
+-        }
+-        .pause-btn.is-continue:hover {
+-            background: linear-gradient(135deg, #1fad52 0%, #166534 100%);
+-        }
+-        .pause-btn:disabled {
+-            border-color: #d6dae3;
+-            background: #e5e7eb;
+-            color: #7a8397;
+-            cursor: not-allowed;
+-            box-shadow: none;
+-        }
+-        .delete-form {
+-            margin: 0;
+-            display: flex;
+-        }
+-        .pause-btn[hidden] + .delete-form {
+-            grid-column: span 2;
+-        }
+-        .delete-btn {
+-            border: 1px solid #d94b4b;
+-            background: linear-gradient(135deg, #ef5350 0%, #d94b4b 100%);
+-            color: #fff;
+-            cursor: pointer;
+-        }
+-        .delete-btn:hover {
+-            background: linear-gradient(135deg, #e24a47 0%, #b43838 100%);
+-        }
+-        .delete-btn:disabled {
+-            border-color: #d6dae3;
+-            background: #e5e7eb;
+-            color: #7a8397;
+-            cursor: not-allowed;
+-            box-shadow: none;
+-        }
+-        @media (max-width: 560px) {
+-            .actions {
+-                grid-template-columns: 1fr;
+-            }
+-            .pause-btn[hidden] + .delete-form {
+-                grid-column: auto;
+-            }
+-        }
+-        .delete-note {
+-            font-size: 12px;
+-            color: #8a4b00;
+-        }
+-        .campaign-progress {
+-            margin-top: 2px;
+-        }
+-        .campaign-progress-head {
+-            display: flex;
+-            justify-content: space-between;
+-            align-items: center;
+-            gap: 8px;
+-            font-size: 12px;
+-            color: #5a6278;
+-            margin-bottom: 6px;
+-        }
+-        .progress-status {
+-            font-weight: 700;
+-            color: #5a6278;
+-        }
+-        .progress-status.sending {
+-            color: #1d4ed8;
+-        }
+-        .progress-status.paused {
+-            color: #b45309;
+-        }
+-        .progress-status.done {
+-            color: #15803d;
+-        }
+-        .progress-percent {
+-            font-weight: 700;
+-            color: #2f3a56;
+-        }
+-        .progress-track {
+-            width: 100%;
+-            height: 10px;
+-            background: #e5e7eb;
+-            border-radius: 999px;
+-            overflow: hidden;
+-        }
+-        .progress-fill {
+-            width: 0%;
+-            height: 100%;
+-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+-            transition: width 0.3s ease;
+-        }
+-        .progress-fill.sending {
+-            animation: sendingPulse 1.6s ease-in-out infinite alternate;
+-        }
+-        .progress-subtext {
+-            margin-top: 6px;
+-            font-size: 12px;
+-            color: #606b85;
+-            min-height: 16px;
+-        }
+-        @keyframes sendingPulse {
+-            from { filter: brightness(1); }
+-            to { filter: brightness(1.15); }
+-        }
+-    </style>
+-    <link rel="stylesheet" href="{{ url_for('static', filename='shared_nav.css') }}">
+-    <script src="{{ url_for('static', filename='shared_nav.js') }}" defer></script>
+-</head>
+-<body>
+-    <nav class="navbar">
+-        <a href="{{ url_for('index') }}" class="nav-link">E-Mails finden</a>
+-        <a href="{{ url_for('firebase_page') }}" class="nav-link">Firebase</a>
+-        <a href="{{ url_for('money') }}" class="nav-link">Money</a>
+-        <a href="{{ url_for('create_anschreibens') }}" class="nav-link">Anschreiben erstellen</a>
+-        <a href="{{ url_for('send_emails') }}" class="nav-link">E-Mails senden</a>
+-        <a href="{{ url_for('dashboard') }}" class="nav-link active">Dashboard</a>
+-        <a href="{{ url_for('ausbildungen') }}" class="nav-link">Ausbildungen</a>
+-    </nav>
+-
+-    <div class="container">
+-        <div class="header">
+-            <h1>Dashboard</h1>
+-            <p>Gespeicherte Vorlagen mit dauerhaftem Versandfortschritt.</p>
+-            <div class="header-actions">
+-                <a class="new-template-link" href="{{ url_for('send_emails') }}">Neue Vorlage anlegen</a>
+-            </div>
+-        </div>
+-
+-        {% with messages = get_flashed_messages(with_categories=true) %}
+-        {% if messages %}
+-        <div class="flash-messages">
+-            {% for category, message in messages %}
+-            <div class="flash {{ category }}">{{ message }}</div>
+-            {% endfor %}
+-        </div>
+-        {% endif %}
+-        {% endwith %}
+-
+-        {% if not campaigns %}
+-        <div class="empty">
+-            Noch keine gespeicherten Vorlagen. Starte unter <a href="{{ url_for('send_emails') }}">E-Mails senden</a>, die Kampagne wird automatisch gespeichert.
+-        </div>
+-        {% else %}
+-        <div class="cards">
+-            {% for campaign in campaigns %}
+-            <div class="card" data-campaign-id="{{ campaign.id }}">
+-                <h3>{{ campaign.full_name or campaign.name }}</h3>
+-                <div class="meta">
+-                    Modus: <strong class="meta-mode">{{ campaign.mode }}</strong><br>
+-                    Absender: <span class="meta-sender">{{ campaign.sender_email or 'k. A.' }}</span><br>
+-                    Anh&#228;nge: <span class="meta-attachments">{{ campaign.attachment_count }}</span><br>
+-                    Aktualisiert: <span class="meta-updated">{{ campaign.updated_at }}</span>
+-                </div>
+-                <div class="stats">
+-                    <div class="stat">
+-                        <strong class="stat-total">{{ campaign.total_rows }}</strong>
+-                        <span>Gesamt</span>
+-                    </div>
+-                    <div class="stat">
+-                        <strong class="stat-sent">{{ campaign.sent_rows }}</strong>
+-                        <span>Gesendet</span>
+-                    </div>
+-                    <div class="stat">
+-                        <strong class="stat-remaining">{{ campaign.remaining_rows }}</strong>
+-                        <span>Offen</span>
+-                    </div>
+-                </div>
+-                <div class="actions">
+-                    <a class="open-btn" href="{{ url_for('send_emails', campaign=campaign.id) }}">Versand öffnen</a>
+-                    <a
+-                        class="edit-btn{% if campaign.has_active_job or not campaign.has_anschreiben_data or campaign.mode != 'transfer' %} disabled{% endif %}"
+-                        href="{% if campaign.has_anschreiben_data and campaign.mode == 'transfer' and not campaign.has_active_job %}{{ url_for('create_anschreibens') }}?edit_campaign={{ campaign.id }}{% else %}#{% endif %}"
+-                        data-edit-href="{{ url_for('create_anschreibens') }}?edit_campaign={{ campaign.id }}"
+-                        data-has-anschreiben="{{ 'true' if campaign.has_anschreiben_data else 'false' }}"
+-                        {% if campaign.has_active_job %}
+-                        title="Anschreiben kann erst bearbeitet werden, wenn der Versand gestoppt ist"
+-                        {% elif not campaign.has_anschreiben_data or campaign.mode != 'transfer' %}
+-                        title="Kein gespeichertes Anschreiben für diese Karte verfügbar"
+-                        {% endif %}
+-                    >
+-                        Edit Anschreiben
+-                    </a>
+-                    <button
+-                        type="button"
+-                        class="pause-btn{% if campaign.active_job and campaign.active_job.status == 'paused' %} is-continue{% endif %}"
+-                        data-job-id="{{ campaign.active_job.job_id if campaign.active_job else '' }}"
+-                        data-action="{% if campaign.active_job and campaign.active_job.status == 'paused' %}continue{% else %}pause{% endif %}"
+-                        {% if not campaign.active_job %}hidden{% endif %}
+-                    >
+-                        {% if campaign.active_job and campaign.active_job.status == 'paused' %}Continue{% else %}Pause{% endif %}
+-                    </button>
+-                    <form
+-                        class="delete-form"
+-                        method="POST"
+-                        action="{{ url_for('delete_dashboard_campaign', campaign_id=campaign.id) }}"
+-                        onsubmit="return confirm('Diese gespeicherte Vorlage löschen? Das kann nicht rückgängig gemacht werden.');"
+-                    >
+-                        <button
+-                            type="submit"
+-                            class="delete-btn"
+-                            {% if campaign.has_active_job %}disabled title="Laufenden oder pausierten Versand zuerst abschließen"{% endif %}
+-                        >
+-                            {% if campaign.has_active_job %}Versand aktiv{% else %}Löschen{% endif %}
+-                        </button>
+-                    </form>
+-                </div>
+-                <div class="delete-note" {% if not campaign.has_active_job %}hidden{% endif %}>
+-                    Löschen ist während eines laufenden oder pausierten Versands gesperrt.
+-                </div>
+-                <div class="campaign-progress">
+-                    <div class="campaign-progress-head">
+-                        <span class="progress-status{% if campaign.is_sending %} sending{% elif campaign.is_paused %} paused{% elif campaign.remaining_rows == 0 and campaign.total_rows > 0 %} done{% endif %}">
+-                            {% if campaign.is_sending %}
+-                            Versand laeuft
+-                            {% elif campaign.is_paused %}
+-                            Pausiert
+-                            {% elif campaign.remaining_rows == 0 and campaign.total_rows > 0 %}
+-                            Abgeschlossen
+-                            {% else %}
+-                            Bereit
+-                            {% endif %}
+-                        </span>
+-                        <span class="progress-percent">{{ "%.1f"|format(campaign.progress_percent or 0) }}%</span>
+-                    </div>
+-                    <div class="progress-track">
+-                        <div
+-                            class="progress-fill{% if campaign.is_sending %} sending{% endif %}"
+-                            style="width: {{ "%.2f"|format(campaign.progress_percent or 0) }}%;"
+-                        ></div>
+-                    </div>
+-                    <div class="progress-subtext">
+-                        {% if campaign.active_job %}
+-                        {{ campaign.active_job.message or 'Massenversand aktiv...' }}
+-                        {% else %}
+-                        {{ campaign.sent_rows }}/{{ campaign.total_rows }} gesendet, {{ campaign.remaining_rows }} offen.
+-                        {% endif %}
+-                    </div>
+-                </div>
+-            </div>
+-            {% endfor %}
+-        </div>
+-        {% endif %}
+-    </div>
+-
+-    {% if campaigns %}
+-    <script>
+-        (() => {
+-            const cards = new Map();
+-            const pendingJobActions = new Map();
+-            document.querySelectorAll('.card[data-campaign-id]').forEach((card) => {
+-                cards.set(card.dataset.campaignId, card);
+-            });
+-
+-            if (!cards.size) {
+-                return;
+-            }
+-
+-            let pollTimer = null;
+-            let reloadedForStructureChange = false;
+-
+-            function clampPercent(value) {
+-                const parsed = Number(value || 0);
+-                if (!Number.isFinite(parsed)) {
+-                    return 0;
+-                }
+-                return Math.max(0, Math.min(100, parsed));
+-            }
+-
+-            function text(card, selector, value) {
+-                const el = card.querySelector(selector);
+-                if (el) {
+-                    el.textContent = String(value ?? '');
+-                }
+-            }
+-
+-            function setPauseButtonState(card, activeJob, hasActiveJob) {
+-                const pauseBtn = card.querySelector('.pause-btn');
+-                if (!pauseBtn) {
+-                    return;
+-                }
+-
+-                const campaignId = String(card.dataset.campaignId || '');
+-                const jobStatus = String(activeJob?.status || '');
+-                const pendingAction = pendingJobActions.get(campaignId) || '';
+-
+-                if (
+-                    (pendingAction === 'pause' && jobStatus === 'paused')
+-                    || (pendingAction === 'continue' && jobStatus === 'running')
+-                    || !hasActiveJob
+-                ) {
+-                    pendingJobActions.delete(campaignId);
+-                }
+-
+-                const resolvedPendingAction = pendingJobActions.get(campaignId) || '';
+-                const isPaused = jobStatus === 'paused';
+-
+-                if (!hasActiveJob) {
+-                    pauseBtn.hidden = true;
+-                    pauseBtn.disabled = false;
+-                    pauseBtn.dataset.jobId = '';
+-                    pauseBtn.dataset.action = 'pause';
+-                    pauseBtn.textContent = 'Pause';
+-                    pauseBtn.title = '';
+-                    pauseBtn.classList.remove('is-continue');
+-                    return;
+-                }
+-
+-                pauseBtn.hidden = false;
+-                pauseBtn.dataset.jobId = String(activeJob?.job_id || '');
+-                pauseBtn.dataset.action = isPaused ? 'continue' : 'pause';
+-                pauseBtn.disabled = Boolean(resolvedPendingAction) || !pauseBtn.dataset.jobId;
+-                pauseBtn.textContent = resolvedPendingAction
+-                    ? (resolvedPendingAction === 'pause' ? 'Pausing...' : 'Continuing...')
+-                    : (isPaused ? 'Continue' : 'Pause');
+-                pauseBtn.title = isPaused
+-                    ? 'Pausierten Versand für diese Karte fortsetzen'
+-                    : 'Laufenden Versand für diese Karte pausieren';
+-                pauseBtn.classList.toggle('is-continue', isPaused || resolvedPendingAction === 'continue');
+-            }
+-
+-            function updateCard(card, campaign) {
+-                const total = Number(campaign.total_rows || 0);
+-                const sent = Number(campaign.sent_rows || 0);
+-                const remaining = Number(campaign.remaining_rows || 0);
+-                const percent = clampPercent(
+-                    campaign.progress_percent != null
+-                        ? campaign.progress_percent
+-                        : (total > 0 ? (sent / total) * 100 : 0)
+-                );
+-
+-                text(card, '.meta-mode', campaign.mode || '');
+-                text(card, '.meta-sender', campaign.sender_email || 'k. A.');
+-                text(card, '.meta-attachments', campaign.attachment_count || 0);
+-                text(card, '.meta-updated', campaign.updated_at || '');
+-                text(card, '.stat-total', total);
+-                text(card, '.stat-sent', sent);
+-                text(card, '.stat-remaining', remaining);
+-
+-                const statusEl = card.querySelector('.progress-status');
+-                const percentEl = card.querySelector('.progress-percent');
+-                const fillEl = card.querySelector('.progress-fill');
+-                const subtextEl = card.querySelector('.progress-subtext');
+-                const deleteBtn = card.querySelector('.delete-btn');
+-                const deleteNote = card.querySelector('.delete-note');
+-                const editBtn = card.querySelector('.edit-btn');
+-                const activeJob = campaign.active_job || null;
+-                const hasActiveJob = Boolean(campaign.has_active_job && activeJob);
+-                const jobStatus = String(activeJob?.status || '');
+-                const isSending = hasActiveJob && jobStatus === 'running';
+-                const isPaused = hasActiveJob && jobStatus === 'paused';
+-
+-                setPauseButtonState(card, activeJob, hasActiveJob);
+-
+-                if (statusEl) {
+-                    statusEl.classList.remove('sending', 'paused', 'done');
+-                    if (isSending) {
+-                        statusEl.classList.add('sending');
+-                        statusEl.textContent = 'Versand laeuft';
+-                    } else if (isPaused) {
+-                        statusEl.classList.add('paused');
+-                        statusEl.textContent = 'Pausiert';
+-                    } else if (total > 0 && remaining === 0) {
+-                        statusEl.classList.add('done');
+-                        statusEl.textContent = 'Abgeschlossen';
+-                    } else {
+-                        statusEl.textContent = 'Bereit';
+-                    }
+-                }
+-
+-                if (percentEl) {
+-                    percentEl.textContent = `${percent.toFixed(1)}%`;
+-                }
+-                if (fillEl) {
+-                    fillEl.style.width = `${percent.toFixed(2)}%`;
+-                    fillEl.classList.toggle('sending', isSending);
+-                }
+-                if (deleteBtn) {
+-                    deleteBtn.disabled = hasActiveJob;
+-                    deleteBtn.textContent = hasActiveJob ? 'Versand aktiv' : 'Löschen';
+-                    deleteBtn.title = hasActiveJob
+-                        ? 'Laufenden oder pausierten Versand zuerst abschließen'
+-                        : '';
+-                }
+-                if (deleteNote) {
+-                    deleteNote.hidden = !hasActiveJob;
+-                }
+-                if (editBtn) {
+-                    editBtn.dataset.hasAnschreiben = String(Boolean(campaign.has_anschreiben_data));
+-                    const hasAnschreibenData = String(editBtn.dataset.hasAnschreiben || 'false') === 'true';
+-                    const canEdit = !hasActiveJob && hasAnschreibenData && (campaign.mode || '') === 'transfer';
+-                    editBtn.classList.toggle('disabled', !canEdit);
+-                    editBtn.href = canEdit ? String(editBtn.dataset.editHref || '#') : '#';
+-                    editBtn.title = canEdit
+-                        ? ''
+-                        : (hasActiveJob
+-                            ? 'Anschreiben kann erst bearbeitet werden, wenn der Versand gestoppt ist'
+-                            : 'Kein gespeichertes Anschreiben für diese Karte verfügbar');
+-                }
+-
+-                if (subtextEl) {
+-                    if (hasActiveJob) {
+-                        const runTotal = Number(activeJob.total || 0);
+-                        const runProcessed = Number(activeJob.processed || 0);
+-                        const runPercent = clampPercent(activeJob.percent || 0);
+-                        const runInfo = runTotal > 0
+-                            ? `Lauf ${runProcessed}/${runTotal} (${runPercent.toFixed(1)}%)`
+-                            : '';
+-                        const message = String(activeJob.message || '').trim();
+-                        subtextEl.textContent = message
+-                            ? (runInfo ? `${runInfo} | ${message}` : message)
+-                            : (runInfo || `${sent}/${total} gesendet, ${remaining} offen.`);
+-                    } else {
+-                        subtextEl.textContent = `${sent}/${total} gesendet, ${remaining} offen.`;
+-                    }
+-                }
+-            }
+-
+-            async function pollDashboard() {
+-                const response = await fetch('/api/dashboard/campaigns');
+-                const payload = await response.json();
+-                if (!response.ok || !payload.success || !Array.isArray(payload.campaigns)) {
+-                    throw new Error(payload.message || 'Dashboard-Daten konnten nicht geladen werden');
+-                }
+-
+-                const campaigns = payload.campaigns;
+-                const incomingIds = new Set(campaigns.map((item) => String(item.id || '')));
+-                const hasShapeChange = incomingIds.size !== cards.size
+-                    || Array.from(cards.keys()).some((id) => !incomingIds.has(id));
+-                if (hasShapeChange) {
+-                    if (!reloadedForStructureChange) {
+-                        reloadedForStructureChange = true;
+-                        window.location.reload();
+-                    }
+-                    return;
+-                }
+-
+-                campaigns.forEach((campaign) => {
+-                    const card = cards.get(String(campaign.id || ''));
+-                    if (!card) {
+-                        return;
+-                    }
+-                    updateCard(card, campaign);
+-                });
+-            }
+-
+-            async function toggleCampaignJob(card) {
+-                const pauseBtn = card.querySelector('.pause-btn');
+-                const jobId = String(pauseBtn?.dataset.jobId || '').trim();
+-                const campaignId = String(card.dataset.campaignId || '').trim();
+-                const action = String(pauseBtn?.dataset.action || 'pause').trim() === 'continue'
+-                    ? 'continue'
+-                    : 'pause';
+-                if (!pauseBtn || !jobId || !campaignId) {
+-                    return;
+-                }
+-
+-                pendingJobActions.set(campaignId, action);
+-                setPauseButtonState(
+-                    card,
+-                    { job_id: jobId, status: action === 'continue' ? 'paused' : 'running' },
+-                    true
+-                );
+-
+-                try {
+-                    const response = await fetch(`/api/send-bulk/${action}/${encodeURIComponent(jobId)}`, {
+-                        method: 'POST'
+-                    });
+-                    const payload = await response.json();
+-                    if (!response.ok || !payload.success) {
+-                        throw new Error(
+-                            payload.message
+-                            || (action === 'continue'
+-                                ? 'Continue konnte nicht angefordert werden'
+-                                : 'Pause konnte nicht angefordert werden')
+-                        );
+-                    }
+-                    await pollDashboard();
+-                } catch (error) {
+-                    pendingJobActions.delete(campaignId);
+-                    setPauseButtonState(
+-                        card,
+-                        { job_id: jobId, status: action === 'continue' ? 'paused' : 'running' },
+-                        true
+-                    );
+-                    window.alert(
+-                        error.message
+-                        || (action === 'continue'
+-                            ? 'Continue konnte nicht angefordert werden.'
+-                            : 'Pause konnte nicht angefordert werden.')
+-                    );
+-                }
+-            }
+-
+-            document.addEventListener('click', (event) => {
+-                const pauseBtn = event.target.closest('.pause-btn');
+-                if (!pauseBtn) {
+-                    return;
+-                }
+-
+-                const card = pauseBtn.closest('.card[data-campaign-id]');
+-                if (!card) {
+-                    return;
+-                }
+-
+-                toggleCampaignJob(card).catch(() => {});
+-            });
+-
+-            pollTimer = setInterval(() => {
+-                pollDashboard().catch(() => {});
+-            }, 1500);
+-
+-            pollDashboard().catch(() => {});
+-
+-            window.addEventListener('beforeunload', () => {
+-                if (pollTimer) {
+-                    clearInterval(pollTimer);
+-                }
+-            });
+-        })();
+-    </script>
+-    {% endif %}
+-</body>
+-</html>
+diff --git a/templates/firebase.html b/templates/firebase.html
+--- a/templates/firebase.html
++++ /dev/null
+@@ -1,209 +0,0 @@
+-<!DOCTYPE html>
+-<html lang="en">
+-<head>
+-    <meta charset="UTF-8">
+-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+-    <title>JobScout - Client Applications</title>
+-    <style>
+-        body {
+-            font-family: Arial, sans-serif;
+-            background: #f5f5f5;
+-            margin: 0;
+-            padding: 100px 20px 20px;
+-        }
+-        .navbar {
+-            max-width: 1100px;
+-            margin: 0 auto 20px;
+-            background: #fff;
+-            border-radius: 10px;
+-            display: flex;
+-            gap: 10px;
+-            padding: 10px 14px;
+-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+-            position: fixed;
+-            top: 16px;
+-            left: 50%;
+-            transform: translateX(-50%);
+-            z-index: 1000;
+-            flex-wrap: wrap;
+-        }
+-        .nav-link {
+-            color: #2f3a56;
+-            text-decoration: none;
+-            font-weight: 700;
+-            padding: 8px 12px;
+-            border-radius: 6px;
+-        }
+-        .nav-link.active {
+-            background: #667eea;
+-            color: #fff;
+-        }
+-        .container {
+-            max-width: 1100px;
+-            margin: 0 auto;
+-        }
+-        .header {
+-            background: linear-gradient(135deg, #0b6e4f 0%, #1a936f 100%);
+-            color: #fff;
+-            padding: 28px;
+-            border-radius: 10px;
+-            margin-bottom: 20px;
+-        }
+-        .header h1 {
+-            margin: 0;
+-        }
+-        .header p {
+-            margin: 8px 0 0;
+-        }
+-        .empty {
+-            background: #fff;
+-            border-radius: 10px;
+-            padding: 20px;
+-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+-            color: #555;
+-        }
+-        .cards {
+-            display: grid;
+-            grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+-            gap: 14px;
+-        }
+-        .card {
+-            background: #fff;
+-            border-radius: 10px;
+-            padding: 18px;
+-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+-            display: flex;
+-            flex-direction: column;
+-            gap: 10px;
+-        }
+-        .card h3 {
+-            margin: 0;
+-            font-size: 1.1rem;
+-            color: #1f2a44;
+-        }
+-        .meta {
+-            color: #606b85;
+-            font-size: 14px;
+-            line-height: 1.4;
+-        }
+-        .actions {
+-            display: grid;
+-            grid-template-columns: 1fr;
+-            gap: 10px;
+-        }
+-        .firebase-badge {
+-            display: inline-flex;
+-            align-items: center;
+-            gap: 6px;
+-            padding: 4px 10px;
+-            border-radius: 999px;
+-            background: rgba(11, 110, 79, 0.12);
+-            color: #0b6e4f;
+-            font-size: 0.75rem;
+-            font-weight: 700;
+-            text-transform: uppercase;
+-            letter-spacing: 0.05em;
+-        }
+-        .firebase-badge::before {
+-            content: "";
+-            width: 8px;
+-            height: 8px;
+-            border-radius: 999px;
+-            background: #0b6e4f;
+-        }
+-        .card.firebase-card {
+-            border-left: 4px solid #0b6e4f;
+-        }
+-        .card.firebase-card h3 {
+-            display: flex;
+-            align-items: center;
+-            gap: 10px;
+-        }
+-        .firebase-delete-btn {
+-            display: flex;
+-            align-items: center;
+-            justify-content: center;
+-            width: 100%;
+-            min-height: 46px;
+-            box-sizing: border-box;
+-            border-radius: 10px;
+-            padding: 11px 14px;
+-            font-size: 14px;
+-            font-weight: 700;
+-            line-height: 1.2;
+-            text-align: center;
+-            text-decoration: none;
+-            transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+-            white-space: nowrap;
+-            cursor: pointer;
+-            border: 1px solid #b85c38;
+-            background: linear-gradient(135deg, #ef5350 0%, #b85c38 100%);
+-            color: #fff;
+-        }
+-        .firebase-delete-btn:hover {
+-            background: linear-gradient(135deg, #e24a47 0%, #a04d2d 100%);
+-            transform: translateY(-1px);
+-            box-shadow: 0 8px 18px rgba(47, 58, 86, 0.14);
+-        }
+-        .firebase-delete-btn:disabled {
+-            border-color: #d6dae3;
+-            background: #e5e7eb;
+-            color: #7a8397;
+-            cursor: not-allowed;
+-            transform: none;
+-            box-shadow: none;
+-        }
+-    </style>
+-    <link rel="stylesheet" href="{{ url_for('static', filename='shared_nav.css') }}">
+-    <script src="{{ url_for('static', filename='shared_nav.js') }}" defer></script>
+-</head>
+-<body>
+-    <nav class="navbar">
+-        <a href="{{ url_for('index') }}" class="nav-link">Find Emails</a>
+-        <a href="{{ url_for('firebase_page') }}" class="nav-link active">Firebase</a>
+-        <a href="{{ url_for('money') }}" class="nav-link">Money</a>
+-        <a href="{{ url_for('create_anschreibens') }}" class="nav-link">Cover Letters</a>
+-        <a href="{{ url_for('send_emails') }}" class="nav-link">Send Emails</a>
+-        <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+-        <a href="{{ url_for('ausbildungen') }}" class="nav-link">Apprenticeships</a>
+-    </nav>
+-
+-    <div class="container">
+-        <div class="header">
+-            <h1>Applications</h1>
+-            <p>Online Client Submissions</p>
+-        </div>
+-
+-        <section id="firebase-section" class="firebase-section" {% if not firebase_applications %}hidden{% endif %}>
+-            <div class="cards" id="firebase-cards" data-initial-count="{{ firebase_applications|length }}">
+-                {% for app in firebase_applications %}
+-                <div class="card firebase-card" data-firebase-id="{{ app.id }}" data-source="firebase">
+-                    <h3>
+-                        {{ app.fullName or 'Unnamed applicant' }}
+-                        <span class="firebase-badge">{{ app.source_label or 'Firebase' }}</span>
+-                    </h3>
+-                    <div class="meta">
+-                        Source: <strong>{{ app.source_label or 'Firebase' }}</strong><br>
+-                        Email: <strong>{{ app.email or 'N/A' }}</strong><br>
+-                        WhatsApp: <span>{{ app.whatsapp or 'N/A' }}</span><br>
+-                        Package: <span>{{ app.bewerbungen or 'N/A' }}</span><br>
+-                        Field/Industry: <span>{{ app.bereich or 'N/A' }}</span><br>
+-                        Documents: <span>{{ app.document_count or 0 }}</span><br>
+-                        Submitted: <span>{{ app.created_at_display or 'N/A' }}</span>
+-                    </div>
+-                    <div class="actions">
+-                        <button type="button" class="firebase-delete-btn" data-firebase-delete="{{ app.id }}">Delete</button>
+-                    </div>
+-                </div>
+-                {% endfor %}
+-            </div>
+-        </section>
+-        
+-        {% if not firebase_applications %}
+-        <div class="empty">No client applications received yet.</div>
+-        {% endif %}
+-    </div>
+-
+-    <script type="module" src="{{ url_for('static', filename='dashboard_firebase.js') }}"></script>
+-</body>
+-</html>
+diff --git a/templates/send_emails.html b/templates/send_emails.html
+--- a/templates/send_emails.html
++++ /dev/null
+@@ -1,1037 +0,0 @@
+-<!DOCTYPE html>
+-<html lang="de">
+-<head>
+-    <meta charset="UTF-8">
+-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+-    <title>E-Mails senden</title>
+-    <style>
+-        body {
+-            font-family: Arial, sans-serif;
+-            background: #f5f5f5;
+-            margin: 0;
+-            padding: 100px 20px 20px;
+-        }
+-        .navbar {
+-            max-width: 1000px;
+-            margin: 0 auto 20px;
+-            background: #fff;
+-            border-radius: 10px;
+-            display: flex;
+-            gap: 10px;
+-            padding: 10px 14px;
+-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+-            position: fixed;
+-            top: 16px;
+-            left: 50%;
+-            transform: translateX(-50%);
+-            z-index: 1000;
+-        }
+-        .nav-link {
+-            color: #2f3a56;
+-            text-decoration: none;
+-            font-weight: 700;
+-            padding: 8px 12px;
+-            border-radius: 6px;
+-        }
+-        .nav-link.active {
+-            background: #667eea;
+-            color: #fff;
+-        }
+-        .container {
+-            max-width: 1000px;
+-            margin: 0 auto;
+-        }
+-        .header {
+-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+-            color: #fff;
+-            padding: 30px;
+-            border-radius: 10px;
+-            margin-bottom: 20px;
+-            text-align: center;
+-        }
+-        .card {
+-            background: #fff;
+-            border-radius: 10px;
+-            padding: 24px;
+-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+-        }
+-        .grid {
+-            display: grid;
+-            grid-template-columns: 1fr 1fr;
+-            gap: 12px;
+-        }
+-        .group {
+-            margin-bottom: 12px;
+-        }
+-        label {
+-            display: block;
+-            margin-bottom: 6px;
+-            color: #555;
+-            font-weight: 700;
+-        }
+-        input, textarea, select {
+-            width: 100%;
+-            border: 1px solid #ccc;
+-            border-radius: 5px;
+-            background: #fff;
+-            padding: 11px 12px;
+-            font: inherit;
+-            box-sizing: border-box;
+-        }
+-        textarea {
+-            min-height: 120px;
+-            resize: vertical;
+-        }
+-        .file-input {
+-            position: absolute;
+-            width: 0;
+-            height: 0;
+-            opacity: 0;
+-            pointer-events: none;
+-        }
+-        .file-upload {
+-            display: flex;
+-            align-items: center;
+-            gap: 10px;
+-            border: 1px solid #d6d6d6;
+-            border-radius: 8px;
+-            background: #fff;
+-            padding: 8px;
+-            min-height: 46px;
+-        }
+-        .file-btn {
+-            display: inline-block;
+-            background: #667eea;
+-            color: #fff;
+-            font-weight: 700;
+-            padding: 9px 12px;
+-            border-radius: 6px;
+-            cursor: pointer;
+-            white-space: nowrap;
+-            user-select: none;
+-        }
+-        .file-btn:hover {
+-            background: #764ba2;
+-        }
+-        .file-name {
+-            color: #666;
+-            font-size: 14px;
+-            overflow: hidden;
+-            text-overflow: ellipsis;
+-            white-space: nowrap;
+-        }
+-        .btn {
+-            margin-top: 8px;
+-            width: 100%;
+-            border: 0;
+-            border-radius: 5px;
+-            padding: 12px;
+-            color: #fff;
+-            font-weight: 700;
+-            background: #667eea;
+-            cursor: pointer;
+-        }
+-        .btn:hover {
+-            background: #764ba2;
+-        }
+-        .btn:disabled {
+-            opacity: .7;
+-            cursor: not-allowed;
+-        }
+-        .btn-row {
+-            display: grid;
+-            grid-template-columns: 1fr 1fr;
+-            gap: 8px;
+-            margin-top: 8px;
+-        }
+-        .btn-row .btn {
+-            margin-top: 0;
+-        }
+-        .btn-secondary {
+-            background: #2f3a56;
+-        }
+-        .btn-secondary:hover {
+-            background: #1f2a44;
+-        }
+-        .btn-danger {
+-            background: #d94b4b;
+-        }
+-        .btn-danger:hover {
+-            background: #b43838;
+-        }
+-        .btn-inline {
+-            width: auto;
+-            margin-top: 0;
+-        }
+-        .result {
+-            display: none;
+-            margin-top: 14px;
+-            border-radius: 5px;
+-            padding: 12px;
+-            white-space: pre-wrap;
+-        }
+-        .result.success {
+-            display: block;
+-            background: #dcfce7;
+-            color: #166534;
+-            border: 1px solid #86efac;
+-        }
+-        .result.error {
+-            display: block;
+-            background: #fee2e2;
+-            color: #b91c1c;
+-            border: 1px solid #fca5a5;
+-        }
+-        .tips {
+-            margin-bottom: 12px;
+-            color: #666;
+-        }
+-        .tip {
+-            margin-bottom: 6px;
+-        }
+-        .transfer-box {
+-            background: #eef2ff;
+-            border: 1px solid #c7d2fe;
+-            color: #3730a3;
+-            border-radius: 8px;
+-            padding: 12px;
+-            margin-bottom: 14px;
+-        }
+-        .transfer-error {
+-            background: #fee2e2;
+-            border: 1px solid #fca5a5;
+-            color: #b91c1c;
+-            border-radius: 8px;
+-            padding: 12px;
+-            margin-bottom: 14px;
+-        }
+-        .transfer-list {
+-            margin: 8px 0 0;
+-            padding-left: 18px;
+-        }
+-        .campaign-box {
+-            background: #eff6ff;
+-            border: 1px solid #bfdbfe;
+-            color: #1d4ed8;
+-            border-radius: 8px;
+-            padding: 12px;
+-            margin-bottom: 14px;
+-        }
+-        .campaign-box-head {
+-            display: flex;
+-            align-items: flex-start;
+-            justify-content: space-between;
+-            gap: 12px;
+-            flex-wrap: wrap;
+-        }
+-        .campaign-list {
+-            margin: 8px 0 0;
+-            padding-left: 18px;
+-        }
+-        .muted-note {
+-            font-size: 13px;
+-            color: #666;
+-            margin-top: 6px;
+-        }
+-        .send-progress-dock {
+-            position: fixed;
+-            left: 0;
+-            right: 0;
+-            bottom: 0;
+-            background: #ffffff;
+-            border-top: 1px solid #d6d6d6;
+-            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.08);
+-            padding: 10px 16px;
+-            display: none;
+-            z-index: 1000;
+-        }
+-        .send-progress-dock.visible {
+-            display: block;
+-        }
+-        .send-progress-text {
+-            font-size: 14px;
+-            color: #333;
+-            margin-bottom: 6px;
+-        }
+-        .send-progress-track {
+-            width: 100%;
+-            height: 12px;
+-            background: #ececec;
+-            border-radius: 999px;
+-            overflow: hidden;
+-        }
+-        .send-progress-fill {
+-            width: 0%;
+-            height: 100%;
+-            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+-            transition: width 0.25s ease;
+-        }
+-        @media (max-width: 900px) {
+-            .grid {
+-                grid-template-columns: 1fr;
+-            }
+-        }
+-    </style>
+-    <link rel="stylesheet" href="{{ url_for('static', filename='shared_nav.css') }}">
+-    <script src="{{ url_for('static', filename='shared_nav.js') }}" defer></script>
+-</head>
+-<body>
+-    <nav class="navbar">
+-        <a href="{{ url_for('index') }}" class="nav-link">E-Mails finden</a>
+-        <a href="{{ url_for('firebase_page') }}" class="nav-link">Firebase</a>
+-        <a href="{{ url_for('money') }}" class="nav-link">Money</a>
+-        <a href="{{ url_for('create_anschreibens') }}" class="nav-link">Anschreiben erstellen</a>
+-        <a href="{{ url_for('send_emails') }}" class="nav-link active">E-Mails senden</a>
+-        <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+-        <a href="{{ url_for('ausbildungen') }}" class="nav-link">Ausbildungen</a>
+-    </nav>
+-
+-    <div class="container">
+-        <div class="header">
+-            <h1>E-Mails senden</h1>
+-            <p>Personalisierter Massenversand mit CSV/XLSX-Daten.</p>
+-        </div>
+-
+-        <div class="card">
+-            <div class="tips">
+-                <div class="tip">Standard-Empf&#228;ngerspalte ist <b>email</b>.</div>
+-                <div class="tip">Unterst&#252;tzte Datendateien: <b>.csv</b>, <b>.xlsx</b>.</div>
+-                <div class="tip">Platzhalter wie <code>&#123;&#123;company&#125;&#125;</code> und <code>&#123;&#123;person&#125;&#125;</code> verwenden.</div>
+-            </div>
+-            {% if transfer_error %}
+-            <div class="transfer-error">{{ transfer_error }}</div>
+-            {% endif %}
+-            {% if campaign_error %}
+-            <div class="transfer-error">{{ campaign_error }}</div>
+-            {% endif %}
+-            {% if campaign_info %}
+-            <div class="campaign-box">
+-                <div class="campaign-box-head">
+-                    <div>
+-                        <strong>Gespeicherte Vorlage geladen:</strong> {{ campaign_info.name }}<br>
+-                        Fortschritt: {{ campaign_info.sent_rows }}/{{ campaign_info.total_rows }} gesendet, {{ campaign_info.remaining_rows }} offen.
+-                    </div>
+-                    <button
+-                        class="btn btn-danger btn-inline"
+-                        type="button"
+-                        id="deleteCampaignBtn"
+-                        {% if active_send_job %}disabled title="Laufenden Versand zuerst stoppen oder abschließen"{% endif %}
+-                    >
+-                        {% if active_send_job %}Versand aktiv{% else %}Vorlage löschen{% endif %}
+-                    </button>
+-                </div>
+-                <div class="muted-note" id="deleteCampaignNote" {% if not active_send_job %}hidden{% endif %}>
+-                    Löschen ist während eines laufenden Versands gesperrt.
+-                </div>
+-                {% if campaign_info.preview %}
+-                <ul class="campaign-list">
+-                    {% for row in campaign_info.preview %}
+-                    <li>Zeile {{ row.row_index }} | {{ row.recipient }} | {{ row.company }}</li>
+-                    {% endfor %}
+-                </ul>
+-                {% endif %}
+-            </div>
+-            {% endif %}
+-            {% if transfer_info %}
+-            <div class="transfer-box">
+-                <strong>Transfer aus Anschreiben geladen:</strong> {{ transfer_info.total_rows }} Empf&#228;nger mit zugeordneten PDF-Dateien.
+-                {% if transfer_info.preview %}
+-                <ul class="transfer-list">
+-                    {% for row in transfer_info.preview %}
+-                    <li>{{ row.recipient }} | {{ row.company or 'k. A.' }} | {{ row.filename }}</li>
+-                    {% endfor %}
+-                </ul>
+-                {% endif %}
+-            </div>
+-            {% endif %}
+-
+-            <form id="bulkForm" enctype="multipart/form-data">
+-                <input type="hidden" name="transfer_session_id" value="{{ transfer_info.id if transfer_info else '' }}">
+-                <input type="hidden" name="campaign_id" value="{{ campaign_info.id if campaign_info else '' }}">
+-                <div class="grid">
+-                    <div class="group">
+-                        <label for="full_name">Vollst&#228;ndiger Name</label>
+-                        <input
+-                            type="text"
+-                            id="full_name"
+-                            name="full_name"
+-                            placeholder="z. B. Max Mustermann"
+-                            value="{{ campaign_info.full_name if campaign_info else '' }}"
+-                        >
+-                    </div>
+-                    <div class="group">
+-                        <label for="sender_email">Absender (Gmail)</label>
+-                        <input
+-                            type="email"
+-                            id="sender_email"
+-                            name="sender_email"
+-                            placeholder="you@gmail.com"
+-                            value="{{ campaign_info.sender_email if campaign_info else '' }}"
+-                        >
+-                    </div>
+-                    <div class="group">
+-                        <label for="app_password">App-Passwort</label>
+-                        <input
+-                            type="password"
+-                            id="app_password"
+-                            name="app_password"
+-                            placeholder="xxxx xxxx xxxx xxxx"
+-                            value="{{ campaign_info.app_password if campaign_info else '' }}"
+-                        >
+-                    </div>
+-                </div>
+-
+-                <div class="grid">
+-                    <div class="group">
+-                        <label for="data_file">
+-                            {% if campaign_info %}
+-                            Empf&#228;nger aus gespeicherter Vorlage
+-                            {% elif transfer_info %}
+-                            Empf&#228;nger aus Anschreiben-Transfer
+-                            {% else %}
+-                            Empf&#228;nger-Datendatei (.csv/.xlsx)
+-                            {% endif %}
+-                        </label>
+-                        <div class="file-upload">
+-                            <input class="file-input" type="file" id="data_file" name="data_file" accept=".csv,.xlsx,.xls" {% if transfer_info or campaign_info %}disabled{% else %}required{% endif %}>
+-                            <label for="data_file" class="file-btn">{% if transfer_info or campaign_info %}Gesperrt{% else %}Datei w&#228;hlen{% endif %}</label>
+-                            <span id="data_file_name" class="file-name">{% if campaign_info %}{{ campaign_info.total_rows }} Empf&#228;nger geladen{% elif transfer_info %}{{ transfer_info.total_rows }} Empf&#228;nger geladen{% else %}Keine Datei ausgew&#228;hlt{% endif %}</span>
+-                        </div>
+-                        {% if transfer_info %}
+-                        <div class="muted-note">Im Transfer-Modus ist kein Datei-Upload erforderlich.</div>
+-                        {% elif campaign_info %}
+-                        <div class="muted-note">Empf&#228;ngerzeilen stammen aus der gespeicherten Vorlage und werden ab der n&#228;chsten ungesendeten Zeile fortgesetzt.</div>
+-                        {% endif %}
+-                    </div>
+-                    <div class="group">
+-                        <label for="attachments">Anh&#228;nge (optional, mehrfach)</label>
+-                        <div class="file-upload">
+-                            <input class="file-input" type="file" id="attachments" name="attachments" multiple>
+-                            <label for="attachments" class="file-btn">Dateien w&#228;hlen</label>
+-                            <span id="attachments_name" class="file-name">{% if campaign_info and campaign_info.attachments %}{{ campaign_info.attachments|length }} Anhang/Anh&#228;nge gespeichert{% else %}Keine Datei ausgew&#228;hlt{% endif %}</span>
+-                        </div>
+-                    </div>
+-                </div>
+-
+-                <div class="grid">
+-                    {% if not transfer_info and not campaign_info %}
+-                    <div class="group">
+-                        <label for="recipient_column">Name der Empf&#228;ngerspalte</label>
+-                        <input type="text" id="recipient_column" name="recipient_column" value="email" required>
+-                    </div>
+-                    {% elif campaign_info and campaign_info.mode != 'transfer' %}
+-                    <div class="group">
+-                        <label for="recipient_column">Name der Empf&#228;ngerspalte</label>
+-                        <input type="text" id="recipient_column" name="recipient_column" value="{{ campaign_info.recipient_column }}" required>
+-                    </div>
+-                    {% endif %}
+-                    <div class="group">
+-                        <label for="limit">Zeilenlimit (optional)</label>
+-                        <input
+-                            type="number"
+-                            id="limit"
+-                            name="limit"
+-                            min="1"
+-                            placeholder="Beispiel: 100"
+-                            value="{{ campaign_info.last_limit if campaign_info and campaign_info.last_limit else '' }}"
+-                        >
+-                    </div>
+-                </div>
+-
+-                <div class="group">
+-                    <label for="day_preset">Versand-Tag</label>
+-                    <select id="day_preset" name="day_preset">
+-                        <option value="">Tag ausw&#228;hlen</option>
+-                        <option value="day1">Tag 1 - 100 E-Mails</option>
+-                        <option value="day2">Tag 2 - 200 E-Mails</option>
+-                        <option value="day3">Tag 3 - 300 E-Mails</option>
+-                        <option value="day4">Tag 4 - 500 E-Mails</option>
+-                    </select>
+-                    <div class="muted-note">Die Werte f&#252;r Zeilenlimit, Jitter und Batch werden automatisch gesetzt.</div>
+-                </div>
+-
+-                <div class="grid">
+-                    <div class="group">
+-                        <label for="jitter_min_seconds">Jitter Minimum (Sekunden)</label>
+-                        <input
+-                            type="number"
+-                            id="jitter_min_seconds"
+-                            name="jitter_min_seconds"
+-                            min="0"
+-                            step="0.1"
+-                            placeholder="z. B. 80"
+-                            value="{{ campaign_info.jitter_min_seconds if campaign_info else '' }}"
+-                        >
+-                    </div>
+-                    <div class="group">
+-                        <label for="jitter_max_seconds">Jitter Maximum (Sekunden)</label>
+-                        <input
+-                            type="number"
+-                            id="jitter_max_seconds"
+-                            name="jitter_max_seconds"
+-                            min="0"
+-                            step="0.1"
+-                            placeholder="z. B. 110"
+-                            value="{{ campaign_info.jitter_max_seconds if campaign_info else '' }}"
+-                        >
+-                    </div>
+-                </div>
+-
+-                <div class="grid">
+-                    <div class="group">
+-                        <label for="batch_size">Batch-Gr&#246;&#223;e (E-Mails)</label>
+-                        <input
+-                            type="number"
+-                            id="batch_size"
+-                            name="batch_size"
+-                            min="1"
+-                            step="1"
+-                            placeholder="z. B. 20"
+-                            value="{{ campaign_info.batch_size if campaign_info and campaign_info.batch_size else '' }}"
+-                        >
+-                    </div>
+-                    <div class="group">
+-                        <label for="batch_pause_minutes">Batch-Pause (Minuten)</label>
+-                        <input
+-                            type="number"
+-                            id="batch_pause_minutes"
+-                            name="batch_pause_minutes"
+-                            min="0"
+-                            step="0.1"
+-                            placeholder="z. B. 30"
+-                            value="{{ ((campaign_info.batch_pause_seconds or 0) / 60) if campaign_info and campaign_info.batch_pause_seconds else '' }}"
+-                        >
+-                    </div>
+-                </div>
+-
+-                <div class="group">
+-                    <label for="subject_template">Betreff-Vorlage</label>
+-                    <input
+-                        type="text"
+-                        id="subject_template"
+-                        name="subject_template"
+-                        placeholder="Hi &#123;&#123;person&#125;&#125; from &#123;&#123;company&#125;&#125;"
+-                        value="{{ campaign_info.subject_template if campaign_info else '' }}"
+-                        required
+-                    >
+-                </div>
+-
+-                <div class="group">
+-                    <label for="body_template">Nachrichtenvorlage</label>
+-                    <textarea id="body_template" name="body_template" placeholder="Hallo &#123;&#123;person&#125;&#125;,&#10;&#10;wir haben ein Angebot f&#252;r &#123;&#123;company&#125;&#125;." required>{{ campaign_info.body_template if campaign_info else '' }}</textarea>
+-                </div>
+-
+-                <div class="btn-row">
+-                    <button class="btn btn-secondary" type="button" id="saveTemplateBtn">Vorlage im Dashboard speichern</button>
+-                    <button class="btn" type="submit" id="sendBtn">Massenversand starten</button>
+-                </div>
+-                <button class="btn" type="button" id="stopSendBtn" style="display:none; margin-top:8px; background:#d94b4b;">Speichern und stoppen</button>
+-            </form>
+-
+-            <div id="result" class="result"></div>
+-        </div>
+-    </div>
+-    <div id="sendProgressDock" class="send-progress-dock">
+-        <div id="sendProgressText" class="send-progress-text">Versand wird vorbereitet...</div>
+-        <div class="send-progress-track">
+-            <div id="sendProgressFill" class="send-progress-fill"></div>
+-        </div>
+-    </div>
+-
+-    <script>
+-        const form = document.getElementById('bulkForm');
+-        const resultDiv = document.getElementById('result');
+-        const sendBtn = document.getElementById('sendBtn');
+-        const saveTemplateBtn = document.getElementById('saveTemplateBtn');
+-        const stopSendBtn = document.getElementById('stopSendBtn');
+-        const campaignIdInput = form.querySelector('input[name="campaign_id"]');
+-        const deleteCampaignBtn = document.getElementById('deleteCampaignBtn');
+-        const deleteCampaignNote = document.getElementById('deleteCampaignNote');
+-        const dataFileInput = document.getElementById('data_file');
+-        const dataFileName = document.getElementById('data_file_name');
+-        const attachmentsInput = document.getElementById('attachments');
+-        const attachmentsName = document.getElementById('attachments_name');
+-        const sendProgressDock = document.getElementById('sendProgressDock');
+-        const sendProgressText = document.getElementById('sendProgressText');
+-        const sendProgressFill = document.getElementById('sendProgressFill');
+-        const dayPresetSelect = document.getElementById('day_preset');
+-        let sendJobPoll = null;
+-        let activeSendJobId = '';
+-        const initialActiveSendJob = {{ active_send_job|tojson }};
+-        const SEND_FORM_STATE_KEY = 'aa_send_form_state_v1';
+-        const SEND_RESULT_FLASH_KEY = 'aa_send_result_flash_v1';
+-        const DAY_PRESETS = {
+-            day1: {
+-                limit: '100',
+-                jitter_min_seconds: '90',
+-                jitter_max_seconds: '140',
+-                batch_size: '10',
+-                batch_pause_minutes: '35'
+-            },
+-            day2: {
+-                limit: '200',
+-                jitter_min_seconds: '85',
+-                jitter_max_seconds: '130',
+-                batch_size: '15',
+-                batch_pause_minutes: '30'
+-            },
+-            day3: {
+-                limit: '300',
+-                jitter_min_seconds: '80',
+-                jitter_max_seconds: '120',
+-                batch_size: '20',
+-                batch_pause_minutes: '25'
+-            },
+-            day4: {
+-                limit: '500',
+-                jitter_min_seconds: '75',
+-                jitter_max_seconds: '110',
+-                batch_size: '20',
+-                batch_pause_minutes: '20'
+-            }
+-        };
+-
+-        function updateFileLabel(inputEl, outputEl, isMultiple = false) {
+-            const files = Array.from(inputEl.files || []);
+-            if (!files.length) {
+-                outputEl.textContent = 'Keine Datei ausgew\u00E4hlt';
+-                outputEl.title = '';
+-                return;
+-            }
+-
+-            if (!isMultiple) {
+-                outputEl.textContent = files[0].name;
+-                outputEl.title = files[0].name;
+-                return;
+-            }
+-
+-            const names = files.map((file) => file.name);
+-            const shortText = names.length <= 2
+-                ? names.join(', ')
+-                : `${names.slice(0, 2).join(', ')} +${names.length - 2} weitere`;
+-            outputEl.textContent = shortText;
+-            outputEl.title = names.join(', ');
+-        }
+-
+-        dataFileInput.addEventListener('change', () => updateFileLabel(dataFileInput, dataFileName));
+-        attachmentsInput.addEventListener('change', () => updateFileLabel(attachmentsInput, attachmentsName, true));
+-
+-        function setLoadedCampaignDeleteState(isSending) {
+-            if (!deleteCampaignBtn) {
+-                return;
+-            }
+-
+-            const hasCampaignId = Boolean(String(campaignIdInput?.value || '').trim());
+-            deleteCampaignBtn.disabled = !hasCampaignId || isSending;
+-            deleteCampaignBtn.textContent = isSending ? 'Versand aktiv' : 'Vorlage löschen';
+-            deleteCampaignBtn.title = isSending
+-                ? 'Laufenden Versand zuerst stoppen oder abschließen'
+-                : '';
+-
+-            if (deleteCampaignNote) {
+-                deleteCampaignNote.hidden = !isSending;
+-            }
+-        }
+-
+-        function consumeTransientResult() {
+-            const raw = sessionStorage.getItem(SEND_RESULT_FLASH_KEY);
+-            if (!raw) {
+-                return;
+-            }
+-
+-            sessionStorage.removeItem(SEND_RESULT_FLASH_KEY);
+-            try {
+-                const payload = JSON.parse(raw);
+-                if (!payload || !payload.message) {
+-                    return;
+-                }
+-                resultDiv.className = `result ${payload.level === 'error' ? 'error' : 'success'}`;
+-                resultDiv.textContent = payload.message;
+-                resultDiv.style.display = 'block';
+-            } catch (_error) {
+-                // ignore invalid transient payload
+-            }
+-        }
+-
+-        function saveSendFormState() {
+-            const state = {
+-                full_name: document.getElementById('full_name')?.value || '',
+-                sender_email: document.getElementById('sender_email')?.value || '',
+-                recipient_column: document.getElementById('recipient_column')?.value || '',
+-                limit: document.getElementById('limit')?.value || '',
+-                day_preset: dayPresetSelect?.value || '',
+-                jitter_min_seconds: document.getElementById('jitter_min_seconds')?.value || '',
+-                jitter_max_seconds: document.getElementById('jitter_max_seconds')?.value || '',
+-                batch_size: document.getElementById('batch_size')?.value || '',
+-                batch_pause_minutes: document.getElementById('batch_pause_minutes')?.value || '',
+-                subject_template: document.getElementById('subject_template')?.value || '',
+-                body_template: document.getElementById('body_template')?.value || ''
+-            };
+-            localStorage.setItem(SEND_FORM_STATE_KEY, JSON.stringify(state));
+-        }
+-
+-        function applyDayPreset(presetKey) {
+-            const preset = DAY_PRESETS[presetKey];
+-            if (!preset) {
+-                return;
+-            }
+-
+-            Object.entries(preset).forEach(([id, value]) => {
+-                const el = document.getElementById(id);
+-                if (el) {
+-                    el.value = value;
+-                }
+-            });
+-        }
+-
+-        function detectDayPresetFromInputs() {
+-            const currentValues = {
+-                limit: document.getElementById('limit')?.value || '',
+-                jitter_min_seconds: document.getElementById('jitter_min_seconds')?.value || '',
+-                jitter_max_seconds: document.getElementById('jitter_max_seconds')?.value || '',
+-                batch_size: document.getElementById('batch_size')?.value || '',
+-                batch_pause_minutes: document.getElementById('batch_pause_minutes')?.value || ''
+-            };
+-
+-            const matchingPreset = Object.entries(DAY_PRESETS).find(([, preset]) =>
+-                Object.entries(preset).every(([key, value]) => currentValues[key] === value)
+-            );
+-
+-            return matchingPreset ? matchingPreset[0] : '';
+-        }
+-
+-        function restoreSendFormState() {
+-            const raw = localStorage.getItem(SEND_FORM_STATE_KEY);
+-            if (!raw) {
+-                if (dayPresetSelect) {
+-                    dayPresetSelect.value = detectDayPresetFromInputs();
+-                }
+-                return;
+-            }
+-            try {
+-                const state = JSON.parse(raw);
+-                Object.entries(state).forEach(([id, value]) => {
+-                    const el = document.getElementById(id);
+-                    if (!el || el.value) {
+-                        return;
+-                    }
+-                    el.value = typeof value === 'string' ? value : '';
+-                });
+-                if (dayPresetSelect && !dayPresetSelect.value) {
+-                    dayPresetSelect.value = detectDayPresetFromInputs();
+-                }
+-            } catch (_error) {
+-                // ignore bad local state
+-            }
+-        }
+-
+-        function bindSendFormState() {
+-            ['full_name', 'sender_email', 'recipient_column', 'limit', 'day_preset', 'jitter_min_seconds', 'jitter_max_seconds', 'batch_size', 'batch_pause_minutes', 'subject_template', 'body_template'].forEach((id) => {
+-                const el = document.getElementById(id);
+-                if (!el) {
+-                    return;
+-                }
+-                el.addEventListener('input', saveSendFormState);
+-                el.addEventListener('change', saveSendFormState);
+-            });
+-        }
+-
+-        if (dayPresetSelect) {
+-            dayPresetSelect.addEventListener('change', () => {
+-                applyDayPreset(dayPresetSelect.value);
+-                saveSendFormState();
+-            });
+-        }
+-
+-        function setSendingUiActive() {
+-            sendBtn.disabled = true;
+-            saveTemplateBtn.disabled = true;
+-            sendBtn.textContent = 'Wird gesendet...';
+-            stopSendBtn.style.display = 'block';
+-            stopSendBtn.disabled = false;
+-            stopSendBtn.textContent = 'Speichern und stoppen';
+-            sendProgressDock.classList.add('visible');
+-            setLoadedCampaignDeleteState(true);
+-        }
+-
+-        function resetSendingUi() {
+-            sendBtn.disabled = false;
+-            saveTemplateBtn.disabled = false;
+-            sendBtn.textContent = 'Massenversand starten';
+-            stopSendBtn.style.display = 'none';
+-            stopSendBtn.disabled = false;
+-            stopSendBtn.textContent = 'Speichern und stoppen';
+-            setLoadedCampaignDeleteState(false);
+-        }
+-
+-        async function saveTemplateToDashboard() {
+-            resultDiv.style.display = 'none';
+-            saveTemplateBtn.disabled = true;
+-            const previousLabel = saveTemplateBtn.textContent;
+-            saveTemplateBtn.textContent = 'Speichert...';
+-
+-            try {
+-                const formData = new FormData(form);
+-                const response = await fetch('/api/campaign/save', {
+-                    method: 'POST',
+-                    body: formData
+-                });
+-                const data = await response.json();
+-                if (!response.ok || !data.success) {
+-                    throw new Error(data.message || 'Vorlage konnte nicht gespeichert werden');
+-                }
+-
+-                if (data.campaign_id && campaignIdInput) {
+-                    campaignIdInput.value = data.campaign_id;
+-                    const currentUrl = new URL(window.location.href);
+-                    currentUrl.searchParams.set('campaign', data.campaign_id);
+-                    currentUrl.searchParams.delete('transfer');
+-                    window.history.replaceState({}, '', currentUrl.toString());
+-                }
+-
+-                saveSendFormState();
+-                resultDiv.className = 'result success';
+-                resultDiv.textContent = data.message || 'Vorlage gespeichert.';
+-                resultDiv.style.display = 'block';
+-            } catch (saveError) {
+-                resultDiv.className = 'result error';
+-                resultDiv.textContent = saveError.message || 'Vorlage konnte nicht gespeichert werden.';
+-                resultDiv.style.display = 'block';
+-            } finally {
+-                saveTemplateBtn.disabled = false;
+-                saveTemplateBtn.textContent = previousLabel;
+-            }
+-        }
+-
+-        function attachToSendJob(jobId) {
+-            activeSendJobId = String(jobId || '').trim();
+-            if (!activeSendJobId) {
+-                return;
+-            }
+-            setSendingUiActive();
+-            if (sendJobPoll) {
+-                clearInterval(sendJobPoll);
+-            }
+-            sendJobPoll = setInterval(async () => {
+-                try {
+-                    await pollSendJobStatus();
+-                } catch (pollError) {
+-                    if (sendJobPoll) {
+-                        clearInterval(sendJobPoll);
+-                        sendJobPoll = null;
+-                    }
+-                    resetSendingUi();
+-                    resultDiv.className = 'result error';
+-                    resultDiv.textContent = pollError.message || 'Versandfortschritt konnte nicht geladen werden.';
+-                    resultDiv.style.display = 'block';
+-                }
+-            }, 1500);
+-        }
+-
+-        function updateSendProgress(job) {
+-            const total = Number(job.total || 0);
+-            const processed = Number(job.processed || 0);
+-            const sentSuccess = Number(job.sent_success || 0);
+-            const percent = Math.max(0, Math.min(100, Number(job.percent || 0)));
+-            const stageMessage = (job.message || '').trim();
+-            const remainingSeconds = Number(job.estimated_remaining_seconds);
+-
+-            function formatEta(seconds) {
+-                if (!Number.isFinite(seconds) || seconds < 0) {
+-                    return '';
+-                }
+-                if (seconds < 60) {
+-                    return `${Math.round(seconds)}s`;
+-                }
+-                const hours = Math.floor(seconds / 3600);
+-                const minutes = Math.floor((seconds % 3600) / 60);
+-                const secs = Math.round(seconds % 60);
+-                if (hours > 0) {
+-                    return `${hours}h ${minutes}m`;
+-                }
+-                if (minutes > 0) {
+-                    return `${minutes}m ${secs}s`;
+-                }
+-                return `${secs}s`;
+-            }
+-
+-            sendProgressDock.classList.add('visible');
+-            sendProgressFill.style.width = `${percent}%`;
+-            const etaText = total > processed && Number.isFinite(remainingSeconds)
+-                ? ` | ETA ${formatEta(remainingSeconds)}`
+-                : '';
+-            const base = `Gesendet ${sentSuccess}/${total} | Verarbeitet ${processed}/${total} | ${percent.toFixed(1)}%${etaText}`;
+-            sendProgressText.textContent = stageMessage ? `${base} | ${stageMessage}` : base;
+-        }
+-
+-        async function pollSendJobStatus() {
+-            if (!activeSendJobId) {
+-                return;
+-            }
+-            const response = await fetch(`/api/send-bulk/status/${activeSendJobId}`);
+-            const data = await response.json();
+-            if (!response.ok || !data.success) {
+-                throw new Error(data.message || 'Versandfortschritt konnte nicht geladen werden');
+-            }
+-
+-            const job = data.job || {};
+-            updateSendProgress(job);
+-
+-            if (job.campaign_id && campaignIdInput) {
+-                campaignIdInput.value = job.campaign_id;
+-                const currentUrl = new URL(window.location.href);
+-                currentUrl.searchParams.set('campaign', job.campaign_id);
+-                currentUrl.searchParams.delete('transfer');
+-                window.history.replaceState({}, '', currentUrl.toString());
+-            }
+-
+-            if (job.status === 'completed' || job.status === 'failed') {
+-                if (sendJobPoll) {
+-                    clearInterval(sendJobPoll);
+-                    sendJobPoll = null;
+-                }
+-                activeSendJobId = '';
+-                resetSendingUi();
+-                resultDiv.className = `result ${job.success ? 'success' : 'error'}`;
+-                resultDiv.textContent = job.message || 'Versandauftrag abgeschlossen.';
+-                resultDiv.style.display = 'block';
+-            }
+-        }
+-
+-        async function restoreActiveSendJobForCampaign() {
+-            const preloadedJob = initialActiveSendJob && typeof initialActiveSendJob === 'object'
+-                ? initialActiveSendJob
+-                : null;
+-            if (preloadedJob && preloadedJob.job_id) {
+-                attachToSendJob(preloadedJob.job_id);
+-                await pollSendJobStatus();
+-                return;
+-            }
+-
+-            const campaignId = String(campaignIdInput?.value || '').trim();
+-            if (!campaignId) {
+-                return;
+-            }
+-
+-            const response = await fetch(`/api/send-bulk/active?campaign_id=${encodeURIComponent(campaignId)}`);
+-            const data = await response.json();
+-            if (!response.ok || !data.success || !data.job || !data.job.job_id) {
+-                return;
+-            }
+-
+-            attachToSendJob(data.job.job_id);
+-            await pollSendJobStatus();
+-        }
+-
+-        async function deleteLoadedCampaign() {
+-            const campaignId = String(campaignIdInput?.value || '').trim();
+-            if (!campaignId) {
+-                return;
+-            }
+-            if (!window.confirm('Diese gespeicherte Vorlage löschen? Das kann nicht rückgängig gemacht werden.')) {
+-                return;
+-            }
+-
+-            resultDiv.style.display = 'none';
+-            const previousLabel = deleteCampaignBtn.textContent;
+-            deleteCampaignBtn.disabled = true;
+-            deleteCampaignBtn.textContent = 'Loescht...';
+-
+-            try {
+-                const response = await fetch(`/api/campaign/delete/${encodeURIComponent(campaignId)}`, {
+-                    method: 'POST'
+-                });
+-                const data = await response.json();
+-                if (!response.ok || !data.success) {
+-                    throw new Error(data.message || 'Vorlage konnte nicht gelöscht werden');
+-                }
+-
+-                sessionStorage.setItem(SEND_RESULT_FLASH_KEY, JSON.stringify({
+-                    level: 'success',
+-                    message: data.message || 'Vorlage wurde gelöscht.'
+-                }));
+-
+-                const currentUrl = new URL(window.location.href);
+-                currentUrl.searchParams.delete('campaign');
+-                window.location.href = currentUrl.toString();
+-            } catch (deleteError) {
+-                resultDiv.className = 'result error';
+-                resultDiv.textContent = deleteError.message || 'Vorlage konnte nicht gelöscht werden.';
+-                resultDiv.style.display = 'block';
+-                deleteCampaignBtn.textContent = previousLabel;
+-                setLoadedCampaignDeleteState(Boolean(activeSendJobId));
+-            }
+-        }
+-
+-        form.addEventListener('submit', async (e) => {
+-            e.preventDefault();
+-            setSendingUiActive();
+-            resultDiv.style.display = 'none';
+-            sendProgressDock.classList.add('visible');
+-            sendProgressText.textContent = 'Versandauftrag wird gestartet...';
+-            sendProgressFill.style.width = '0%';
+-
+-            try {
+-                const formData = new FormData(form);
+-                const response = await fetch('/api/send-bulk/start', {
+-                    method: 'POST',
+-                    body: formData
+-                });
+-
+-                const data = await response.json();
+-                if (!response.ok || !data.success || !data.job_id) {
+-                    throw new Error(data.message || 'Versandauftrag konnte nicht gestartet werden');
+-                }
+-
+-                attachToSendJob(data.job_id);
+-                saveSendFormState();
+-                await pollSendJobStatus();
+-            } catch (_error) {
+-                resultDiv.className = 'result error';
+-                resultDiv.textContent = _error.message || 'Netzwerkfehler. Bitte erneut versuchen.';
+-                resultDiv.style.display = 'block';
+-                resetSendingUi();
+-            }
+-        });
+-
+-        stopSendBtn.addEventListener('click', async () => {
+-            if (!activeSendJobId) {
+-                return;
+-            }
+-            stopSendBtn.disabled = true;
+-            stopSendBtn.textContent = 'Stoppe...';
+-
+-            try {
+-                const response = await fetch(`/api/send-bulk/stop/${activeSendJobId}`, {
+-                    method: 'POST'
+-                });
+-                const data = await response.json();
+-                if (!response.ok || !data.success) {
+-                    throw new Error(data.message || 'Stoppen konnte nicht angefordert werden');
+-                }
+-            } catch (stopError) {
+-                stopSendBtn.disabled = false;
+-                stopSendBtn.textContent = 'Speichern und stoppen';
+-                resultDiv.className = 'result error';
+-                resultDiv.textContent = stopError.message || 'Stoppen konnte nicht angefordert werden.';
+-                resultDiv.style.display = 'block';
+-            }
+-        });
+-
+-        saveTemplateBtn.addEventListener('click', () => {
+-            saveTemplateToDashboard().catch(() => {});
+-        });
+-        if (deleteCampaignBtn) {
+-            deleteCampaignBtn.addEventListener('click', () => {
+-                deleteLoadedCampaign().catch(() => {});
+-            });
+-        }
+-
+-        consumeTransientResult();
+-        setLoadedCampaignDeleteState(Boolean(initialActiveSendJob && initialActiveSendJob.job_id));
+-        restoreSendFormState();
+-        bindSendFormState();
+-        restoreActiveSendJobForCampaign().catch(() => {});
+-    </script>
+-</body>
+-</html>

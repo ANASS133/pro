@@ -150,7 +150,7 @@ class AppRoutesTestCase(unittest.TestCase):
         mock_jobs = [
             {"title": "Koch Azubi", "company": "Hotel Grand", "location": "Berlin", "source": "Arbeitsagentur"}
         ]
-        with patch("app._fetch_combined_jobs") as mock_fetch:
+        with patch("app._fetch_combined_jobs") as mock_fetch, patch("app._save_auto_extraction_export_records"), patch("app._save_search_cache_to_disk"):
             def side_effect(*args, **kwargs):
                 cb = kwargs.get("progress_callback")
                 if callable(cb):

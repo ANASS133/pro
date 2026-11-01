@@ -1,6 +1,5 @@
 import logging
 import re
-import time
 import urllib.parse
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -135,14 +134,13 @@ class AzubiyoScraper:
         Extracts titles, companies, locations, start dates, salaries, and application links.
         Applies relevance validation to avoid returning unrelated professions or distant locations.
         """
-        from .search_filter_engine import is_profession_relevant, is_location_relevant
+        from .search_filter_engine import is_profession_relevant
 
         candidate_urls = self.build_candidate_urls(keyword, location)
         all_jobs: List[Dict] = []
         seen_refs = set()
 
         search_kw = str(keyword or "").strip()
-        search_loc = str(location or "").strip()
 
         logger.info(
             "Azubiyo fetch start: keyword='%s', location='%s', max_jobs=%s",

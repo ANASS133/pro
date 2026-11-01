@@ -23,20 +23,59 @@
             const radEl = document.getElementById("search_radius");
 
             const srcLabels = {
-                all: "Alle Quellen inkl. Google Maps",
+                all: "All Sources",
                 job_portals: "Job Portals Only",
-                google_maps: "Nur Google Maps",
+                google_maps: "Google Maps Only",
             };
             const dateLabels = {
-                "30days": "30 Tage",
-                "14days": "14 Tage",
-                "7days": "7 Tage",
-                all: "Alle Anzeigen",
+                "30days": "30 Days",
+                "14days": "14 Days",
+                "7days": "7 Days",
+                all: "All Listings",
             };
-            const srcText = srcLabels[srcEl ? srcEl.value : "all"] || "Alle Quellen";
-            const dateText = dateLabels[dateEl ? dateEl.value : "30days"] || "30 Tage";
+            const srcVal = srcEl ? srcEl.value : "all";
+            const srcText = srcLabels[srcVal] || "All Sources";
             const radText = (radEl && radEl.value) ? ` • +${radEl.value} km` : "";
-            badge.textContent = `${srcText} • ${dateText}${radText}`;
+
+            if (srcVal === "google_maps") {
+                badge.textContent = `${srcText}${radText}`;
+            } else {
+                const dateText = dateLabels[dateEl ? dateEl.value : "30days"] || "30 Days";
+                badge.textContent = `${srcText} • ${dateText}${radText}`;
+            }
+        }
+
+        function handleSearchSourceChange() {
+            const srcEl = document.getElementById("search_source_1");
+            if (!srcEl) return;
+            const val = srcEl.value; // 'all', 'job_portals', 'google_maps'
+
+            const aiSection = document.getElementById("ai_employer_detection_section");
+            const pubSinceItem = document.getElementById("filter_item_published_since");
+
+            // 1. AI Employer Detection visibility:
+            // Google Maps Only or All Sources -> Visible
+            // Job Portals Only -> Hidden completely
+            if (aiSection) {
+                if (val === "job_portals") {
+                    aiSection.style.display = "none";
+                } else {
+                    aiSection.style.display = "block";
+                }
+            }
+
+            // 2. Publication Period filter inside Advanced Filters:
+            // Job Portals Only or All Sources -> Visible
+            // Google Maps Only -> Hidden (maps has no publication date)
+            if (pubSinceItem) {
+                if (val === "google_maps") {
+                    pubSinceItem.style.display = "none";
+                } else {
+                    pubSinceItem.style.display = "block";
+                }
+            }
+
+            updateFilterSummaryBadge();
         }
 
         function saveIndexState() {
@@ -146,10 +185,38 @@
             return labels[value] || "30 Tage";
         }
 
+        function formatConsoleTime() {
+            const d = new Date();
+            return d.toTimeString().split(" ")[0];
+        }
+
+        function logToConsole(ui, message, level = "info", sourceTag = "") {
+            if (!ui || !ui.consoleTerminal) return;
+            const timeStr = formatConsoleTime();
+            const row = document.createElement("div");
+            row.className = "terminal-row";
+
+            let levelClass = "terminal-msg";
+            if (level === "success") levelClass = "terminal-success";
+            else if (level === "warn") levelClass = "terminal-warn";
+            else if (level === "error") levelClass = "terminal-error";
+            else if (level === "muted") levelClass = "terminal-muted";
+
+            const tagStr = sourceTag ? `<span class="terminal-src">[${escapeHtml(sourceTag.toUpperCase())}]</span> ` : "";
+            row.innerHTML = `<span class="terminal-ts">[${timeStr}]</span> ${tagStr}<span class="${levelClass}">${escapeHtml(message)}</span>`;
+
+            ui.consoleTerminal.appendChild(row);
+            while (ui.consoleTerminal.children.length > 200) {
+                ui.consoleTerminal.removeChild(ui.consoleTerminal.firstChild);
+            }
+            ui.consoleTerminal.scrollTop = ui.consoleTerminal.scrollHeight;
+        }
+
         function setSearchProgress(ui, progressData) {
             const pct = Math.max(0, Math.min(100, Math.round(progressData.percent || 0)));
             const stage = progressData.stage || "";
             const found = typeof progressData.found === "number" ? progressData.found : 0;
+            const rawFound = typeof progressData.raw_found === "number" ? progressData.raw_found : found;
             const source = progressData.source || "";
             const finishedSource = progressData.finished_source || "";
             const sourceCount = progressData.source_count;
@@ -158,13 +225,38 @@
                 ui.progressCard.style.display = "block";
             }
 
-            // 1. Update the Search Button progress bar & label
+            // 1. Update Live Target Banner
+            if (ui.targetText && stage) {
+                ui.targetText.textContent = stage;
+            }
+
+            // 2. Update Live Metrics Strip
+            if (ui.metricRaw) {
+                ui.metricRaw.textContent = String(rawFound);
+            }
+            if (ui.metricMatched) {
+                ui.metricMatched.textContent = String(found);
+            }
+            if (ui.metricSource) {
+                ui.metricSource.textContent = source ? source.toUpperCase().replace("_", ".") : "Searching";
+            }
+
+            // 3. Log to Terminal Stream
+            if (stage && stage !== ui.lastLoggedStage) {
+                ui.lastLoggedStage = stage;
+                let lvl = "info";
+                if (progressData.status === "source_done" || pct >= 100) lvl = "success";
+                else if (progressData.status === "source_error") lvl = "error";
+                logToConsole(ui, stage, lvl, source);
+            }
+
+            // 4. Update the Search Button progress bar & label
             if (ui.btnBar) {
                 ui.btnBar.style.width = `${pct}%`;
             }
             if (ui.btnLabel) {
                 if (pct >= 100) {
-                    ui.btnLabel.textContent = `Fertig (${found} Stellen)`;
+                    ui.btnLabel.textContent = `Completed (${found} positions)`;
                 } else if (found > 0) {
                     ui.btnLabel.textContent = `Searching... ${pct}% (${found} positions)`;
                 } else {
@@ -172,7 +264,7 @@
                 }
             }
 
-            // 2. Update the Search Progress Card
+            // 5. Update the Search Progress Card
             if (ui.searchProgressFill) {
                 ui.searchProgressFill.style.width = `${pct}%`;
             }
@@ -180,17 +272,17 @@
                 ui.searchProgressPct.textContent = `${pct}%`;
             }
             if (ui.progressCounter) {
-                if (progressData.raw_found && progressData.raw_found > found) {
-                    ui.progressCounter.textContent = `${found} matching positions (${progressData.raw_found} checked)`;
+                if (rawFound > found) {
+                    ui.progressCounter.textContent = `${found} matching positions (${rawFound} scanned)`;
                 } else {
-                    ui.progressCounter.textContent = `${found} Stellen gefunden`;
+                    ui.progressCounter.textContent = `${found} positions found`;
                 }
             }
             if (ui.searchProgressStatus && stage) {
                 ui.searchProgressStatus.textContent = stage;
             }
 
-            // 3. Update Portal Badges
+            // 6. Update Portal Badges
             if (ui.searchProgressStages) {
                 if (source && source !== "all") {
                     const activePill = ui.searchProgressStages.querySelector(`[data-portal="${source}"]`);
@@ -268,7 +360,7 @@
                         });
                     }
                 }
-                setSearchProgress(ui, { percent: 5, stage: "Verbindung zu Portalen wird hergestellt...", found: 0 });
+                setSearchProgress(ui, { percent: 5, stage: "Connecting to job portals & directories...", found: 0 });
             } else {
                 ui.searchBtn.disabled = false;
                 ui.searchBtn.classList.remove("is-searching");
@@ -276,7 +368,7 @@
                     ui.btnBar.style.width = "0%";
                 }
                 if (ui.btnLabel) {
-                    ui.btnLabel.textContent = "Suche starten";
+                    ui.btnLabel.textContent = "Start Search";
                 }
                 if (ui.loadingEl) {
                     ui.loadingEl.style.display = "none";
@@ -323,7 +415,7 @@
             const publishedSince = publishedSinceLabel(data.published_since || "all");
             let metaText = `${total} matching positions found | Veröffentlicht seit: ${publishedSince}`;
             if (data.audit && data.audit.raw_total) {
-                metaText = `${total} passende Stellen aus ${data.audit.raw_total} geprüften Angeboten | Veröffentlicht seit: ${publishedSince}`;
+                metaText = `${total} matching positions from ${data.audit.raw_total} geprüften Angeboten | Veröffentlicht seit: ${publishedSince}`;
             }
             ui.metaEl.textContent = metaText;
 
@@ -356,11 +448,11 @@
                 auditBanner.style.cssText = "background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px 14px; margin:10px 0; font-size:13px; color:#334155;";
                 auditBanner.innerHTML = `
                     <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" id="audit_header_${isUi1 ? '1' : '2'}">
-                        <span><strong>📊 Such-Audit:</strong> ${a.filtered_total} passende Stellen aus ${a.raw_total} Angeboten &bull; <span style="color:#64748b;">${a.exclusions_total} herausgefiltert</span></span>
-                        <button type="button" style="background:none; border:none; color:#2563eb; cursor:pointer; font-size:12px; font-weight:600;">Details anzeigen ▾</button>
+                        <span><strong>📊 Search Audit:</strong> ${a.filtered_total} matching positions from ${a.raw_total} Angeboten &bull; <span style="color:#64748b;">${a.exclusions_total} filtered out</span></span>
+                        <button type="button" style="background:none; border:none; color:#2563eb; cursor:pointer; font-size:12px; font-weight:600;">Show details ▾</button>
                     </div>
                     <div id="audit_details_${isUi1 ? '1' : '2'}" style="display:none; margin-top:8px; padding-top:8px; border-top:1px solid #e2e8f0;">
-                        <div style="margin-bottom:6px; font-weight:600; color:#1e293b;">Aufteilung nach Portal & Filtergründen:</div>
+                        <div style="margin-bottom:6px; font-weight:600; color:#1e293b;">Breakdown by Portal & Filter Criteria:</div>
                         ${srcRows}
                     </div>
                 `;
@@ -371,7 +463,7 @@
                         const isOpen = det.style.display !== "none";
                         det.style.display = isOpen ? "none" : "block";
                         const btn = hdr.querySelector("button");
-                        if (btn) btn.textContent = isOpen ? "Details anzeigen ▾" : "Details verbergen ▴";
+                        if (btn) btn.textContent = isOpen ? "Show details ▾" : "Hide details ▴";
                     };
                 }
             } else if (auditBanner) {
@@ -380,7 +472,7 @@
 
             if (!ui.lastJobs.length) {
                 if (ui.filterBar) ui.filterBar.style.display = "none";
-                ui.listEl.innerHTML = '<div class="job-item">No matching job listings found for these search criteria gefunden.</div>';
+                ui.listEl.innerHTML = '<div class="job-item">No matching job listings found for these search criteria.</div>';
                 ui.autoBtn.style.display = "none";
                 if (exportBtn) exportBtn.style.display = "none";
                 if (ui.generateCoverLettersBtn) ui.generateCoverLettersBtn.style.display = "none";
@@ -462,35 +554,35 @@
 
                 let contactBadge = "";
                 if (hasValidEmail && hasVerifiedForm) {
-                    contactBadge = `<span class="job-contact-pill has-both" title="E-Mail & verifiziertes Online-Bewerbungsformular verfügbar">⚡ E-Mail + Online-Formular</span>`;
+                    contactBadge = `<span class="job-contact-pill has-both" title="Email & verified online application form available">⚡ Direct Email + Form</span>`;
                 } else if (hasVerifiedForm) {
-                    contactBadge = `<span class="job-contact-pill has-verified-form" title="Verifiziertes Online-Bewerbungsformular">✅ Online-Bewerbungsformular</span>`;
+                    contactBadge = `<span class="job-contact-pill has-verified-form" title="Verified online application form">✅ Online Form</span>`;
                 } else if (hasValidEmail) {
-                    contactBadge = `<span class="job-contact-pill has-email" title="Bewerbungs-E-Mail vorhanden">✉️ ${escapeHtml(email)}</span>`;
+                    contactBadge = `<span class="job-contact-pill has-email" title="Direct recruiter email available">✉️ ${escapeHtml(email)}</span>`;
                 }
 
                 const aiButtonsHtml = `
-                    <button type="button" class="job-link job-single-anschreiben-btn" data-index="${idx}" title="⚡ Direktes Anschreiben für diese Stelle im Cover Letter Studio erstellen">⚡ Anschreiben</button>
-                    <button type="button" class="job-link job-vibe-btn" data-company="${company}" data-title="${title}" title="Unternehmenskultur, Vibe & Du/Sie Formel prüfen (~$0.00001)">🧭 Vibe</button>
-                    <button type="button" class="job-link job-heatmap-btn" data-company="${company}" data-title="${title}" title="Visual ATS Match & Skill Heatmap anzeigen (~$0.00002)">📊 Heatmap</button>
+                    <button type="button" class="job-link job-single-anschreiben-btn" data-index="${idx}" title="⚡ Create tailored cover letter in Cover Letter Studio">⚡ Cover Letter</button>
+                    <button type="button" class="job-link job-vibe-btn" data-company="${company}" data-title="${title}" title="Inspect company culture, tone & address formula">🧭 Vibe</button>
+                    <button type="button" class="job-link job-heatmap-btn" data-company="${company}" data-title="${title}" title="View visual ATS match & skill heatmap">📊 Heatmap</button>
                 `;
 
                 // Distinct, verified action buttons
                 let actionButtonsHtml = "";
                 if (hasVerifiedForm && formUrl) {
-                    actionButtonsHtml += `<a class="job-link job-verified-apply-btn" href="${formUrl}" target="_blank" rel="noopener noreferrer" title="Zum echten verifizierten Online-Bewerbungsformular">📝 Zum Bewerbungsformular ↗</a>`;
-                    actionButtonsHtml += `<button type="button" class="job-link job-autofill-btn" data-job-url="${formUrl}" data-job-title="${title}" data-job-company="${company}" title="Mit verifiziertem Formular bewerben & Autofill nutzen">⚡ Mit Formular bewerben (Autofill)</button>`;
+                    actionButtonsHtml += `<a class="job-link job-verified-apply-btn" href="${formUrl}" target="_blank" rel="noopener noreferrer" title="Zum echten verifizierten Online-Bewerbungsformular">📝 Apply via Form ↗</a>`;
+                    actionButtonsHtml += `<button type="button" class="job-link job-autofill-btn" data-job-url="${formUrl}" data-job-title="${title}" data-job-company="${company}" title="Mit verifiziertem Formular bewerben & Autofill nutzen">⚡ Apply via Form (Autofill)</button>`;
                 } else {
                     if (originalUrl) {
-                        actionButtonsHtml += `<a class="job-link job-listing-btn" href="${originalUrl}" target="_blank" rel="noopener noreferrer" title="Originale Stellenanzeige aufrufen">Stellenanzeige öffnen ↗</a>`;
+                        actionButtonsHtml += `<a class="job-link job-listing-btn" href="${originalUrl}" target="_blank" rel="noopener noreferrer" title="Originale Stellenanzeige aufrufen">Open Listing ↗</a>`;
                     }
                     if (bewerbungLink && bewerbungLink !== originalUrl) {
-                        actionButtonsHtml += `<a class="job-link job-listing-btn" href="${bewerbungLink}" target="_blank" rel="noopener noreferrer" title="Karriereseite aufrufen">Karriereseite öffnen ↗</a>`;
+                        actionButtonsHtml += `<a class="job-link job-listing-btn" href="${bewerbungLink}" target="_blank" rel="noopener noreferrer" title="Karriereseite aufrufen">Open Careers Page ↗</a>`;
                     }
                 }
 
                 if (hasValidEmail) {
-                    actionButtonsHtml += `<a class="job-link job-mail-btn" href="mailto:${escapeHtml(email)}?subject=Bewerbung%20als%20${encodeURIComponent(job.title || '')}" title="Bewerbungs-E-Mail senden">✉️ E-Mail senden</a>`;
+                    actionButtonsHtml += `<a class="job-link job-mail-btn" href="mailto:${escapeHtml(email)}?subject=Bewerbung%20als%20${encodeURIComponent(job.title || '')}" title="Bewerbungs-E-Mail senden">✉️ Send Email</a>`;
                 }
                 actionButtonsHtml += aiButtonsHtml;
 
@@ -499,9 +591,9 @@
                 const isPotential = job.opportunity_type === "POTENTIAL_EMPLOYER" || job.is_potential_employer;
 
                 if (isVerifiedVacancy) {
-                    oppBadge = `<span class="job-contact-pill" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;" title="Verifizierte aktive Ausschreibung auf Unternehmenswebsite">✓ Bestätigte Ausbildungsstelle</span>`;
+                    oppBadge = `<span class="job-contact-pill" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;" title="Verifizierte aktive Ausschreibung auf Unternehmenswebsite">✓ Confirmed Vacancy</span>`;
                 } else if (isPotential) {
-                    oppBadge = `<span class="job-contact-pill" style="background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe;" title="Relevanter potenzieller Ausbildungsbetrieb für Initiativbewerbungen">★ Potenzieller Arbeitgeber</span>`;
+                    oppBadge = `<span class="job-contact-pill" style="background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe;" title="Relevanter potenzieller Ausbildungsbetrieb für Initiativbewerbungen">★ Potential Employer</span>`;
                 }
 
                 let catBadge = "";
@@ -527,10 +619,10 @@
                             </div>
                         </div>
                         <div class="job-meta">
-                            <strong>Unternehmen:</strong> ${company} &bull; 
-                            <strong>Ort:</strong> ${location}<br>
-                            <strong>Veröffentlicht:</strong> ${publishedDate} &bull; 
-                            <strong>Erfasst:</strong> ${scrapedAt}
+                            <strong>Company:</strong> ${company} &bull; 
+                            <strong>Location:</strong> ${location}<br>
+                            <strong>Published:</strong> ${publishedDate} &bull; 
+                            <strong>Scraped:</strong> ${scrapedAt}
                         </div>
                         <div class="job-actions-row">
                             ${actionButtonsHtml}
@@ -547,7 +639,7 @@
             ui.listEl.innerHTML = "";
             ui.autoBtn.style.display = "none";
             if (ui.generateCoverLettersBtn) ui.generateCoverLettersBtn.style.display = "none";
-            ui.errorEl.textContent = message || "Suche fehlgeschlagen.";
+            ui.errorEl.textContent = message || "Search failed.";
             ui.errorEl.style.display = "block";
         }
 
@@ -570,16 +662,16 @@
                 ui.progressError.style.display = "none";
             }
 
-            let status = "Leerlauf";
+            let status = "Idle";
             const isCompleted = !data.is_running && Number(data.current_index || 0) >= Number(data.total_jobs || 0) && Number(data.total_jobs || 0) > 0;
             if (isCompleted) {
-                status = "Extraktion abgeschlossen";
+                status = "Extraction completed";
             } else if (data.stop_requested) {
-                status = "Gestoppt";
+                status = "Stopped";
             } else if (data.paused) {
-                status = data.last_error ? "Pausiert - Fehler" : "Pausiert";
+                status = data.last_error ? "Paused - Error" : "Paused";
             } else if (data.is_running) {
-                status = `Verarbeite Stelle ${data.current_index}/${data.total_jobs}...`;
+                status = `Processing position ${data.current_index}/${data.total_jobs}...`;
             }
             ui.progressStatus.textContent = status;
 
@@ -613,10 +705,10 @@
         function setAutoBtnIdle(btn) {
             if (!btn) return;
             btn.disabled = false;
-            btn.innerHTML = `<svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg><span>Automatisch extrahieren</span>`;
+            btn.innerHTML = `<svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg><span>⚡ Auto-Extract Contacts</span>`;
         }
 
-        function setAutoBtnLoading(btn, text = "Starte...") {
+        function setAutoBtnLoading(btn, text = "Starting...") {
             if (!btn) return;
             btn.disabled = true;
             btn.innerHTML = `<span class="btn-spinner"></span><span>${escapeHtml(text)}</span>`;
@@ -652,7 +744,7 @@
 
         async function startAutoExtraction(ui) {
             if (!Array.isArray(ui.lastJobs) || !ui.lastJobs.length) {
-                showError(ui, "Bitte zuerst eine Suche ausfuehren, damit Stellen vorliegen.");
+                showError(ui, "Please perform a search first to discover job opportunities.");
                 return;
             }
 
@@ -824,8 +916,7 @@
             saveIndexState();
             setLoading(ui, true);
 
-            const searchScopeEl = document.getElementById("search_scope");
-            const searchScope = searchScopeEl ? searchScopeEl.value : "both";
+            const searchScope = "both";
             const autoCategoriesEl = document.getElementById("auto_categories_toggle");
             const autoCategories = autoCategoriesEl ? String(autoCategoriesEl.checked) : "true";
             const customCategoriesEl = document.getElementById("custom_categories");
@@ -975,6 +1066,15 @@
             metaEl: document.getElementById("results_meta_1"),
             listEl: document.getElementById("results_list_1"),
             errorEl: document.getElementById("results_error_1"),
+            targetBanner: document.getElementById("scraper_target_banner_1"),
+            targetText: document.getElementById("scraper_target_text_1"),
+            metricRaw: document.getElementById("metric_raw_scanned_1"),
+            metricMatched: document.getElementById("metric_matched_leads_1"),
+            metricSource: document.getElementById("metric_active_source_1"),
+            consoleTerminal: document.getElementById("scraper_console_terminal_1"),
+            consoleClear: document.getElementById("scraper_console_clear_1"),
+            consoleToggle: document.getElementById("scraper_console_toggle_1"),
+            lastLoggedStage: "",
             autoBtn: document.getElementById("auto_btn_1"),
             progressPanel: document.getElementById("progress_panel_1"),
             processedEl: document.getElementById("processed_1"),
@@ -1056,6 +1156,20 @@
             });
         }
         bindFilterEvents(searchUi1);
+        // Console Clear & Toggle Listeners
+        if (searchUi1.consoleClear && searchUi1.consoleTerminal) {
+            searchUi1.consoleClear.addEventListener("click", () => {
+                searchUi1.consoleTerminal.innerHTML = '<div class="terminal-row terminal-muted">[00:00:00] Console cleared. Ready for next scraping cycle.</div>';
+            });
+        }
+        if (searchUi1.consoleToggle && searchUi1.consoleTerminal) {
+            searchUi1.consoleToggle.addEventListener("click", () => {
+                const isHidden = searchUi1.consoleTerminal.style.display === "none";
+                searchUi1.consoleTerminal.style.display = isHidden ? "block" : "none";
+                searchUi1.consoleToggle.textContent = isHidden ? "Minimize ▲" : "Expand ▼";
+            });
+        }
+
         if (searchUi2) bindFilterEvents(searchUi2);
 
         searchUi1.form.addEventListener("submit", async (event) => {
@@ -1235,9 +1349,60 @@
         const profSearchTermsPreview = document.getElementById("prof_search_terms_preview");
         const profSummaryBadge = document.getElementById("prof_summary_badge");
 
+        const toggleCustomBtn = document.getElementById("toggle_custom_categories_btn");
+        const customDrawer = document.getElementById("custom_categories_drawer");
+        const newCustomInput = document.getElementById("new_custom_category_input");
+        const addCustomBtn = document.getElementById("add_custom_category_btn");
+        const restoreDefaultBtn = document.getElementById("restore_default_categories_btn");
+
         let activeCategoriesList = [];
         let defaultCategoriesList = [];
         let classifyDebounceTimer = null;
+
+        if (toggleCustomBtn && customDrawer) {
+            toggleCustomBtn.addEventListener("click", () => {
+                const isExpanded = toggleCustomBtn.getAttribute("aria-expanded") === "true";
+                const newExpanded = !isExpanded;
+                toggleCustomBtn.setAttribute("aria-expanded", String(newExpanded));
+                customDrawer.style.display = newExpanded ? "block" : "none";
+                toggleCustomBtn.classList.toggle("is-open", newExpanded);
+            });
+        }
+
+        function addCustomCategoryAction() {
+            if (!newCustomInput) return;
+            const val = newCustomInput.value.trim();
+            if (!val) return;
+            if (!activeCategoriesList.some(c => c.toLowerCase() === val.toLowerCase())) {
+                activeCategoriesList.push(val);
+                if (customCategoriesInput) customCategoriesInput.value = activeCategoriesList.join(", ");
+                renderCategoryChips();
+                updateSearchTermsPreview();
+            }
+            newCustomInput.value = "";
+        }
+
+        if (addCustomBtn) {
+            addCustomBtn.addEventListener("click", addCustomCategoryAction);
+        }
+
+        if (newCustomInput) {
+            newCustomInput.addEventListener("keydown", (e) => {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    addCustomCategoryAction();
+                }
+            });
+        }
+
+        if (restoreDefaultBtn) {
+            restoreDefaultBtn.addEventListener("click", () => {
+                activeCategoriesList = [...defaultCategoriesList];
+                if (customCategoriesInput) customCategoriesInput.value = activeCategoriesList.join(", ");
+                renderCategoryChips();
+                updateSearchTermsPreview();
+            });
+        }
 
         if (aiProfToggle && aiProfContent) {
             aiProfToggle.addEventListener("click", () => {
@@ -1254,15 +1419,21 @@
             chipsContainer.innerHTML = "";
 
             if (!activeCategoriesList.length) {
-                chipsContainer.innerHTML = '<span style="color: #94a3b8; font-size: 12px; padding: 4px;">Keine Branchen ausgewählt</span>';
+                chipsContainer.innerHTML = `
+                    <div class="ai-chips-empty">
+                        <span>Type a profession above to automatically discover target employer industries</span>
+                    </div>`;
                 if (customCategoriesInput) customCategoriesInput.value = "";
                 return;
             }
 
             activeCategoriesList.forEach((cat, idx) => {
                 const chip = document.createElement("span");
-                chip.style.cssText = "display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe; border-radius: 16px; font-size: 12px; font-weight: 500;";
-                chip.innerHTML = `${escapeHtml(cat)} <button type="button" data-idx="${idx}" style="background: none; border: none; color: #6366f1; cursor: pointer; font-weight: bold; font-size: 14px; line-height: 1; padding: 0 2px;" title="Entfernen">&times;</button>`;
+                chip.className = "ai-sector-chip";
+                chip.innerHTML = `
+                    <span class="ai-chip-name">${escapeHtml(cat)}</span>
+                    <button type="button" class="ai-chip-remove" data-idx="${idx}" title="Remove category" aria-label="Remove category">&times;</button>
+                `;
                 
                 chip.querySelector("button").addEventListener("click", (e) => {
                     e.stopPropagation();
@@ -1288,7 +1459,7 @@
                 const terms = activeCategoriesList.map(c => `"${c}${locSuffix}"`).join(", ");
                 profSearchTermsPreview.textContent = terms;
             } else {
-                profSearchTermsPreview.textContent = "Keine Kategorien aktiv.";
+                profSearchTermsPreview.textContent = "No specific category queries active.";
             }
         }
 
@@ -1299,10 +1470,10 @@
             const locVal = document.getElementById("location") ? document.getElementById("location").value.trim() : "";
 
             if (!rawVal || rawVal.length < 3) {
-                if (profRecognizedName) profRecognizedName.textContent = "(Warte auf Eingabe)";
+                if (profRecognizedName) profRecognizedName.textContent = "Ready for input...";
                 if (profSectorName) profSectorName.textContent = "—";
-                if (profSearchTermsPreview) profSearchTermsPreview.textContent = "Geben Sie oben einen Beruf ein.";
-                if (profSummaryBadge) profSummaryBadge.textContent = "Bereit für Eingabe";
+                if (profSearchTermsPreview) profSearchTermsPreview.textContent = "Enter a profession above to preview target search queries.";
+                if (profSummaryBadge) profSummaryBadge.textContent = "Automatic";
                 activeCategoriesList = [];
                 defaultCategoriesList = [];
                 renderCategoryChips();
@@ -1314,40 +1485,39 @@
             }
 
             try {
-                if (profSummaryBadge) profSummaryBadge.textContent = "Analysiere Beruf...";
+                if (profSummaryBadge) profSummaryBadge.textContent = "Analyzing...";
                 const res = await fetch(`/api/profession/classify?keyword=${encodeURIComponent(rawVal)}&location=${encodeURIComponent(locVal)}`);
-                if (!res.ok) throw new Error("Klassifizierung fehlgeschlagen");
+                if (!res.ok) throw new Error("Classification failed");
                 const data = await res.json();
                 
                 const norm = data.normalized_profession || rawVal;
-                const sector = data.sector || "Allgemein";
+                const sector = data.sector || "General";
                 const cats = (data.employer_categories || []).map(c => c.category || c.search_term);
                 
                 if (profRecognizedName) profRecognizedName.textContent = norm;
                 if (profSectorName) profSectorName.textContent = sector;
-                if (profSummaryBadge) profSummaryBadge.textContent = `${norm} (${sector})`;
+                if (profSummaryBadge) profSummaryBadge.textContent = "Automatic";
                 
                 if (data.geographic_coverage) {
                     const cov = data.geographic_coverage;
                     const hubCount = (cov.targets || []).length;
                     if (geoCoverageIndicator) {
                         if (cov.scope === "nationwide_sample") {
-                            geoCoverageIndicator.textContent = `Bundesweit (${hubCount} Metropol-Hubs)`;
+                            geoCoverageIndicator.textContent = `Nationwide (${hubCount} Metro Hubs)`;
                         } else if (cov.scope === "federal_state") {
                             geoCoverageIndicator.textContent = `${cov.matched_state} (${hubCount} Hubs)`;
                         } else {
-                            geoCoverageIndicator.textContent = locVal || "Lokal";
+                            geoCoverageIndicator.textContent = locVal || "Local Region";
                         }
                     }
                 }
-
-                defaultCategoriesList = cats;
+                defaultCategoriesList = [...cats];
                 activeCategoriesList = [...cats];
                 renderCategoryChips();
                 updateSearchTermsPreview();
             } catch (err) {
                 console.warn("Profession classify error:", err);
-                if (profSummaryBadge) profSummaryBadge.textContent = "Automatische Erkennung aktiv";
+                if (profSummaryBadge) profSummaryBadge.textContent = "Automatic";
             }
         }
 
@@ -1562,11 +1732,14 @@
 
         restoreIndexState();
         bindIndexStatePersistence();
+        handleSearchSourceChange();
 
-        return {
-            show() {},
-            hide() {},
-        };
+        const srcElInit = document.getElementById("search_source_1");
+        if (srcElInit) {
+            srcElInit.addEventListener("change", handleSearchSourceChange);
+        }
+
+        return sections.createSearchSources();
     };
 
     window.SPASections = sections;

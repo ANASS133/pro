@@ -13,9 +13,8 @@ import imaplib
 import json
 import logging
 import os
-import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from services.ai_provider_manager import ai_manager
 from services.client_manager import client_manager
@@ -216,50 +215,35 @@ class EmailReplyMonitor:
         sender domain, recipient email, or candidate name in body.
         """
         matches = self.store.list_matches(limit=500)
-        sender_clean = (sender or "").lower()
         recipient_clean = (recipient or "").lower()
         company_clean = (company_name or "").lower().strip()
         candidate_clean = (candidate_name or "").lower().strip()
         body_lower = (body_text or "").lower()
 
-        # 1. Match on exact or substring company name in client_matches
-        if company_clean and len(company_clean) > 2:
-            for m in matches:
-                m_comp = m.get("company", "").lower().strip()
-                if m_comp and (company_clean in m_comp or m_comp in company_clean):
-                    return m, m["client_id"]
+        # Restrict by candidate identity before matching an employer shared by clients.
+        clients = client_manager.list_clients()
+        candidate_ids = set()
+        for c in clients:
+            name = str(c.get("name") or "").lower().strip()
+            address = str(c.get("email") or "").lower().strip()
+            if (address and address in recipient_clean) or (candidate_clean and candidate_clean == name) or (name and len(name) > 4 and name in body_lower):
+                candidate_ids.add(c["id"])
+        if candidate_ids:
+            matches = [m for m in matches if m["client_id"] in candidate_ids]
 
-        # 2. Match on sender email address in client_matches
+        sender_address = email.utils.parseaddr(sender)[1].lower()
+        employer_matches = []
         for m in matches:
-            m_email = m.get("email", "").lower().strip()
-            if m_email and m_email in sender_clean:
-                return m, m["client_id"]
-
-        # 3. Match on sender domain against match link or email
-        sender_domain = sender_clean.split("@")[-1].split(">")[0].strip() if "@" in sender_clean else ""
-        if sender_domain and len(sender_domain) > 3 and not sender_domain.endswith(("gmail.com", "yahoo.com", "gmx.de", "web.de", "outlook.com")):
-            domain_stem = sender_domain.split(".")[0]
-            for m in matches:
-                link = m.get("link", "").lower()
-                m_email = m.get("email", "").lower()
-                m_comp = m.get("company", "").lower()
-                if sender_domain in link or sender_domain in m_email or (len(domain_stem) > 3 and domain_stem in m_comp):
-                    return m, m["client_id"]
-
-        # 4. Match candidate by recipient email or candidate name in body against registered clients
-        try:
-            for c in client_manager.list_clients():
-                cid = c["id"]
-                c_name = str(c.get("name") or "").lower().strip()
-                c_email = str(c.get("email") or "").lower().strip()
-                if (c_email and c_email in recipient_clean) or (candidate_clean and candidate_clean in c_name) or (c_name and len(c_name) > 4 and c_name in body_lower):
-                    c_matches = [m for m in matches if m.get("client_id") == cid]
-                    return (c_matches[0] if c_matches else None), cid
-        except Exception:
-            pass
-
-        if matches:
-            return matches[0], matches[0]["client_id"]
+            address = str(m.get("email") or "").lower().strip()
+            company = str(m.get("company") or "").lower().strip()
+            if (address and address == sender_address) or (company_clean and len(company_clean) > 2 and company and (company_clean in company or company in company_clean)):
+                employer_matches.append(m)
+        # Ambiguous employer replies must not mutate an arbitrary application.
+        if len(employer_matches) == 1:
+            match = employer_matches[0]
+            return match, match["client_id"]
+        if len(candidate_ids) == 1:
+            return None, next(iter(candidate_ids))
         return None, ""
 
     def _update_client_reply_stats(self, client_id: str, intent: str):
@@ -294,6 +278,9 @@ class EmailReplyMonitor:
         client_id_hint: str = "",
     ) -> Dict[str, Any]:
         """Classifies an individual email message, updates application & client state, and generates alerts."""
+        existing = self.store.get_inbox_message(message_id) if message_id else None
+        if existing:
+            return {**existing, "duplicate": True}
         classification = self.classify_email_content(sender, subject, body)
         intent = classification["intent"]
         company = classification.get("company") or ""
@@ -307,6 +294,8 @@ class EmailReplyMonitor:
             candidate_name=candidate_name,
             body_text=f"{subject}\n{body}",
         )
+        if client_id_hint and matched_match and matched_match["client_id"] != client_id_hint:
+            matched_match = None
         client_id = client_id_hint or resolved_client_id
         if matched_match and not company:
             company = matched_match.get("company", "")
@@ -424,11 +413,15 @@ class EmailReplyMonitor:
             }
 
         processed = []
+        errors = []
         try:
-            conn.select("INBOX", readonly=True)
+            select_status, _ = conn.select("INBOX", readonly=True)
+            if select_status != "OK":
+                raise RuntimeError("IMAP INBOX selection failed")
             status, msg_nums = conn.search(None, "ALL")
-            if status != "OK" or not msg_nums or not msg_nums[0]:
-                conn.logout()
+            if status != "OK":
+                raise RuntimeError("IMAP search failed")
+            if not msg_nums or not msg_nums[0]:
                 return {"configured": True, "status": "empty_inbox", "processed_count": 0, "messages": []}
 
             ids = msg_nums[0].split()
@@ -438,7 +431,7 @@ class EmailReplyMonitor:
                 try:
                     res, data = conn.fetch(mid_bytes, "(RFC822)")
                     if res != "OK" or not data:
-                        continue
+                        raise RuntimeError("IMAP fetch failed")
                     raw_email = data[0][1]
                     msg = email.message_from_bytes(raw_email)
 
@@ -456,12 +449,12 @@ class EmailReplyMonitor:
                             if ctype == "text/plain" and "attachment" not in cdisp:
                                 payload_bytes = part.get_payload(decode=True)
                                 if payload_bytes:
-                                    body = payload_bytes.decode("utf-8", errors="replace")
+                                    body = payload_bytes.decode(part.get_content_charset() or "utf-8", errors="replace")
                                 break
                     else:
                         payload_bytes = msg.get_payload(decode=True)
                         if payload_bytes:
-                            body = payload_bytes.decode("utf-8", errors="replace")
+                            body = payload_bytes.decode(msg.get_content_charset() or "utf-8", errors="replace")
 
                     result = self.process_incoming_message(
                         message_id=message_id_hdr,
@@ -471,18 +464,26 @@ class EmailReplyMonitor:
                         received_at=datetime.now(timezone.utc).isoformat(),
                         body=body,
                     )
-                    processed.append(result)
+                    if not result.get("duplicate"):
+                        processed.append(result)
                 except Exception as inner_exc:
-                    logger.debug("Error processing email message %s: %s", mid_bytes, inner_exc)
+                    errors.append(str(inner_exc))
+                    logger.warning("Error processing email message %s: %s", mid_bytes, inner_exc)
 
-            conn.logout()
         except Exception as exc:
             logger.error("Error during IMAP check: %s", exc)
             return {"configured": True, "status": "error", "error": str(exc), "processed_count": 0, "messages": []}
 
+        finally:
+            try:
+                conn.logout()
+            except Exception:
+                pass
+
         return {
             "configured": True,
-            "status": "success",
+            "status": "partial_error" if errors else "success",
+            "errors": errors,
             "processed_count": len(processed),
             "messages": processed,
         }

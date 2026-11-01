@@ -22,6 +22,17 @@ from .search_filter_engine import (
 )
 from .google_maps_ausbildung_verifier import GoogleMapsAusbildungVerifier
 from .google_maps_opportunity_verifier import GoogleMapsOpportunityVerifier
+from .parallel_domain_engine import (
+    ParallelDomainEngine,
+    DomainItem,
+    DomainStatus,
+    ScraperMetrics,
+    ProxyMode,
+    ProxyPoolManager,
+    create_engine,
+    get_engine,
+    run_parallel_domain_scrape,
+)
 
 __all__ = [
     "EnhancedJobScraper",
@@ -46,5 +57,14 @@ __all__ = [
     "verify_application_workflow",
     "GoogleMapsAusbildungVerifier",
     "GoogleMapsOpportunityVerifier",
+    "ParallelDomainEngine",
+    "DomainItem",
+    "DomainStatus",
+    "ScraperMetrics",
+    "ProxyMode",
+    "ProxyPoolManager",
+    "create_engine",
+    "get_engine",
+    "run_parallel_domain_scrape",
 ]
 

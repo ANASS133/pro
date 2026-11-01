@@ -13,7 +13,6 @@ from services.supabase_service import (
     ApplicationNotFoundError,
     DocumentDownloadError,
     PaymentUnverifiedError,
-    SupabaseServiceError,
 )
 from services.client_manager import client_manager
 

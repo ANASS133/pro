@@ -10,14 +10,8 @@
         const statTotalFiles = document.getElementById("ab-stat-total-files");
         const statTotalRows = document.getElementById("ab-stat-total-rows");
         const statTotalSize = document.getElementById("ab-stat-total-size");
-        const statCandidateName = document.getElementById("ab-stat-candidate-name");
-        const statCandidateRole = document.getElementById("ab-stat-candidate-role");
-
         const searchInput = document.getElementById("ausbildung-search-input");
         const searchClearBtn = document.getElementById("ausbildung-search-clear");
-        const btnToggleCandidateFilter = document.getElementById("btn-toggle-candidate-filter");
-        const candidateFilterLabel = document.getElementById("candidate-filter-label");
-        const candidateMatchCount = document.getElementById("candidate-match-count");
         const topicChipsRoot = document.getElementById("ab-topic-chips");
 
         const batchBar = document.getElementById("ab-batch-bar");
@@ -56,8 +50,6 @@
 
         // In-memory file cache & filter state
         let allFiles = [];
-        let activeCandidate = null;
-        let candidateFilterActive = true;
         let activeTopic = "all";
         let searchQuery = "";
         const selectedFiles = new Set();
@@ -143,96 +135,6 @@
             return "Update läuft...";
         }
 
-        // Active Candidate Retrieval & Matching
-        async function fetchActiveCandidate() {
-            try {
-                const res = await fetch("/api/clients/active");
-                if (!res.ok) {
-                    activeCandidate = null;
-                    updateCandidateDisplay();
-                    return;
-                }
-                const data = await res.json();
-                if (data.success && data.applicant) {
-                    const app = data.applicant;
-                    const personal = app.personal || {};
-                    const prof = app.professional_profile || {};
-                    activeCandidate = {
-                        id: data.client_id || "",
-                        name: personal.full_name || `${personal.first_name || ""} ${personal.last_name || ""}`.trim() || "Kandidat",
-                        title: prof.current_title || prof.headline || "",
-                        fields: Array.isArray(prof.primary_fields) ? prof.primary_fields : [],
-                    };
-                } else {
-                    activeCandidate = null;
-                }
-            } catch (_) {
-                activeCandidate = null;
-            }
-            updateCandidateDisplay();
-        }
-
-        function updateCandidateDisplay() {
-            if (!statCandidateName) return;
-
-            if (activeCandidate && activeCandidate.name) {
-                statCandidateName.textContent = activeCandidate.name;
-                if (statCandidateRole) {
-                    statCandidateRole.textContent = activeCandidate.title ? `• ${activeCandidate.title}` : "";
-                }
-                if (candidateFilterLabel) {
-                    candidateFilterLabel.textContent = `⭐ ${activeCandidate.name.split(" ")[0] || "Candidate"} Matches`;
-                }
-            } else {
-                statCandidateName.textContent = "No Candidate Active";
-                if (statCandidateRole) statCandidateRole.textContent = "";
-                if (candidateFilterLabel) candidateFilterLabel.textContent = "All Datasets";
-            }
-        }
-
-        function isFileRelevantForCandidate(fileItem) {
-            if (!activeCandidate || !activeCandidate.title) {
-                return true; // No candidate restriction
-            }
-
-            const title = activeCandidate.title.toLowerCase();
-            if (title === "bewerber" || title.length < 3) {
-                // If generic title, check primary fields
-                if (activeCandidate.fields && activeCandidate.fields.length > 0) {
-                    const fieldsStr = activeCandidate.fields.join(" ").toLowerCase();
-                    const fText = `${fileItem.filename || ""} ${fileItem.domain_name || ""}`.toLowerCase();
-                    return activeCandidate.fields.some(f => f.length >= 4 && fText.includes(f.toLowerCase()));
-                }
-                return true;
-            }
-
-            // Extract tokens from candidate title
-            const tokens = title
-                .replace(/[^a-z0-9äöüß]/gi, " ")
-                .split(/\s+/)
-                .filter(t => t.length >= 4 && !["fuer", "für", "oder", "und", "junior", "senior"].includes(t));
-
-            const fileText = `${fileItem.filename || ""} ${fileItem.domain_name || ""}`.toLowerCase();
-
-            // Match if any token is found in file name or domain name
-            for (const token of tokens) {
-                if (fileText.includes(token)) return true;
-                // Stemming check e.g. "informatik" matches "fachinformatiker"
-                if (token.startsWith("informatik") && fileText.includes("informatik")) return true;
-                if (token.startsWith("fachinformatik") && fileText.includes("fachinformatik")) return true;
-                if (token.startsWith("koch") && fileText.includes("koch")) return true;
-            }
-
-            // Cross-check: does domain name appear in candidate title?
-            const domainTokens = (fileItem.domain_name || "")
-                .toLowerCase()
-                .replace(/[^a-z0-9äöüß]/gi, " ")
-                .split(/\s+/)
-                .filter(t => t.length >= 4 && !["ausbildung", "platz", "suche", "suchergebnisse"].includes(t));
-
-            return domainTokens.some(dt => title.includes(dt));
-        }
-
         // Filter and topic calculation
         function getFilteredFiles() {
             return allFiles.filter(item => {
@@ -249,11 +151,6 @@
                     if (!d.includes(activeTopic.toLowerCase())) return false;
                 }
 
-                // Candidate relevance toggle
-                if (candidateFilterActive && activeCandidate && activeCandidate.title && activeCandidate.title.toLowerCase() !== "bewerber") {
-                    if (!isFileRelevantForCandidate(item)) return false;
-                }
-
                 return true;
             });
         }
@@ -267,12 +164,6 @@
             if (statTotalFiles) statTotalFiles.textContent = String(totalFiles);
             if (statTotalRows) statTotalRows.textContent = totalRows.toLocaleString();
             if (statTotalSize) statTotalSize.textContent = `${Math.round(totalSize)} KB`;
-
-            // Candidate match count
-            if (candidateMatchCount) {
-                const matchCount = allFiles.filter(isFileRelevantForCandidate).length;
-                candidateMatchCount.textContent = String(matchCount);
-            }
 
             // Build dynamic topic chips
             if (topicChipsRoot) {
@@ -344,12 +235,11 @@
             const activeJob = item.active_job || null;
             const isRunning = Boolean(activeJob && activeJob.is_running);
             const isSelected = selectedFiles.has(item.filename);
-            const isRelevant = isFileRelevantForCandidate(item);
-            const domainTitle = item.domain_name ? (item.domain_name.charAt(0).toUpperCase() + item.domain_name.slice(1)) : "Datensatz";
+            const domainTitle = item.domain_name ? (item.domain_name.charAt(0).toUpperCase() + item.domain_name.slice(1)) : "Dataset";
 
             return `
                 <article
-                    class="file-card ${isSelected ? "is-selected" : ""} ${isRelevant ? "is-candidate-match" : ""}"
+                    class="file-card ${isSelected ? "is-selected" : ""}"
                     data-export-card
                     data-filename="${escapeHtml(item.filename || "")}"
                     data-job-id="${escapeHtml((activeJob && activeJob.job_id) || "")}"
@@ -365,8 +255,7 @@
                             <span class="file-pill">XLSX</span>
                         </label>
                         <div class="ab-pill-group">
-                            ${isRelevant && activeCandidate && activeCandidate.title ? '<span class="ab-candidate-tag" title="Matches active candidate target role">⭐ Matches</span>' : ""}
-                            <span class="line-count" data-line-count>${escapeHtml(item.row_count_display || "k. A.")} Zeilen</span>
+                            <span class="line-count" data-line-count>${escapeHtml(item.row_count_display || "N/A")} rows</span>
                         </div>
                     </div>
 
@@ -379,17 +268,17 @@
                     </div>
 
                     <div class="file-actions">
-                        <button type="button" class="ab-btn-card-action ab-btn-preview" data-preview-btn title="Datensätze in Tabelle ansehen">
+                        <button type="button" class="ab-btn-card-action ab-btn-preview" data-preview-btn title="Preview dataset in table">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                            <span>Vorschau</span>
+                            <span>Preview</span>
                         </button>
-                        <a href="/api/ausbildungen/file/${encodeURIComponent(item.filename || "")}/download" class="ab-btn-card-action ab-btn-download" title="Datei herunterladen" download>
+                        <a href="/api/ausbildungen/file/${encodeURIComponent(item.filename || "")}/download" class="ab-btn-card-action ab-btn-download" title="Download dataset file" download>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                             <span>Export</span>
                         </a>
-                        <button type="button" class="update-btn" data-update-button ${isRunning ? "hidden" : ""} title="Webcrawler für neue E-Mails ausführen">Update</button>
+                        <button type="button" class="update-btn" data-update-button ${isRunning ? "hidden" : ""} title="Run web crawler for new emails">Update</button>
                         <button type="button" class="stop-btn" data-stop-button ${isRunning ? "" : "hidden"}>Stop</button>
-                        <button type="button" class="ab-btn-card-action ab-btn-delete" data-delete-btn title="Test-Scrap löschen">
+                        <button type="button" class="ab-btn-card-action ab-btn-delete" data-delete-btn title="Delete dataset">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                         </button>
                         <a href="/captcha_solve" target="_blank" rel="noopener noreferrer" class="solver-link" data-solver-link hidden>Open CAPTCHA</a>
@@ -403,10 +292,10 @@
             const filtered = getFilteredFiles();
             emptyState.hidden = filtered.length > 0;
             if (filtered.length === 0) {
-                if (searchQuery || candidateFilterActive || activeTopic !== "all") {
-                    emptyState.textContent = "Keine Ausbildungs-Dateien entsprechen den gewählten Filtern.";
+                if (searchQuery || activeTopic !== "all") {
+                    emptyState.textContent = "No apprenticeship datasets match the current filter.";
                 } else {
-                    emptyState.textContent = "Keine exportierten Ausbildungs-Dateien gefunden.";
+                    emptyState.textContent = "No exported apprenticeship datasets found.";
                 }
             }
             filesRoot.innerHTML = filtered.map(renderFileCard).join("");
@@ -430,7 +319,7 @@
             if (!statusNodeLocal) return;
 
             if (lineCount && Number(job.result_rows || 0) > 0) {
-                lineCount.textContent = `${Number(job.result_rows || 0)} Zeilen`;
+                lineCount.textContent = `${Number(job.result_rows || 0)} rows`;
             }
 
             card.dataset.jobId = String(job.job_id || "");
@@ -491,7 +380,7 @@
                 try {
                     const payload = await fetchJson(`/api/ausbildungen/update/${encodeURIComponent(jobId)}`);
                     if (!payload.success || !payload.job) {
-                        throw new Error(payload.message || "Status konnte nicht geladen werden");
+                        throw new Error(payload.message || "Failed to load update status");
                     }
 
                     const job = payload.job;
@@ -512,7 +401,7 @@
                     const statusNodeLocal = card.querySelector("[data-update-status]");
                     if (statusNodeLocal) {
                         statusNodeLocal.className = "update-status error";
-                        statusNodeLocal.textContent = error.message || "Update-Status konnte nicht geladen werden.";
+                        statusNodeLocal.textContent = error.message || "Could not load update status.";
                     }
                     setIdleState(card);
                     if (activePolls.has(key)) {
@@ -533,10 +422,9 @@
             stopAllPolls();
 
             try {
-                await fetchActiveCandidate();
                 const payload = await fetchJson("/api/ausbildungen/files");
                 if (!payload.success || !Array.isArray(payload.files)) {
-                    throw new Error(payload.message || "Exportdateien konnten nicht geladen werden");
+                    throw new Error(payload.message || "Failed to load exported datasets");
                 }
 
                 allFiles = payload.files;
@@ -552,7 +440,7 @@
                     }
                 });
             } catch (error) {
-                setStatus(error.message || "Exportdateien konnten nicht geladen werden.", true);
+                setStatus(error.message || "Failed to load exported datasets.", true);
             } finally {
                 isLoading = false;
             }
@@ -561,7 +449,7 @@
         // Preview Modal functionality
         async function openPreview(filename) {
             if (!previewModal) return;
-            previewTitle.textContent = "Lade Vorschau...";
+            previewTitle.textContent = "Loading preview...";
             previewFilename.textContent = filename;
             previewStats.textContent = "";
             previewThead.innerHTML = "";
@@ -574,21 +462,21 @@
             try {
                 const res = await fetchJson(`/api/ausbildungen/file/${encodeURIComponent(filename)}/preview`);
                 if (!res.ok && !res.success) {
-                    throw new Error(res.message || "Vorschau konnte nicht geladen werden");
+                    throw new Error(res.message || "Failed to load preview");
                 }
 
                 currentPreviewCols = res.columns || [];
                 currentPreviewRows = res.rows || [];
 
-                previewTitle.textContent = "Datensatz-Vorschau";
-                previewStats.textContent = `${res.total_rows} Zeilen • ${res.email_count} mit E-Mail`;
+                previewTitle.textContent = "Dataset Preview";
+                previewStats.textContent = `${res.total_rows} rows • ${res.email_count} with email`;
                 if (previewCounter) {
-                    previewCounter.textContent = `Zeige ${currentPreviewRows.length} von ${res.total_rows} Einträgen`;
+                    previewCounter.textContent = `Showing ${currentPreviewRows.length} of ${res.total_rows} entries`;
                 }
 
                 renderPreviewRows(currentPreviewRows);
             } catch (err) {
-                previewTbody.innerHTML = `<tr><td colspan="6" class="ab-table-empty is-error">Fehler beim Laden: ${escapeHtml(err.message)}</td></tr>`;
+                previewTbody.innerHTML = `<tr><td colspan="6" class="ab-table-empty is-error">Failed to load preview: ${escapeHtml(err.message)}</td></tr>`;
             }
         }
 
@@ -609,7 +497,7 @@
             `;
 
             if (rows.length === 0) {
-                previewTbody.innerHTML = `<tr><td colspan="${colsToShow.length + 1}" class="ab-table-empty">Keine passenden Zeilen in der Vorschau.</td></tr>`;
+                previewTbody.innerHTML = `<tr><td colspan="${colsToShow.length + 1}" class="ab-table-empty">No matching rows in preview.</td></tr>`;
                 return;
             }
 
@@ -626,14 +514,14 @@
                             if (col === "email") {
                                 return hasEmail
                                     ? `<td><span class="ab-email-badge">✉️ ${escapeHtml(val)}</span></td>`
-                                    : `<td><span class="ab-no-email">Keine E-Mail</span></td>`;
+                                    : `<td><span class="ab-no-email">No email</span></td>`;
                             }
                             if (col === "application_method") {
                                 const pillClass = appMethod.includes("form") ? "method-form" : (appMethod.includes("portal") ? "method-portal" : "method-email");
                                 return `<td><span class="ab-method-pill ${pillClass}">${escapeHtml(val || appMethod)}</span></td>`;
                             }
                             if (col === "apply_url" || col === "form_link" || col === "bewerbung_link") {
-                                return val ? `<td><a href="${escapeHtml(val)}" target="_blank" rel="noopener noreferrer" class="ab-cell-link">Öffnen ↗</a></td>` : "<td>-</td>";
+                                return val ? `<td><a href="${escapeHtml(val)}" target="_blank" rel="noopener noreferrer" class="ab-cell-link">Open ↗</a></td>` : "<td>-</td>";
                             }
                             return `<td class="ab-cell-text" title="${escapeHtml(val)}">${escapeHtml(val || "-")}</td>`;
                         }).join("")}
@@ -644,14 +532,14 @@
 
         function formatColHeader(col) {
             const map = {
-                title: "Beruf / Stelle",
-                company: "Unternehmen",
-                location: "Ort",
-                city: "Stadt",
-                email: "E-Mail Adresse",
-                application_method: "Bewerbungsart",
+                title: "Profession / Title",
+                company: "Company",
+                location: "Location",
+                city: "City",
+                email: "Email Address",
+                application_method: "Application Method",
                 apply_url: "Link / Portal",
-                source: "Quelle",
+                source: "Source",
             };
             return map[col] || col.charAt(0).toUpperCase() + col.slice(1);
         }
@@ -668,14 +556,14 @@
                 const q = e.target.value.toLowerCase().trim();
                 if (!q) {
                     renderPreviewRows(currentPreviewRows);
-                    if (previewCounter) previewCounter.textContent = `Zeige ${currentPreviewRows.length} Einträge`;
+                    if (previewCounter) previewCounter.textContent = `Showing ${currentPreviewRows.length} entries`;
                     return;
                 }
                 const filtered = currentPreviewRows.filter(row => {
                     return Object.values(row).some(v => String(v || "").toLowerCase().includes(q));
                 });
                 renderPreviewRows(filtered);
-                if (previewCounter) previewCounter.textContent = `Gefiltert: ${filtered.length} von ${currentPreviewRows.length} Einträgen`;
+                if (previewCounter) previewCounter.textContent = `Filtered: ${filtered.length} of ${currentPreviewRows.length} entries`;
             });
         }
 
@@ -689,41 +577,49 @@
 
         // Delete File
         async function deleteFile(filename) {
-            const confirmed = window.confirm(`Möchten Sie die Datei "${filename}" wirklich unwiderruflich löschen?\n\nDies bereinigt den Speicher und entfernt unvollständige Test-Scraps.`);
+            const confirmed = window.confirm(`Are you sure you want to permanently delete "${filename}"?\n\nThis will free up disk space and remove incomplete scrape data.`);
             if (!confirmed) return;
 
             try {
+                // Optimistically remove from selection and in-memory list, re-render immediately
+                selectedFiles.delete(filename);
+                allFiles = allFiles.filter(f => f.filename !== filename);
+                renderGrid();
+                window.dispatchEvent(new CustomEvent("ausbildungDatasetsChanged", {
+                    detail: { files: allFiles, updatedAt: new Date().toISOString() }
+                }));
+
                 const res = await fetchJson(`/api/ausbildungen/file/${encodeURIComponent(filename)}/delete`, {
                     method: "POST",
                 });
                 if (!res.success) {
-                    throw new Error(res.message || "Datei konnte nicht gelöscht werden");
+                    throw new Error(res.message || "Failed to delete dataset");
                 }
-                selectedFiles.delete(filename);
-                setStatus(`✓ Datei "${filename}" wurde erfolgreich gelöscht.`, false);
+                setStatus(`✓ Dataset "${filename}" deleted successfully.`, false);
                 await loadFiles();
             } catch (err) {
-                setStatus(`Fehler beim Löschen: ${err.message}`, true);
+                setStatus(`Error deleting dataset: ${err.message}`, true);
+                await loadFiles();
             }
         }
 
         // Batch Merge Files
         async function runBatchMerge() {
             if (selectedFiles.size < 2) {
-                alert("Bitte wählen Sie mindestens 2 Dateien zum Zusammenführen aus.");
+                alert("Please select at least 2 files to merge.");
                 return;
             }
 
             const fileList = Array.from(selectedFiles);
             const deleteSources = deleteSourcesCheckbox ? deleteSourcesCheckbox.checked : false;
 
-            const confirmMsg = `Möchten Sie ${fileList.length} Dateien zu einem bereinigten Datensatz zusammenführen?` +
-                (deleteSources ? "\n\nDie Quell-Dateien werden nach der Deduplizierung automatisch gelöscht." : "\n\nDie Quell-Dateien bleiben erhalten.");
+            const confirmMsg = `Are you sure you want to merge ${fileList.length} files into a single deduplicated dataset?` +
+                (deleteSources ? "\n\nSource files will be permanently deleted after deduplication." : "\n\nSource files will be preserved.");
 
             if (!window.confirm(confirmMsg)) return;
 
             btnBatchMerge.disabled = true;
-            btnBatchMerge.textContent = "Führe zusammen...";
+            btnBatchMerge.textContent = "Merging...";
 
             try {
                 const res = await fetchJson("/api/ausbildungen/merge", {
@@ -736,14 +632,14 @@
                 });
 
                 if (!res.success) {
-                    throw new Error(res.message || "Zusammenführen fehlgeschlagen");
+                    throw new Error(res.message || "Merge failed");
                 }
 
                 selectedFiles.clear();
-                setStatus(`✓ ${res.message} (Neue Datei: ${res.merged_filename})`, false);
+                setStatus(`✓ ${res.message} (New file: ${res.merged_filename})`, false);
                 await loadFiles();
             } catch (err) {
-                setStatus(`Merge-Fehler: ${err.message}`, true);
+                setStatus(`Merge error: ${err.message}`, true);
             } finally {
                 btnBatchMerge.disabled = false;
                 btnBatchMerge.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path></svg> <span>Merge &amp; Deduplicate</span>';
@@ -760,7 +656,7 @@
 
             setRunningState(card);
             statusNodeLocal.className = "update-status";
-            statusNodeLocal.textContent = "Update wird gestartet...";
+            statusNodeLocal.textContent = "Starting update...";
 
             try {
                 const payload = await fetchJson("/api/ausbildungen/update", {
@@ -769,7 +665,7 @@
                     body: JSON.stringify({ filename }),
                 });
                 if (!payload.success || !payload.job_id) {
-                    throw new Error(payload.message || "Update konnte nicht gestartet werden");
+                    throw new Error(payload.message || "Failed to start update");
                 }
 
                 card.dataset.jobId = String(payload.job_id);
@@ -777,7 +673,7 @@
             } catch (error) {
                 setIdleState(card);
                 statusNodeLocal.className = "update-status error";
-                statusNodeLocal.textContent = error.message || "Update konnte nicht gestartet werden.";
+                statusNodeLocal.textContent = error.message || "Failed to start update.";
             }
         }
 
@@ -796,15 +692,15 @@
                     method: "POST",
                 });
                 if (!payload.success) {
-                    throw new Error(payload.message || "Stop konnte nicht angefordert werden");
+                    throw new Error(payload.message || "Failed to request stop");
                 }
                 statusNodeLocal.className = "update-status";
-                statusNodeLocal.textContent = "Stop wird angefordert...";
+                statusNodeLocal.textContent = "Requesting stop...";
             } catch (error) {
                 button.disabled = false;
                 button.textContent = "Stop updating";
                 statusNodeLocal.className = "update-status error";
-                statusNodeLocal.textContent = error.message || "Stop konnte nicht angefordert werden.";
+                statusNodeLocal.textContent = error.message || "Failed to request stop.";
             }
         }
 
@@ -870,14 +766,6 @@
                 if (searchInput) searchInput.value = "";
                 searchQuery = "";
                 searchClearBtn.hidden = true;
-                renderGrid();
-            });
-        }
-
-        if (btnToggleCandidateFilter) {
-            btnToggleCandidateFilter.addEventListener("click", () => {
-                candidateFilterActive = !candidateFilterActive;
-                btnToggleCandidateFilter.classList.toggle("is-active", candidateFilterActive);
                 renderGrid();
             });
         }

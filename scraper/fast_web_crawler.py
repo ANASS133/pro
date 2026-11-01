@@ -7,7 +7,7 @@ Impressum legal data, tech-stack detection, and career pages without Selenium ov
 import concurrent.futures
 import logging
 import re
-from typing import Dict, List, Optional, Set
+from typing import Callable, Dict, List, Optional, Set
 from urllib.parse import urljoin, urlparse
 
 import requests
@@ -231,3 +231,28 @@ class FastWebCrawler:
             result["primary_email"] = chosen
 
         return result
+
+    @classmethod
+    def crawl_domains_parallel(
+        cls,
+        domains: List[Dict],
+        max_concurrency: int = 25,
+        timeout_seconds: float = 12.0,
+        proxy_mode: str = "DIRECT",
+        proxy_list: Optional[List[str]] = None,
+        progress_callback: Optional[Callable] = None,
+    ) -> List[Dict]:
+        """
+        High-throughput asynchronous parallel crawl across multiple independent company domains.
+        Delegates directly to JobScout's ParallelDomainEngine.
+        """
+        from .parallel_domain_engine import run_parallel_domain_scrape
+        return run_parallel_domain_scrape(
+            domains=domains,
+            max_concurrency=max_concurrency,
+            timeout_seconds=timeout_seconds,
+            proxy_mode=proxy_mode,
+            proxy_list=proxy_list,
+            progress_callback=progress_callback,
+        )
+

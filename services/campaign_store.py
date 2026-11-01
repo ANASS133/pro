@@ -8,12 +8,11 @@ import base64
 import hashlib
 import json
 import logging
-import os
 import sqlite3
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

@@ -31,13 +31,17 @@ def _create_sample_pdf(name: str = "Max Mustermann", email: str = "max.musterman
 
 class ClientManagerTestCase(unittest.TestCase):
     def setUp(self):
+        from unittest.mock import patch
         app.config["TESTING"] = True
         self.client = app.test_client()
         self.test_dir = tempfile.mkdtemp(prefix="test_clients_")
         self.test_af_dir = tempfile.mkdtemp(prefix="test_af_")
         self.mgr = ClientManager(clients_dir=Path(self.test_dir), autofill_dir=Path(self.test_af_dir))
+        self._cm_patch = patch("routes.clients.client_manager", self.mgr)
+        self._cm_patch.start()
 
     def tearDown(self):
+        self._cm_patch.stop()
         shutil.rmtree(self.test_dir, ignore_errors=True)
         shutil.rmtree(self.test_af_dir, ignore_errors=True)
 
@@ -94,7 +98,7 @@ class ClientManagerTestCase(unittest.TestCase):
 
     def test_api_active_client_switching(self):
         # Setup an active client
-        client_manager.save_client("test_switch_client", {
+        self.mgr.save_client("test_switch_client", {
             "applicant": {
                 "personal": {"first_name": "Test", "last_name": "Switch", "full_name": "Test Switch"},
                 "contact": {"email": "switch@test.de"}
@@ -113,7 +117,7 @@ class ClientManagerTestCase(unittest.TestCase):
         self.assertEqual(active_data["client_id"], "test_switch_client")
 
         # Clean up
-        client_manager.delete_client("test_switch_client")
+        self.mgr.delete_client("test_switch_client")
 
     def test_api_cv_ingest(self):
         pdf_bytes = _create_sample_pdf(name="Sara Berg", email="sara.berg@agency.de", city="20095 Hamburg")
@@ -125,10 +129,10 @@ class ClientManagerTestCase(unittest.TestCase):
         res = resp.get_json()
         self.assertTrue(res["success"])
         self.assertEqual(res["client_id"], "sara_berg")
-        self.assertEqual(client_manager.get_active_client_id(), "sara_berg")
+        self.assertEqual(self.mgr.get_active_client_id(), "sara_berg")
 
         # Clean up
-        client_manager.delete_client("sara_berg")
+        self.mgr.delete_client("sara_berg")
 
 
 if __name__ == "__main__":

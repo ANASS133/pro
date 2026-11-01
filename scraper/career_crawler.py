@@ -7,7 +7,7 @@ unsolicited applications (Initiativbewerbungen) are welcomed.
 
 import logging
 import re
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Set
 from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup

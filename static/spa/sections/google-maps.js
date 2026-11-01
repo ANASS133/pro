@@ -56,7 +56,6 @@
 
         // Two-step UI elements
         const discoverySummary = document.getElementById("gmaps-discovery-summary");
-        const discoveryCount = document.getElementById("gmaps-discovery-count");
         const startExtractBtn = document.getElementById("gmaps-start-extract-btn");
 
         if (!form) {
@@ -416,50 +415,6 @@
         }
 
         // ── API calls ────────────────────────────────────────────────
-        async function discoverBusinesses() {
-            const payload = buildPayload();
-            if (!payload.query) {
-                if (progressError) {
-                    progressError.textContent = "Bitte einen Suchbegriff eingeben.";
-                    progressError.hidden = false;
-                }
-                return;
-            }
-
-            setLoading(true);
-            if (progressError) { progressError.textContent = ""; progressError.hidden = true; }
-            if (resultsPanel) resultsPanel.hidden = true;
-            if (exportBar) exportBar.hidden = true;
-            if (discoverySummary) discoverySummary.hidden = true;
-            if (startExtractBtn) startExtractBtn.hidden = true;
-
-            try {
-                const response = await fetch("/api/google-maps/discover", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(payload),
-                });
-                const data = await response.json();
-
-                if (!response.ok || !data.success) {
-                    throw new Error(data.message || "Discovery fehlgeschlagen");
-                }
-
-                jobId = data.job_id || "";
-                if (!jobId) throw new Error("Keine Job-ID erhalten");
-
-                if (progressPanel) progressPanel.hidden = false;
-                startPolling();
-            } catch (error) {
-                if (progressError) {
-                    progressError.textContent = error.message || "Discovery fehlgeschlagen";
-                    progressError.hidden = false;
-                }
-            } finally {
-                setLoading(false);
-            }
-        }
-
         async function startExtraction() {
             if (!jobId) return;
 
@@ -641,12 +596,59 @@
         return {
             show() {
                 loadClients();
+                if (jobId && !pollTimer) startPolling();
             },
             hide() {
                 if (pollTimer) {
                     clearInterval(pollTimer);
                     pollTimer = null;
                 }
+            },
+        };
+    };
+
+    // Search owns the Maps workspace; there is no separate Maps page/controller.
+    sections.createSearchSources = function createSearchSources() {
+        const source = document.getElementById("search_source_1");
+        const jobs = document.getElementById("search-jobs-workspace");
+        const maps = document.getElementById("search-maps-workspace");
+        const controller = sections.createGoogleMapsSection();
+        let visible = false;
+
+        function render() {
+            const mapsSelected = source.value === "google_maps";
+            jobs.hidden = mapsSelected;
+            maps.hidden = !mapsSelected;
+            if (visible && mapsSelected) controller.show();
+            else controller.hide();
+        }
+
+        source.addEventListener("change", () => {
+            if (source.value === "google_maps") {
+                const query = document.getElementById("gmaps-query");
+                const keyword = document.getElementById("keyword");
+                const location = document.getElementById("location");
+                if (query && !query.value.trim()) {
+                    query.value = [keyword && keyword.value, location && location.value].filter(Boolean).join(" ").trim();
+                }
+            }
+            const url = new URL(window.location.href);
+            url.searchParams.set("source", source.value);
+            window.history.replaceState({}, "", url);
+            render();
+        });
+
+        return {
+            show() {
+                visible = true;
+                const url = new URL(window.location.href);
+                const requested = url.pathname === "/google-maps" ? "google_maps" : url.searchParams.get("source");
+                if (["all", "job_portals", "google_maps"].includes(requested)) source.value = requested;
+                render();
+            },
+            hide() {
+                visible = false;
+                controller.hide();
             },
         };
     };

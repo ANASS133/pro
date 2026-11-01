@@ -6,8 +6,7 @@ the Content Management System, web frameworks, and marketing tools in use.
 
 import logging
 import re
-from typing import Dict, List, Optional
-from bs4 import BeautifulSoup
+from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 

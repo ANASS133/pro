@@ -35,7 +35,7 @@
 
         const API_BASE = "/api";
         const defaultTemplate = "";
-        const defaultFilenameFormatLabel = String(config?.defaultFilenameFormatLabel || "Automatisch aus Firma");
+        const defaultFilenameFormatLabel = String(config?.defaultFilenameFormatLabel || "Auto from Company");
         const dataSourceMode = String(config?.dataSourceMode || "export-selector");
         const transferEnabled = Boolean(config?.transferEnabled);
         const defaultLayout = {
@@ -61,7 +61,7 @@
             templates: [defaultTemplate],
             activeTemplateIndex: 0,
             filenameFormat: "{{Unternehmen}}",
-            variantNames: ["Variante 1"],
+            variantNames: ["Variation 1"],
             previewRowIndex: 0,
             isDirty: false,
             history: [],
@@ -289,7 +289,7 @@
                 state.variantNames = [];
             }
             while (state.variantNames.length < state.templates.length) {
-                state.variantNames.push(`Variante ${state.variantNames.length + 1}`);
+                state.variantNames.push(`Variation ${state.variantNames.length + 1}`);
             }
             if (
                 state.activeTemplateIndex < 0
@@ -348,7 +348,7 @@
 
         function hideProgress() {
             els.progressArea.hidden = true;
-            els.progressText.textContent = "Generiere PDFs...";
+            els.progressText.textContent = "Generating PDFs...";
             els.progressFill.style.width = "0%";
         }
 
@@ -431,7 +431,7 @@
                 els.wordCountEl.textContent = `${words} ${words === 1 ? 'word' : 'words'}`;
             }
             if (els.charCountEl) {
-                els.charCountEl.textContent = `${chars} ${chars === 1 ? 'Zeichen' : 'Zeichen'}`;
+                els.charCountEl.textContent = `${chars} ${chars === 1 ? 'character' : 'characters'}`;
             }
         }
 
@@ -453,17 +453,17 @@
         function updateReadiness() {
             if (els.checkRecords) {
                 const count = state.previewRows?.length || 0;
-                els.checkRecords.textContent = `${count} ${count === 1 ? 'Kontakt' : 'Kontakte'}`;
+                els.checkRecords.textContent = `${count} ${count === 1 ? 'Contact' : 'Contacts'}`;
             }
             if (els.checkVariants) {
                 const count = state.templates?.length || 1;
-                els.checkVariants.textContent = `${count} ${count === 1 ? 'Variante' : 'Varianten'}`;
+                els.checkVariants.textContent = `${count} ${count === 1 ? 'Variation' : 'Variations'}`;
             }
             if (els.checkDesign) {
                 if (state.activeBgTemplateId) {
-                    els.checkDesign.textContent = `Briefpapier (${state.activeBgTemplateId})`;
+                    els.checkDesign.textContent = `Stationery (${state.activeBgTemplateId})`;
                 } else if (state.designPdfName) {
-                    els.checkDesign.textContent = "Eigenes PDF";
+                    els.checkDesign.textContent = "Custom PDF";
                 } else {
                     els.checkDesign.textContent = "Standard";
                 }
@@ -495,10 +495,10 @@
                 const hasData = state.previewRows?.length > 0;
                 const hasText = Boolean((els.templateEditor?.value || "").trim());
                 if (hasData && hasText) {
-                    els.readinessPill.textContent = "Bereit";
+                    els.readinessPill.textContent = "Ready";
                     els.readinessPill.className = "as-readiness-pill ready";
                 } else {
-                    els.readinessPill.textContent = !hasData ? "Warten auf Daten" : "Text leer";
+                    els.readinessPill.textContent = !hasData ? "Waiting for data" : "Empty text";
                     els.readinessPill.className = "as-readiness-pill waiting";
                 }
             }
@@ -512,15 +512,15 @@
                 const button = document.createElement("button");
                 button.type = "button";
                 button.className = `as-var-tab${index === state.activeTemplateIndex ? " is-active" : ""}${template.trim() ? "" : " is-empty"}`;
-                const name = state.variantNames[index] || `Variante ${index + 1}`;
-                button.innerHTML = `<span>${escapeHtml(name)}</span>${template.trim() ? "" : ' <span class="as-tab-empty">(leer)</span>'}`;
-                button.title = `${name} auswählen`;
+                const name = state.variantNames[index] || `Variation ${index + 1}`;
+                button.innerHTML = `<span>${escapeHtml(name)}</span>${template.trim() ? "" : ' <span class="as-tab-empty">(empty)</span>'}`;
+                button.title = `Select ${name}`;
                 button.addEventListener("click", () => switchTemplate(index));
                 els.templateList.appendChild(button);
             });
 
             if (els.activeVariantTitle) {
-                els.activeVariantTitle.textContent = state.variantNames[state.activeTemplateIndex] || `Variante ${state.activeTemplateIndex + 1}`;
+                els.activeVariantTitle.textContent = state.variantNames[state.activeTemplateIndex] || `Variation ${state.activeTemplateIndex + 1}`;
             }
 
             els.deleteTemplateBtn.disabled = state.templates.length <= 1;
@@ -545,7 +545,7 @@
         function addTemplate() {
             persistActiveTemplateValue();
             state.templates.push("");
-            state.variantNames.push(`Variante ${state.templates.length}`);
+            state.variantNames.push(`Variation ${state.templates.length}`);
             state.activeTemplateIndex = state.templates.length - 1;
             loadActiveTemplateIntoEditor();
             setSaveStatus(false);
@@ -554,23 +554,23 @@
         function duplicateActiveTemplate() {
             persistActiveTemplateValue();
             const currentContent = state.templates[state.activeTemplateIndex] || "";
-            const currentName = state.variantNames[state.activeTemplateIndex] || `Variante ${state.activeTemplateIndex + 1}`;
+            const currentName = state.variantNames[state.activeTemplateIndex] || `Variation ${state.activeTemplateIndex + 1}`;
             state.templates.push(currentContent);
-            state.variantNames.push(`${currentName} (Kopie)`);
+            state.variantNames.push(`${currentName} (Copy)`);
             state.activeTemplateIndex = state.templates.length - 1;
             loadActiveTemplateIntoEditor();
             setSaveStatus(false);
-            showToast("Variante dupliziert");
+            showToast("Variation duplicated");
         }
 
         function renameActiveTemplate() {
             ensureTemplateState();
-            const currentName = state.variantNames[state.activeTemplateIndex] || `Variante ${state.activeTemplateIndex + 1}`;
-            const newName = window.prompt("Name der Variante eingeben:", currentName);
+            const currentName = state.variantNames[state.activeTemplateIndex] || `Variation ${state.activeTemplateIndex + 1}`;
+            const newName = window.prompt("Enter variation name:", currentName);
             if (newName && newName.trim()) {
                 state.variantNames[state.activeTemplateIndex] = newName.trim();
                 renderTemplateList();
-                showToast(`Variante umbenannt in "${newName.trim()}"`);
+                showToast(`Variation renamed to "${newName.trim()}"`);
             }
         }
 
@@ -581,17 +581,17 @@
                     state.templates[0] = "";
                     loadActiveTemplateIntoEditor();
                     setSaveStatus(false);
-                    showToast("Variante geleert");
+                    showToast("Variation cleared");
                 }
                 return;
             }
-            if (window.confirm("Möchten Sie diese Variante wirklich löschen?")) {
+            if (window.confirm("Are you sure you want to delete this variation?")) {
                 state.templates.splice(state.activeTemplateIndex, 1);
                 state.variantNames.splice(state.activeTemplateIndex, 1);
                 state.activeTemplateIndex = Math.max(0, state.activeTemplateIndex - 1);
                 loadActiveTemplateIntoEditor();
                 setSaveStatus(false);
-                showToast("Variante gelöscht");
+                showToast("Variation deleted");
             }
         }
 
@@ -671,7 +671,7 @@
                     els.livePreviewIframe.src = "";
                 }
                 if (els.recordIndicator) els.recordIndicator.textContent = "0 / 0";
-                if (els.liveDocName) els.liveDocName.textContent = "Keine Daten";
+                if (els.liveDocName) els.liveDocName.textContent = "No Data";
                 return;
             }
 
@@ -688,7 +688,7 @@
                 || currentRow["Firma"]
                 || currentRow["Company"]
                 || currentRow["Nachname"]
-                || `Empfänger ${clampedIndex + 1}`;
+                || `Recipient ${clampedIndex + 1}`;
 
             if (els.liveDocName) {
                 els.liveDocName.textContent = recipientLabel;
@@ -763,14 +763,14 @@
             renderTemplateList();
             setSaveStatus(false);
             scheduleLivePreviewUpdate();
-            showToast(`Eingefügt: ${token}`, 1200);
+            showToast(`Inserted: ${token}`, 1200);
         }
 
         function createPlaceholderPill(name, category, label) {
             const btn = document.createElement("button");
             btn.type = "button";
             btn.className = `placeholder-pill placeholder-pill--${category}`;
-            btn.title = label ? `${label} - Klicken zum Einfügen: {{${name}}}` : `Klicken zum Einfügen: {{${name}}}`;
+            btn.title = label ? `${label} - Click to insert: {{${name}}}` : `Click to insert: {{${name}}}`;
 
             let iconSvg = "";
             if (category === "smart") {
@@ -796,14 +796,14 @@
             els.placeholderTags.innerHTML = "";
 
             const smartTokens = [
-                { name: "custom_hook", label: "Dynamische Einleitung" },
-                { name: "salutation", label: "Anrede (Sehr geehrte/r...)" },
-                { name: "ansprechpartner", label: "Kontaktperson" },
-                { name: "geschaeftsfuehrer", label: "Geschäftsführer" },
+                { name: "custom_hook", label: "Dynamic Opening Hook" },
+                { name: "salutation", label: "Salutation (Dear...)" },
+                { name: "ansprechpartner", label: "Contact Person" },
+                { name: "geschaeftsfuehrer", label: "Managing Director" },
             ];
 
             const systemTokens = [
-                { name: "heutigenDatum", label: "Heutiges Datum" },
+                { name: "heutigenDatum", label: "Today's Date" },
             ];
 
             const defaultCompanyTokens = ["Unternehmen", "Ort", "Stelle"];
@@ -842,19 +842,19 @@
             }
 
             // 1. KI
-            const kiRow = createGroupRow("KI", "bg-ki", smartTokens, "smart");
+            const kiRow = createGroupRow("AI", "bg-ki", smartTokens, "smart");
             if (kiRow) els.placeholderTags.appendChild(kiRow);
 
             // 2. Kontakt
-            const contactRow = createGroupRow("Kontakt", "bg-contact", contactCols, "data");
+            const contactRow = createGroupRow("Contact", "bg-contact", contactCols, "data");
             if (contactRow) els.placeholderTags.appendChild(contactRow);
 
             // 3. Unternehmen
-            const companyRow = createGroupRow("Firma", "bg-company", companyCols, "data");
+            const companyRow = createGroupRow("Company", "bg-company", companyCols, "data");
             if (companyRow) els.placeholderTags.appendChild(companyRow);
 
             // 4. Datei-Spalten
-            const dataRow = createGroupRow("Datei", "bg-data", otherCols, "data");
+            const dataRow = createGroupRow("File", "bg-data", otherCols, "data");
             if (dataRow) els.placeholderTags.appendChild(dataRow);
 
             // 5. System
@@ -863,7 +863,7 @@
 
             const totalCount = smartTokens.length + systemTokens.length + contactCols.length + companyCols.length + otherCols.length;
             if (els.placeholderCounter) {
-                els.placeholderCounter.textContent = `${totalCount} verfügbar`;
+                els.placeholderCounter.textContent = `${totalCount} available`;
             }
 
             applyPlaceholderFilter();
@@ -893,7 +893,7 @@
                 const btn = document.createElement("button");
                 btn.type = "button";
                 btn.className = "anschreiben-column-tag";
-                btn.title = `Klicken, um {{${column}}} in die Vorlage einzufügen`;
+                btn.title = `Click to insert {{${column}}} into template`;
                 btn.textContent = `+ {{${column}}}`;
                 btn.addEventListener("click", (e) => {
                     e.preventDefault();
@@ -955,7 +955,7 @@
             if (!doc) return null;
             const url = doc.downloadURL || doc.url || doc.href || "";
             if (!url) return null;
-            const name = doc.name || doc.filename || doc.fileName || "Unbenanntes Dokument";
+            const name = doc.name || doc.filename || doc.fileName || "Untitled Document";
             const type = doc.contentType || doc.type || "";
             return { url, name, type };
         }
@@ -1096,19 +1096,19 @@
             }
 
             if (els.summaryName) {
-                els.summaryName.textContent = String(normalized.full_name || "k. A.");
+                els.summaryName.textContent = String(normalized.full_name || "N/A");
             }
             if (els.summaryEmail) {
-                els.summaryEmail.textContent = String(normalized.email || "k. A.");
+                els.summaryEmail.textContent = String(normalized.email || "N/A");
             }
             if (els.summaryWhatsapp) {
-                els.summaryWhatsapp.textContent = String(normalized.whatsapp || "k. A.");
+                els.summaryWhatsapp.textContent = String(normalized.whatsapp || "N/A");
             }
             if (els.summaryBereich) {
-                els.summaryBereich.textContent = String(normalized.bereich || "k. A.");
+                els.summaryBereich.textContent = String(normalized.bereich || "N/A");
             }
             if (els.summaryBewerbungen) {
-                els.summaryBewerbungen.textContent = String(normalized.bewerbungen || "k. A.");
+                els.summaryBewerbungen.textContent = String(normalized.bewerbungen || "N/A");
             }
             if (els.summaryDocuments) {
                 els.summaryDocuments.textContent = String(normalized.document_count ?? 0);
@@ -1193,7 +1193,7 @@
                 if (els.pdfContainer) els.pdfContainer.hidden = true;
                 if (els.sourcePrompt) {
                     els.sourcePrompt.hidden = false;
-                    els.sourcePrompt.textContent = "Für diese gespeicherte Kampagne sind keine separaten Bewerbungsdokumente im Editor hinterlegt.";
+                    els.sourcePrompt.textContent = "No separate application documents are stored in the editor for this saved campaign.";
                 }
             }
 
@@ -1250,11 +1250,11 @@
                 const pkg = client.package || {};
 
                 // Update studio applicant banner if elements exist
-                if (els.summaryName) els.summaryName.textContent = client.name || contact.full_name || "Kandidat";
-                if (els.summaryBereich) els.summaryBereich.textContent = profile.field || "Allgemein";
+                if (els.summaryName) els.summaryName.textContent = client.name || contact.full_name || "Candidate";
+                if (els.summaryBereich) els.summaryBereich.textContent = profile.field || "General";
                 if (els.summaryEmail) els.summaryEmail.textContent = contact.email || "";
                 if (els.summaryWhatsapp) els.summaryWhatsapp.textContent = contact.phone || "";
-                if (els.summaryDocuments) els.summaryDocuments.textContent = `${(client.documents || []).length} Dokumente`;
+                if (els.summaryDocuments) els.summaryDocuments.textContent = `${(client.documents || []).length} Documents`;
                 if (els.applicationSummary) els.applicationSummary.hidden = false;
 
                 // Candidate placeholders to inject into session
@@ -1317,20 +1317,20 @@
                     }).catch(() => {});
                 }
 
-                showToast(`Kandidat ${client.name || clientId} für Anschreiben ausgewählt`);
+                showToast(`Candidate ${client.name || clientId} selected for cover letter`);
             } catch (err) {
-                showToast("Fehler beim Laden des Kandidatenprofils");
+                showToast("Error loading candidate profile");
             }
         }
 
         function buildAutoloadDisplayName(source) {
             if (source === "manual") {
-                return "Gesammelte Jobs (manuelle Extraktion)";
+                return "Collected Jobs (Manual Extraction)";
             }
             if (source === "auto") {
-                return "Gesammelte Jobs (Auto-Extraktion)";
+                return "Collected Jobs (Auto Extraction)";
             }
-            return "Gesammelte Jobs";
+            return "Collected Jobs";
         }
 
         async function uploadDesignPdf(file) {
@@ -1344,7 +1344,7 @@
             formData.append("session_id", state.sessionId);
 
             clearInlineError();
-            showProgress("Design-PDF wird hochgeladen...", 30);
+            showProgress("Uploading design PDF...", 30);
 
             const data = await fetchJson(`${API_BASE}/upload-design-pdf`, {
                 method: "POST",
@@ -1352,9 +1352,9 @@
             });
 
             setDesignFileState(file.name || data.filename || "");
-            showProgress("Design-PDF gespeichert", 100);
+            showProgress("Design PDF saved", 100);
             window.setTimeout(hideProgress, 500);
-            showToast("Design-PDF erfolgreich hochgeladen");
+            showToast("Design PDF uploaded successfully");
         }
 
         async function saveTemplate(options) {
@@ -1380,13 +1380,13 @@
             });
 
             if (Array.isArray(data.missing_placeholders) && data.missing_placeholders.length) {
-                setValidation("warn", `Unbekannte Platzhalter: ${data.missing_placeholders.join(", ")}`);
+                setValidation("warn", `Unknown placeholders: ${data.missing_placeholders.join(", ")}`);
             } else {
-                setValidation("ok", "Vorlage gespeichert. Alle Platzhalter sind gültig.");
+                setValidation("ok", "Template saved. All placeholders are valid.");
             }
 
             if (!configOptions.silent) {
-                showToast(`Vorlagen gespeichert (${data.template_count || state.templates.length})`);
+                showToast(`Templates saved (${data.template_count || state.templates.length})`);
             }
             setSaveStatus(true);
         }
@@ -1400,7 +1400,7 @@
             await saveTemplate({ silent: true });
 
             clearInlineError();
-            showProgress("Vorschau wird erstellt...", 45);
+            showProgress("Generating preview...", 45);
 
             const response = await fetch(`${API_BASE}/preview-pdf`, {
                 method: "POST",
@@ -1414,7 +1414,7 @@
 
             if (!response.ok) {
                 const payload = await response.json().catch(() => ({}));
-                throw new Error(payload.error || "Vorschau fehlgeschlagen");
+                throw new Error(payload.error || "Preview failed");
             }
 
             if (previewObjectUrl) {
@@ -1427,7 +1427,7 @@
             els.pdfPreview.src = previewObjectUrl;
             els.previewModal.hidden = false;
 
-            showProgress("Vorschau bereit", 100);
+            showProgress("Preview ready", 100);
             window.setTimeout(hideProgress, 500);
         }
 
@@ -1440,7 +1440,7 @@
             await saveTemplate({ silent: true });
 
             clearInlineError();
-            showProgress("PDFs werden generiert...", 35);
+            showProgress("Generating PDFs...", 35);
 
             const data = await fetchJson(`${API_BASE}/generate-pdfs`, {
                 method: "POST",
@@ -1451,20 +1451,20 @@
                 }),
             });
 
-            showProgress("PDFs gespeichert", 100);
+            showProgress("PDFs saved", 100);
             window.setTimeout(hideProgress, 500);
 
             const skipped = Number(data.skipped || 0);
             if (state.editCampaignId) {
                 showToast(
                     skipped > 0
-                        ? `Kampagne aktualisiert: ${data.count || 0} PDFs, ${skipped} Zeilen übersprungen`
-                        : "Anschreiben für offene Empfänger aktualisiert",
+                        ? `Campaign updated: ${data.count || 0} PDFs, ${skipped} rows skipped`
+                        : "Cover letters updated for open recipients",
                 );
             } else if (skipped > 0) {
-                showToast(`Fertig: ${data.count || 0} PDFs, ${skipped} Zeilen übersprungen`);
+                showToast(`Done: ${data.count || 0} PDFs, ${skipped} rows skipped`);
             } else {
-                showToast(`Fertig: ${data.count || 0} PDFs in ${data.output_folder || "Projektordner"}`);
+                showToast(`Done: ${data.count || 0} PDFs in ${data.output_folder || "project folder"}`);
             }
 
             state.transferReadyCount = Number(data.transfer_ready || 0);
@@ -1485,7 +1485,7 @@
             }
 
             clearInlineError();
-            showProgress("Transfer zu Email Sender wird vorbereitet...", 40);
+            showProgress("Preparing transfer to Email Sender...", 40);
 
             const data = await fetchJson(`${API_BASE}/prepare-email-transfer`, {
                 method: "POST",
@@ -1493,7 +1493,7 @@
                 body: JSON.stringify({ session_id: state.sessionId }),
             });
 
-            showProgress("Transfer bereit", 100);
+            showProgress("Transfer ready", 100);
             window.setTimeout(hideProgress, 300);
             window.location.href = data.redirect_url || "/send-emails";
         }
@@ -1510,7 +1510,7 @@
         async function aiTemplatize() {
             const text = (els.templateEditor.value || "").trim();
             if (!text) {
-                showToast("Kein Text zum Verarbeiten vorhanden.");
+                showToast("No text available to process.");
                 return;
             }
 
@@ -1519,7 +1519,7 @@
                 placeholders.push("heutigenDatum");
             }
             if (!placeholders.length) {
-                showToast("Keine Platzhalter verfügbar. Bitte zuerst Daten laden.");
+                showToast("No placeholders available. Please load data first.");
                 return;
             }
 
@@ -1528,10 +1528,10 @@
             }
             if (els.aiTemplatizeStatus) {
                 els.aiTemplatizeStatus.hidden = false;
-                els.aiTemplatizeStatus.textContent = "KI verarbeitet den Text...";
+                els.aiTemplatizeStatus.textContent = "AI is processing text...";
             }
             clearInlineError();
-            showProgress("KI analysiert den Text und fuegt Platzhalter ein...", 50);
+            showProgress("AI is analyzing text and inserting placeholders...", 50);
 
             try {
                 const data = await fetchJson(`${API_BASE}/ai-templatize`, {
@@ -1544,17 +1544,17 @@
                     els.templateEditor.value = data.text;
                     persistActiveTemplateValue();
                     renderTemplateList();
-                    showProgress("KI-Vorlage erstellt", 100);
+                    showProgress("AI template created", 100);
                     window.setTimeout(hideProgress, 600);
-                    showToast("KI-Vorlage erfolgreich erstellt");
+                    showToast("AI template created successfully");
                 } else {
                     hideProgress();
-                    showToast("KI hat keinen Text zurueckgegeben.");
+                    showToast("AI did not return any text.");
                 }
             } catch (error) {
                 hideProgress();
-                showInlineError(error.message || "KI-Verarbeitung fehlgeschlagen.");
-                showToast(error.message || "KI-Verarbeitung fehlgeschlagen.");
+                showInlineError(error.message || "AI processing failed.");
+                showToast(error.message || "AI processing failed.");
             } finally {
                 if (els.aiTemplatizeBtn) {
                     els.aiTemplatizeBtn.disabled = false;
@@ -1595,7 +1595,7 @@
             const currentBullets = (els.atsCustomBullets?.value || "").trim();
 
             els.atsRunBtn.disabled = true;
-            els.atsRunBtn.innerHTML = "<span>⚡ Optimiere mit Luna...</span>";
+            els.atsRunBtn.innerHTML = "<span>⚡ Optimizing with Luna...</span>";
             if (els.atsCostBadge) els.atsCostBadge.hidden = true;
             if (els.atsResultArea) els.atsResultArea.hidden = true;
 
@@ -1613,7 +1613,7 @@
                 });
 
                 if (!data.success) {
-                    throw new Error(data.error || "ATS-Optimierung fehlgeschlagen");
+                    throw new Error(data.error || "ATS optimization failed");
                 }
 
                 currentTailoredBullets = data.tailored_bullets || [];
@@ -1628,7 +1628,7 @@
                     els.atsCostBadge.hidden = false;
                     if (data.from_cache) {
                         els.atsCostBadge.className = "ats-cost-badge cached";
-                        els.atsCostText.textContent = "⚡ 0 Tokens (Aus Cache - $0.00)";
+                        els.atsCostText.textContent = "⚡ 0 Tokens (Cached - $0.00)";
                     } else {
                         const cost = data.usage?.estimated_cost_usd || 0.00003;
                         const tokens = data.usage?.total_tokens || 0;
@@ -1638,12 +1638,12 @@
                 }
 
                 if (els.atsResultArea) els.atsResultArea.hidden = false;
-                showToast("ATS-Keywords erfolgreich optimiert!");
+                showToast("ATS keywords optimized successfully!");
             } catch (err) {
-                showToast(err.message || "Fehler beim Anpassen");
+                showToast(err.message || "Optimization failed");
             } finally {
                 els.atsRunBtn.disabled = false;
-                els.atsRunBtn.innerHTML = '<svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg><span>Keywords optimieren (~$0.00003)</span>';
+                els.atsRunBtn.innerHTML = '<svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg><span>Generate Optimized Bullet Points (~$0.00003)</span>';
             }
         }
 
@@ -1662,16 +1662,16 @@
             persistActiveTemplateValue();
             renderTemplateList();
             closeAtsModal();
-            showToast("Stichpunkte ins Anschreiben eingefügt");
+            showToast("Bullet points inserted into cover letter");
         }
 
         function copyTailoredBullets() {
             if (!currentTailoredBullets || !currentTailoredBullets.length) return;
             const formattedText = currentTailoredBullets.map(b => `• ${b}`).join("\n");
             navigator.clipboard.writeText(formattedText).then(() => {
-                showToast("In Zwischenablage kopiert!");
+                showToast("Copied to clipboard!");
             }).catch(() => {
-                showToast("Kopieren fehlgeschlagen");
+                showToast("Copy failed");
             });
         }
 
@@ -1704,7 +1704,7 @@
             const context = (els.hookContext?.value || "").trim();
 
             els.hookRunBtn.disabled = true;
-            els.hookRunBtn.innerHTML = "<span>✨ Generiere Hook mit Luna...</span>";
+            els.hookRunBtn.innerHTML = "<span>✨ Generating Hook with Luna...</span>";
             if (els.hookCostBadge) els.hookCostBadge.hidden = true;
             if (els.hookResultArea) els.hookResultArea.hidden = true;
 
@@ -1721,7 +1721,7 @@
                 });
 
                 if (!data.success) {
-                    throw new Error(data.error || "Golden Hook Erstellung fehlgeschlagen");
+                    throw new Error(data.error || "Golden Hook generation failed");
                 }
 
                 currentGoldenHook = data.hook || "";
@@ -1733,7 +1733,7 @@
                     els.hookCostBadge.hidden = false;
                     if (data.from_cache) {
                         els.hookCostBadge.className = "ats-cost-badge cached";
-                        els.hookCostText.textContent = "⚡ 0 Tokens (Aus Cache - $0.00)";
+                        els.hookCostText.textContent = "⚡ 0 Tokens (Cached - $0.00)";
                     } else {
                         const cost = data.usage?.estimated_cost_usd || 0.000015;
                         const tokens = data.usage?.total_tokens || 0;
@@ -1743,12 +1743,12 @@
                 }
 
                 if (els.hookResultArea) els.hookResultArea.hidden = false;
-                showToast("Golden Hook erfolgreich generiert!");
+                showToast("Golden Hook generated successfully!");
             } catch (err) {
-                showToast(err.message || "Fehler beim Generieren");
+                showToast(err.message || "Generation failed");
             } finally {
                 els.hookRunBtn.disabled = false;
-                els.hookRunBtn.innerHTML = '<svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg><span>Golden Hook generieren (~$0.000015)</span>';
+                els.hookRunBtn.innerHTML = '<svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg><span>Generate Golden Hook (~$0.000015)</span>';
             }
         }
 
@@ -1767,15 +1767,15 @@
             persistActiveTemplateValue();
             renderTemplateList();
             closeGoldenHookModal();
-            showToast("Golden Hook eingefügt");
+            showToast("Golden Hook inserted");
         }
 
         function copyGoldenHook() {
             if (!currentGoldenHook) return;
             navigator.clipboard.writeText(currentGoldenHook).then(() => {
-                showToast("In Zwischenablage kopiert!");
+                showToast("Copied to clipboard!");
             }).catch(() => {
-                showToast("Kopieren fehlgeschlagen");
+                showToast("Copy failed");
             });
         }
 
@@ -1801,15 +1801,15 @@
             }
 
             if (!/\.pdf$/i.test(file.name)) {
-                showToast("Bitte eine PDF-Datei auswaehlen (.pdf)");
+                showToast("Please select a PDF file (.pdf)");
                 return;
             }
 
             state.activeBgTemplateId = null;
             uploadDesignPdf(file).catch((error) => {
                 hideProgress();
-                showInlineError(error.message || "Design-PDF Upload fehlgeschlagen");
-                showToast(error.message || "Design-PDF Upload fehlgeschlagen");
+                showInlineError(error.message || "Design PDF upload failed");
+                showToast(error.message || "Design PDF upload failed");
             });
         }
 
@@ -1828,12 +1828,12 @@
         async function loadAndRenderBgTemplates() {
             if (!els.bgTemplatesList) return;
             if (!state.cachedBgTemplates) {
-                els.bgTemplatesList.innerHTML = '<div class="bg-loading-state"><span class="spinner-ring"></span> Lade Vorlagen...</div>';
+                els.bgTemplatesList.innerHTML = '<div class="bg-loading-state"><span class="spinner-ring"></span> Loading templates...</div>';
                 try {
                     const data = await fetchJson(`${API_BASE}/pdf-background-templates`);
                     state.cachedBgTemplates = Array.isArray(data.templates) ? data.templates : [];
                 } catch (e) {
-                    els.bgTemplatesList.innerHTML = `<div class="bg-error-state">Vorlagen konnten nicht geladen werden: ${escapeHtml(e.message)}</div>`;
+                    els.bgTemplatesList.innerHTML = `<div class="bg-error-state">Templates could not be loaded: ${escapeHtml(e.message)}</div>`;
                     return;
                 }
             }
@@ -1843,7 +1843,7 @@
         function renderBgTemplatesList(templates) {
             if (!els.bgTemplatesList) return;
             if (!templates || !templates.length) {
-                els.bgTemplatesList.innerHTML = '<div class="empty-state">Keine Vorlagen verfügbar.</div>';
+                els.bgTemplatesList.innerHTML = '<div class="empty-state">No templates available.</div>';
                 return;
             }
 
@@ -1868,22 +1868,22 @@
                                 <div class="bg-mini-din-mark mark-3"></div>
                                 <div class="bg-mini-footer"></div>
                             </div>
-                            ${isActive ? '<span class="bg-active-tag">✓ Aktiv</span>' : ''}
+                            ${isActive ? '<span class="bg-active-tag">✓ Active</span>' : ''}
                         </div>
                         <div class="bg-card-info">
                             <div class="bg-card-top-row">
                                 <span class="bg-category-badge">${escapeHtml(t.category || "Design")}</span>
-                                <span class="bg-color-dot" style="background-color: ${t.primaryColor};" title="Primärfarbe: ${t.primaryColor}"></span>
+                                <span class="bg-color-dot" style="background-color: ${t.primaryColor};" title="Primary color: ${t.primaryColor}"></span>
                             </div>
                             <h4 class="bg-card-title">${escapeHtml(t.name)}</h4>
                             <p class="bg-card-desc">${escapeHtml(t.description || "")}</p>
                             <div class="bg-card-actions">
-                                <a href="${API_BASE}/pdf-background-templates/${encodeURIComponent(t.id)}/pdf" target="_blank" class="bg-btn-preview" title="Vorlage in voller A4-Größe im neuen Tab ansehen">
+                                <a href="${API_BASE}/pdf-background-templates/${encodeURIComponent(t.id)}/pdf" target="_blank" class="bg-btn-preview" title="View full A4 template in new tab">
                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                                    Vorschau
+                                    Preview
                                 </a>
                                 <button type="button" class="bg-btn-select ${isActive ? 'is-selected' : ''}" data-action="select-template" data-template-id="${escapeHtml(t.id)}">
-                                    ${isActive ? '✓ Ausgewählt' : 'Auswählen'}
+                                    ${isActive ? '✓ Selected' : 'Select'}
                                 </button>
                             </div>
                         </div>
@@ -1919,7 +1919,7 @@
             }
 
             try {
-                showProgress("Wende Hintergrund-Vorlage an...", 40);
+                showProgress("Applying background template...", 40);
                 const res = await fetchJson(`${API_BASE}/set-background-template`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -1930,7 +1930,7 @@
                 });
 
                 state.activeBgTemplateId = templateId;
-                setDesignFileState(res.filename || `Vorlage: ${templateId}`);
+                setDesignFileState(res.filename || `Template: ${templateId}`);
 
                 if (res.recommendedMargins) {
                     const m = res.recommendedMargins;
@@ -1943,14 +1943,14 @@
                 }
 
                 closeBgTemplatesModal();
-                showProgress("Vorlage aktiviert!", 100);
+                showProgress("Template activated!", 100);
                 window.setTimeout(hideProgress, 400);
-                showToast(`Briefpapier "${res.template?.name || templateId}" erfolgreich aktiviert!`);
+                showToast(`Stationery "${res.template?.name || templateId}" activated successfully!`);
                 updateReadiness();
                 scheduleLivePreviewUpdate();
             } catch (err) {
                 hideProgress();
-                showToast(err.message || "Fehler beim Anwenden der Vorlage");
+                showToast(err.message || "Failed to apply template");
             }
         }
 
@@ -1977,11 +1977,11 @@
                 state.activeBgTemplateId = null;
                 setDesignFileState("");
                 closeBgTemplatesModal();
-                showToast("Hintergrund entfernt. Verwende Standard-Layout.");
+                showToast("Background removed. Using standard layout.");
                 updateReadiness();
                 scheduleLivePreviewUpdate();
             } catch (err) {
-                showToast(err.message || "Fehler beim Entfernen");
+                showToast(err.message || "Failed to remove background");
             }
         }
 
@@ -2026,21 +2026,21 @@
             const placeholder = document.createElement("option");
             placeholder.value = "";
             placeholder.textContent = items.length
-                ? "Bitte Domain waehlen"
-                : "Keine Exportdateien gefunden";
+                ? "Please select a domain"
+                : "No export files found";
             els.exportSelect.appendChild(placeholder);
 
             items.forEach((item) => {
                 const option = document.createElement("option");
                 const filename = String(item?.filename || "").trim();
-                const rowCountDisplay = String(item?.row_count_display ?? "k. A.");
+                const rowCountDisplay = String(item?.row_count_display ?? "N/A");
                 const modifiedAt = String(item?.modified_at || "").trim();
                 const domainName = String(item?.domain_name || filename).trim() || filename;
 
                 option.value = filename;
                 option.textContent = modifiedAt
-                    ? `${domainName} (${rowCountDisplay} Zeilen, ${modifiedAt})`
-                    : `${domainName} (${rowCountDisplay} Zeilen)`;
+                    ? `${domainName} (${rowCountDisplay} rows, ${modifiedAt})`
+                    : `${domainName} (${rowCountDisplay} rows)`;
                 els.exportSelect.appendChild(option);
             });
 
@@ -2084,12 +2084,12 @@
         async function loadExportFilename(filename, updateQuery) {
             const normalizedFilename = String(filename || "").trim();
             if (!normalizedFilename) {
-                showToast("Bitte zuerst eine Domain waehlen");
+                showToast("Please select a domain first");
                 return;
             }
 
             clearInlineError();
-            showProgress("Exportdaten werden geladen...", 25);
+            showProgress("Loading export data...", 25);
 
             const urlParams = new URLSearchParams(window.location.search);
             const applicationId = urlParams.get("application_id") || "";
@@ -2135,9 +2135,9 @@
                 }
                 updateSectionQuery(params);
             }
-            showProgress("Exportdaten geladen", 100);
+            showProgress("Export data loaded", 100);
             window.setTimeout(hideProgress, 600);
-            showToast("Exportdaten wurden geladen");
+            showToast("Export data loaded");
         }
 
         function getCreateBootstrapQueryInfo() {
@@ -2179,7 +2179,7 @@
 
             lastBootstrapKey = bootstrap.key;
             clearInlineError();
-            showProgress("Anschreiben-Daten werden geladen...", 25);
+            showProgress("Loading cover letter data...", 25);
 
             try {
                 let payload;
@@ -2239,11 +2239,11 @@
                 } else if (payload.mode === "autoload") {
                     displayName = buildAutoloadDisplayName(payload.session.source);
                 } else if (payload.mode === "export_file") {
-                    displayName = displayName || payload.session.filename || "Exportdatei";
+                    displayName = displayName || payload.session.filename || "Export file";
                 } else if (payload.mode === "firebase_only") {
-                    displayName = "Bewerbung (Bitte Domain waehlen)";
+                    displayName = "Application (Please select domain)";
                 } else if (payload.mode === "application") {
-                    displayName = displayName || "Bewerbung";
+                    displayName = displayName || "Application";
                 }
 
                 applyLoadedSession(payload.session, displayName);
@@ -2261,25 +2261,25 @@
                 }
 
                 if (payload.mode === "firebase_only" || (payload.mode === "application" && !payload.session.filename)) {
-                    showProgress("Bewerbung geladen", 100);
+                    showProgress("Application loaded", 100);
                     window.setTimeout(hideProgress, 600);
-                    showToast("Bewerbung geladen. Bitte waehle eine Export-Domain aus.");
+                    showToast("Application loaded. Please select an export domain.");
                 } else {
                     showProgress(
-                        payload.mode === "edit_campaign" ? "Anschreiben geladen" : "Daten geladen",
+                        payload.mode === "edit_campaign" ? "Cover letter loaded" : "Data loaded",
                         100,
                     );
                     window.setTimeout(hideProgress, 600);
                     showToast(
                         payload.mode === "edit_campaign"
-                            ? "Gespeichertes Anschreiben wurde geladen"
-                            : "Anschreiben-Daten wurden geladen",
+                            ? "Saved cover letter loaded"
+                            : "Cover letter data loaded",
                     );
                 }
             } catch (error) {
                 hideProgress();
-                showInlineError(error.message || "Anschreiben-Daten konnten nicht geladen werden.");
-                showToast(error.message || "Anschreiben-Daten konnten nicht geladen werden.");
+                showInlineError(error.message || "Could not load cover letter data.");
+                showToast(error.message || "Could not load cover letter data.");
             }
         }
 
@@ -2296,10 +2296,6 @@
             } catch (_error) {
                 return null;
             }
-        }
-
-        function getCachedFirebaseApplication(applicationId) {
-            return getCachedApplication(applicationId);
         }
 
         function getFirebaseBootstrapInfo() {
@@ -2328,7 +2324,7 @@
         async function bootstrapFirebaseFromUrl() {
             const bootstrap = getFirebaseBootstrapInfo();
             if (!bootstrap.applicationId) {
-                setSourcePrompt("Noch keine Bewerbung ausgewaehlt. Oeffne die Supabase-Liste und klicke bei einem Eintrag auf Next step.");
+                setSourcePrompt("No application selected yet. Open the Applications list and click Next Step on an entry.");
                 renderApplicationSummary(null);
                 return;
             }
@@ -2338,7 +2334,7 @@
 
             lastBootstrapKey = bootstrap.key;
             clearInlineError();
-            showProgress("Bewerbung wird geladen...", 25);
+            showProgress("Loading application...", 25);
 
             try {
                 if (!bootstrap.application) {
@@ -2384,7 +2380,7 @@
 
                 applyLoadedSession(
                     payload.session,
-                    payload.session.display_name || `Bewerbung ${bootstrap.applicationId}`,
+                    payload.session.display_name || `Application ${bootstrap.applicationId}`,
                 );
                 renderApplicationSummary(payload.session.application_summary || {});
                 setSourcePrompt("");
@@ -2393,16 +2389,16 @@
                 params.set("application_id", bootstrap.applicationId);
                 updateSectionQuery(params);
 
-                showProgress("Bewerbung geladen", 100);
+                showProgress("Application loaded", 100);
                 window.setTimeout(hideProgress, 600);
-                showToast("Bewerbung wurde geladen");
+                showToast("Application loaded");
 
                 const summary = payload.session.application_summary || {};
                 firebaseBereich = String(summary.bereich || "").trim();
             } catch (error) {
                 hideProgress();
-                showInlineError(error.message || "Bewerbung konnte nicht geladen werden.");
-                showToast(error.message || "Bewerbung konnte nicht geladen werden.");
+                showInlineError(error.message || "Could not load application.");
+                showToast(error.message || "Could not load application.");
             }
         }
 
@@ -2454,8 +2450,8 @@
                 els.loadExportBtn.addEventListener("click", () => {
                     loadExportFilename(els.exportSelect.value, true).catch((error) => {
                         hideProgress();
-                        showInlineError(error.message || "Exportdaten konnten nicht geladen werden.");
-                        showToast(error.message || "Exportdaten konnten nicht geladen werden.");
+                        showInlineError(error.message || "Could not load export data.");
+                        showToast(error.message || "Could not load export data.");
                     });
                 });
             }
@@ -2473,18 +2469,18 @@
                     const pdfUrl = els.pdfContainer ? els.pdfContainer.dataset.pdfUrl : null;
                     
                     if (!pdfUrl) {
-                        showToast("Kein PDF verfügbar. Bitte lade zuerst eine Bewerbung.");
+                        showToast("No PDF available. Please load an application first.");
                         return;
                     }
                     if (isNaN(page) || page < 1) {
-                        showToast("Bitte eine gültige Seitenzahl (>= 1) eingeben.");
+                        showToast("Please enter a valid page number (>= 1).");
                         return;
                     }
 
                     els.extractBtn.disabled = true;
                     if (els.extractStatus) {
                         els.extractStatus.hidden = false;
-                        els.extractStatus.textContent = "Extrahiere...";
+                        els.extractStatus.textContent = "Extracting...";
                     }
 
                     try {
@@ -2498,15 +2494,15 @@
                         persistActiveTemplateValue();
                         renderTemplateList();
                         
-                        showToast("Text erfolgreich extrahiert");
+                        showToast("Text extracted successfully");
 
                         // Automatically trigger AI templatize if columns are loaded
                         if (state.columns.length > 0) {
                             aiTemplatize().catch(() => {});
                         }
                     } catch (error) {
-                        showInlineError(error.message || "Text-Extraktion fehlgeschlagen.");
-                        showToast(error.message || "Text-Extraktion fehlgeschlagen.");
+                        showInlineError(error.message || "Text extraction failed.");
+                        showToast(error.message || "Text extraction failed.");
                     } finally {
                         els.extractBtn.disabled = false;
                         if (els.extractStatus) els.extractStatus.hidden = true;
@@ -2518,16 +2514,16 @@
                 els.aiTemplatizeBtn.addEventListener("click", () => {
                     aiTemplatize().catch((error) => {
                         hideProgress();
-                        showInlineError(error.message || "KI-Verarbeitung fehlgeschlagen.");
-                        showToast(error.message || "KI-Verarbeitung fehlgeschlagen.");
+                        showInlineError(error.message || "AI processing failed.");
+                        showToast(error.message || "AI processing failed.");
                     });
                 });
             }
 
             els.saveTemplateBtn.addEventListener("click", () => {
                 saveTemplate().catch((error) => {
-                    showInlineError(error.message || "Vorlage konnte nicht gespeichert werden.");
-                    showToast(error.message || "Vorlage konnte nicht gespeichert werden.");
+                    showInlineError(error.message || "Could not save template.");
+                    showToast(error.message || "Could not save template.");
                 });
             });
 
@@ -2536,37 +2532,37 @@
                 persistActiveTemplateValue();
                 renderTemplateList();
                 clearValidation();
-                showToast("Aktive Variante geleert");
+                showToast("Active variation cleared");
             });
 
             els.addTemplateBtn.addEventListener("click", () => {
                 addTemplate();
-                showToast("Neue Variante erstellt");
+                showToast("New variation created");
             });
 
             els.deleteTemplateBtn.addEventListener("click", () => {
                 deleteActiveTemplate();
-                showToast("Variante entfernt");
+                showToast("Variation removed");
             });
 
             els.resetLayoutBtn.addEventListener("click", () => {
                 setLayoutInputs(defaultLayout);
-                showToast("Layout auf Standard zurueckgesetzt");
+                showToast("Layout reset to defaults");
             });
 
             els.previewBtn.addEventListener("click", () => {
                 previewPdf().catch((error) => {
                     hideProgress();
-                    showInlineError(error.message || "Vorschau fehlgeschlagen");
-                    showToast(error.message || "Vorschau fehlgeschlagen");
+                    showInlineError(error.message || "Preview failed");
+                    showToast(error.message || "Preview failed");
                 });
             });
 
             els.generateBtn.addEventListener("click", () => {
                 generatePdfs().catch((error) => {
                     hideProgress();
-                    showInlineError(error.message || "Generierung fehlgeschlagen");
-                    showToast(error.message || "Generierung fehlgeschlagen");
+                    showInlineError(error.message || "Generation failed");
+                    showToast(error.message || "Generation failed");
                 });
             });
 
@@ -2574,8 +2570,8 @@
                 els.toEmailBtn.addEventListener("click", () => {
                     transferToEmailSender().catch((error) => {
                         hideProgress();
-                        showInlineError(error.message || "Transfer fehlgeschlagen");
-                        showToast(error.message || "Transfer fehlgeschlagen");
+                        showInlineError(error.message || "Transfer failed");
+                        showToast(error.message || "Transfer failed");
                     });
                 });
             }
@@ -2669,8 +2665,8 @@
                 if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
                     event.preventDefault();
                     saveTemplate().catch((error) => {
-                        showInlineError(error.message || "Vorlage konnte nicht gespeichert werden.");
-                        showToast(error.message || "Vorlage konnte nicht gespeichert werden.");
+                        showInlineError(error.message || "Could not save template.");
+                        showToast(error.message || "Could not save template.");
                     });
                 } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !event.shiftKey) {
                     event.preventDefault();
@@ -2754,7 +2750,7 @@
                         const directSession = JSON.parse(directSessionRaw);
                         if (directSession && directSession.session_id) {
                             applyLoadedSession(directSession, directSession.display_name || "Direct from Search");
-                            showToast(`⚡ ${directSession.row_count || directSession.preview?.length || 0} Stellen aus der Suche geladen`);
+                            showToast(`⚡ ${directSession.row_count || directSession.preview?.length || 0} jobs loaded from search`);
                             return;
                         }
                     } catch (_) {}
@@ -2762,7 +2758,7 @@
 
                 const exportPromise = ensureExportOptionsLoaded(false)
                     .catch((error) => {
-                        showInlineError(error.message || "Exportdateien konnten nicht geladen werden.");
+                        showInlineError(error.message || "Export files could not be loaded.");
                     })
                     .finally(() => {
                         if (dataSourceMode === "export-selector") {
@@ -2790,7 +2786,7 @@
         return createAnschreibenSection({
             prefix: "create-anschreibens",
             dataSourceMode: "export-selector",
-            defaultFilenameFormatLabel: "Automatisch aus Firma",
+            defaultFilenameFormatLabel: "Auto from Company",
             transferEnabled: true,
         });
     };

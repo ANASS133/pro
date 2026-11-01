@@ -16,15 +16,13 @@ import json
 import logging
 import queue
 import time
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
 
 from flask import Blueprint, Response, jsonify, render_template, request, stream_with_context
 
 from services.client_manager import client_manager
 from services.whatsapp_ai_engine import whatsapp_ai_engine
 from services.whatsapp_service import WhatsAppAPIError, whatsapp_service
-from services.whatsapp_store import ConcurrencyConflictError, whatsapp_store
+from services.whatsapp_store import whatsapp_store
 
 logger = logging.getLogger(__name__)
 
@@ -506,4 +504,12 @@ def update_settings():
 @whatsapp_bp.route("/whatsapp-support")
 def whatsapp_page():
     """Renders JobScout SPA shell with the WhatsApp AI Center active."""
-    return render_template("app_shell.html", initial_section="whatsapp")
+    import os
+    supabase_url = os.getenv("VITE_SUPABASE_URL", os.getenv("SUPABASE_URL", ""))
+    supabase_anon_key = os.getenv("VITE_SUPABASE_ANON_KEY", os.getenv("SUPABASE_ANON_KEY", ""))
+    return render_template(
+        "app_shell.html",
+        initial_section="whatsapp",
+        supabase_url=supabase_url,
+        supabase_anon_key=supabase_anon_key,
+    )

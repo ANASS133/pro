@@ -28,13 +28,13 @@ import logging
 import re
 import time
 from datetime import datetime
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set
 from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
 
-from .search_filter_engine import is_profession_relevant, clean_extracted_location
+from .search_filter_engine import is_profession_relevant
 from .application_form_discovery import ApplicationFormDiscovery, classify_application_method
 from .google_maps_opportunity_verifier import GoogleMapsOpportunityVerifier
 

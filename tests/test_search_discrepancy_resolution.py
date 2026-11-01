@@ -327,6 +327,11 @@ class SearchDiscrepancyResolutionTestCase(unittest.TestCase):
         self.assertIn("amexus", companies)
         self.assertIn("DTS Systeme", companies)
         self.assertIn("Finanz Informatik", companies)
+        excel.close()
+        try:
+            file_path.unlink(missing_ok=True)
+        except Exception:
+            pass
 
     def test_search_audit_api_endpoint(self):
         """Verify the /api/search/audit endpoint returns the latest search audit metrics."""

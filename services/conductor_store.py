@@ -11,13 +11,12 @@ Persistent, thread-safe SQLite-backed store for autonomous orchestration:
 """
 
 import hashlib
-import json
 import logging
 import sqlite3
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -469,6 +468,12 @@ class ConductorStore:
         return res
 
     # --- Email Inbox Monitoring Logs ---
+
+    def get_inbox_message(self, message_id: str) -> Optional[Dict[str, Any]]:
+        row = self._get_connection().execute(
+            "SELECT * FROM email_inbox_logs WHERE message_id = ?", (message_id,)
+        ).fetchone()
+        return dict(row) if row else None
 
     def log_inbox_message(self, message_data: Dict[str, Any]) -> Dict[str, Any]:
         msg_id = message_data.get("message_id")

@@ -42,10 +42,9 @@ from bs4 import BeautifulSoup
 from .application_form_discovery import (
     APPLICATION_BUTTON_KEYWORDS,
     KNOWN_ATS_DOMAINS,
-    JOB_PORTAL_DOMAINS,
     classify_application_method,
 )
-from .search_filter_engine import is_profession_relevant, clean_extracted_location
+from .search_filter_engine import is_profession_relevant
 
 logger = logging.getLogger(__name__)
 
@@ -364,8 +363,6 @@ class GoogleMapsOpportunityVerifier:
             return URL_UNKNOWN
 
         parsed = urlparse(url)
-        url_lower = url.lower()
-        netloc_lower = (parsed.netloc or "").lower()
         path_lower = (parsed.path or "").lower()
 
         # 1. Check for known ATS portals
@@ -621,7 +618,6 @@ class GoogleMapsOpportunityVerifier:
         # If candidate profile is provided, extract target criteria
         candidate_skills = []
         candidate_city = ""
-        candidate_education = ""
         candidate_languages = []
 
         if candidate_profile:
@@ -638,9 +634,6 @@ class GoogleMapsOpportunityVerifier:
 
             # Location
             candidate_city = str(applicant.get("contact", {}).get("address", {}).get("city") or "").strip().lower()
-
-            # Education
-            candidate_education = str(applicant.get("education_mapping", {}).get("highest_completed_qualification", {}).get("original_title") or "").lower()
 
             # Languages
             for lang_item in applicant.get("languages", []):
@@ -784,7 +777,6 @@ class GoogleMapsOpportunityVerifier:
         """
         name = str(business.get("name") or business.get("company") or "Unbekannt").strip()
         website = str(business.get("website") or business.get("url") or "").strip()
-        maps_url = str(business.get("maps_url") or "").strip()
 
         # Generate company ID for queue integration
         company_id = generate_company_id(name, website)

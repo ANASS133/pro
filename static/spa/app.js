@@ -13,7 +13,7 @@
         "/ausbildungen": "ausbildungen",
         "/create-anschreibens": "create-anschreibens",
         "/send-emails": "send-emails",
-        "/google-maps": "google-maps",
+        "/google-maps": "search",
         "/autofill": "autofill",
         "/autofill-hub": "autofill",
         "/ai-settings": "ai-settings",
@@ -31,7 +31,6 @@
         ausbildungen: "/ausbildungen",
         "create-anschreibens": "/create-anschreibens",
         "send-emails": "/send-emails",
-        "google-maps": "/google-maps",
         autofill: "/autofill",
         "ai-settings": "/ai-settings",
         whatsapp: "/whatsapp",
@@ -46,7 +45,6 @@
         ausbildungen: "JobScout | Apprenticeships",
         "create-anschreibens": "JobScout | Cover Letters",
         "send-emails": "JobScout | Send Emails",
-        "google-maps": "JobScout | Google Maps",
         autofill: "JobScout | Autofill Hub",
         "ai-settings": "JobScout | AI Settings",
         whatsapp: "JobScout | WhatsApp AI Center",
@@ -77,9 +75,6 @@
             : { show() {}, hide() {} },
         "send-emails": typeof factories.createSendEmailsSection === "function"
             ? factories.createSendEmailsSection()
-            : { show() {}, hide() {} },
-        "google-maps": typeof factories.createGoogleMapsSection === "function"
-            ? factories.createGoogleMapsSection()
             : { show() {}, hide() {} },
         autofill: typeof factories.createAutofillHubSection === "function"
             ? factories.createAutofillHubSection()
@@ -128,6 +123,7 @@
             if (pushState && normalizePath(window.location.pathname) !== sectionToRoute[normalizedSection]) {
                 window.history.pushState({}, "", sectionToRoute[normalizedSection]);
             }
+            if (normalizedSection === "search") controllers.search.show();
             setActiveNav(normalizedSection);
             document.title = titleBySection[normalizedSection] || titleBySection.search;
             return;
@@ -222,53 +218,4 @@
             });
     }
 
-    // Live Task Monitoring via SQLite & SSE
-    const liveJobWidget = document.getElementById("sidebar-live-job");
-    const jobTitle = document.getElementById("sidebar-job-title");
-    const jobPercent = document.getElementById("sidebar-job-percent");
-    const jobFill = document.getElementById("sidebar-job-fill");
-    const jobMeta = document.getElementById("sidebar-job-meta");
-
-    function checkActiveJobs() {
-        fetch("/api/jobs?limit=5")
-            .then((res) => res.json())
-            .then((data) => {
-                const jobs = (data && data.jobs) || [];
-                const runningJob = jobs.find((j) => j.is_running);
-                if (runningJob && liveJobWidget) {
-                    liveJobWidget.hidden = false;
-                    const pct = runningJob.total > 0 ? Math.round((runningJob.progress / runningJob.total) * 100) : 0;
-                    if (jobTitle) jobTitle.textContent = runningJob.job_type.replace(/_/g, " ");
-                    if (jobPercent) jobPercent.textContent = pct + "%";
-                    if (jobFill) jobFill.style.width = pct + "%";
-                    if (jobMeta) jobMeta.textContent = `${runningJob.progress} / ${runningJob.total} (${runningJob.phase})`;
-
-                    if (!window._activeJobEventSource && window.EventSource) {
-                        const es = new EventSource(`/api/jobs/${runningJob.job_id}/stream`);
-                        window._activeJobEventSource = es;
-                        es.onmessage = (e) => {
-                            try {
-                                const update = JSON.parse(e.data);
-                                const uPct = update.total > 0 ? Math.round((update.progress / update.total) * 100) : 0;
-                                if (jobPercent) jobPercent.textContent = uPct + "%";
-                                if (jobFill) jobFill.style.width = uPct + "%";
-                                if (jobMeta) jobMeta.textContent = `${update.progress} / ${update.total} (${update.phase})`;
-                            } catch (_) {}
-                        };
-                        es.addEventListener("close", () => {
-                            es.close();
-                            window._activeJobEventSource = null;
-                            setTimeout(checkActiveJobs, 2000);
-                        });
-                        es.onerror = () => {
-                            es.close();
-                            window._activeJobEventSource = null;
-                        };
-                    }
-                } else if (liveJobWidget) {
-                    liveJobWidget.hidden = true;
-                }
-            })
-            .catch(() => {});
-    }
 })();

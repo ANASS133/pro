@@ -18,6 +18,7 @@ from typing import Any, Dict, List, Optional
 from services.client_manager import client_manager
 from services.conductor_store import conductor_store
 from services.daily_search_runner import daily_search_runner
+from services.profession_matcher import evaluate_profession_match
 from services.email_reply_monitor import email_reply_monitor
 from services.conductor_whatsapp_liaison import conductor_whatsapp_liaison
 
@@ -177,14 +178,17 @@ class ConductorEngine:
             cid = task.get("client_id", "")
             if ttype == "daily_search" and cid and cid != "all":
                 cfg = self.store.get_client_config(cid)
+                if cfg.get("is_paused") or not cfg.get("auto_search", 1):
+                    raise RuntimeError("Client search is paused or disabled")
                 res = self.search_runner.run_daily_search_for_client(cid, max_jobs=cfg.get("max_daily_applications", 5))
                 summary = f"Retry succeeded: {res.get('new_matches_count', 0)} matches found."
             elif ttype == "email_reply_monitor":
                 res = self.email_monitor.check_inbox()
+                if res.get("status") not in ("success", "empty_inbox"):
+                    raise RuntimeError(res.get("error") or res.get("status") or "Inbox check failed")
                 summary = f"Retry succeeded: {res.get('processed_count', 0)} messages processed."
             else:
-                res = {}
-                summary = "Retry completed."
+                raise ValueError(f"Unsupported retry task type: {ttype}")
 
             self.store.update_task(task_id, {
                 "status": "completed",
@@ -244,6 +248,32 @@ class ConductorEngine:
         if cfg.get("is_paused", 0) and trigger_source == "scheduler":
             return {"success": False, "skipped": True, "error": f"Client {client_id} is paused"}
 
+        # Pre-flight safety checks (Requirement 9 & 10)
+        client_info = client_manager.get_client(client_id) or {}
+        pkg = client_info.get("package") or {}
+        is_paid = bool(pkg.get("payment_verified") or client_info.get("metadata", {}).get("supabase_application_id"))
+        if not is_paid:
+            self.store.log_event("WARN", "conductor", f"Blocked cycle for {client_id}: Client is unpaid or payment is unverified.", client_id)
+            return {"success": False, "skipped": True, "reason": "unpaid_client", "error": "Client payment is unverified."}
+
+        doc_dir = client_manager.clients_dir / client_id / "documents"
+        has_cv = any("cv" in f.name.lower() or "lebenslauf" in f.name.lower() for f in doc_dir.iterdir()) if doc_dir.is_dir() else False
+        if not has_cv:
+            self.store.log_event("WARN", "conductor", f"Blocked cycle for {client_id}: Missing CV document in dossier.", client_id)
+            if not self.store.is_emergency_stopped():
+                try:
+                    self.whatsapp_liaison.request_missing_documents(client_id)
+                except Exception:
+                    pass
+            return {"success": False, "skipped": True, "reason": "incomplete_dossier", "error": "Candidate dossier is missing CV document."}
+
+        total_limit = int(pkg.get("total_limit") or 500)
+        c_stats = self.store.count_matches_by_status(client_id)
+        applied_total = c_stats.get("applied", 0)
+        if applied_total >= total_limit:
+            self.store.log_event("WARN", "conductor", f"Blocked cycle for {client_id}: Application quota exhausted ({applied_total}/{total_limit}).", client_id)
+            return {"success": False, "skipped": True, "reason": "quota_exhausted", "error": f"Application quota of {total_limit} has been reached."}
+
         task = self.store.create_task("daily_search", client_id=client_id)
         task_id = task["id"]
         self.store.update_task(task_id, {"status": "running", "started_at": datetime.now(timezone.utc).isoformat()})
@@ -253,6 +283,8 @@ class ConductorEngine:
 
             # 1. Execute Search & Staging
             search_result = self.search_runner.run_daily_search_for_client(client_id, max_jobs=max_daily)
+            if search_result.get("skipped"):
+                raise RuntimeError(search_result.get("reason", "Search skipped"))
             new_matches = search_result.get("new_matches_count", 0)
             cover_letters = search_result.get("cover_letters_created", 0)
 
@@ -297,30 +329,16 @@ class ConductorEngine:
             return {"success": False, "task_id": task_id, "error": str(exc)}
 
     def approve_match(self, match_id: str) -> Dict[str, Any]:
-        """Approves a staged application, marks it as applied, and updates client dossier statistics."""
+        """Reject submission until an actual delivery adapter is available."""
         match = self.store.get_match(match_id)
         if not match:
             return {"success": False, "error": "Match not found"}
 
-        client_id = match.get("client_id", "")
-        prev_status = match.get("status", "")
-        self.store.update_match_status(match_id, "applied")
-
-        if prev_status != "applied" and client_id:
-            self.search_runner._increment_client_applied_stats(client_id, 1)
-
-        self.store.log_event(
-            "SUCCESS",
-            "conductor",
-            f"Authorized and submitted application for {match.get('company')} ({match.get('job_title')})",
-            client_id=client_id,
-        )
         return {
-            "success": True,
+            "success": False,
             "match_id": match_id,
-            "client_id": client_id,
-            "status": "applied",
-            "message": "Application approved and marked as applied",
+            "status": match.get("status"),
+            "error": "Application submission is not implemented in Conductor; no email or online form was sent",
         }
 
     def run_global_cycle(self, trigger_source: str = "manual") -> Dict[str, Any]:
@@ -351,15 +369,16 @@ class ConductorEngine:
         # Also check email replies
         inbox_res = self.check_inbox_now()
 
+        cycle_ok = all(r.get("success") for r in results) and inbox_res.get("success", False)
         summary = f"Processed {len(results)} active clients: {total_new_matches} matches, {total_cover_letters} cover letters, {inbox_res.get('processed_count', 0)} email replies."
         self.store.update_task(task_id, {
-            "status": "completed",
+            "status": "completed" if cycle_ok else "failed",
             "result_summary": summary,
             "completed_at": datetime.now(timezone.utc).isoformat(),
         })
 
         return {
-            "success": True,
+            "success": bool(cycle_ok),
             "task_id": task_id,
             "clients_count": len(results),
             "total_new_matches": total_new_matches,
@@ -379,6 +398,8 @@ class ConductorEngine:
 
         try:
             res = self.email_monitor.check_inbox()
+            if res.get("status") not in ("success", "empty_inbox"):
+                raise RuntimeError(res.get("error") or res.get("status") or "Inbox check failed")
             count = res.get("processed_count", 0)
             summary = f"Processed {count} messages (Status: {res.get('status')})"
             self.store.update_task(task_id, {
@@ -396,6 +417,81 @@ class ConductorEngine:
             })
             return {"success": False, "error": str(exc)}
 
+    def sync_supabase_applications(self) -> Dict[str, Any]:
+        """
+        Synchronizes all paid applications from Supabase into Conductor without duplicates.
+        Ensures client dossiers, package quota, documents, and automation configs are in sync.
+        """
+        if self.store.is_emergency_stopped():
+            return {"success": False, "error": "Emergency stop is active"}
+
+        task = self.store.create_task("supabase_sync", client_id="system")
+        task_id = task["id"]
+        now_iso = datetime.now(timezone.utc).isoformat()
+        self.store.update_task(task_id, {"status": "running", "started_at": now_iso})
+
+        from services.supabase_service import supabase_service
+        from services.onboarding_service import candidate_onboarding_service
+        from services.onboarding_tracker import onboarding_tracker
+
+        new_count = 0
+        synced_count = 0
+        errors = []
+
+        try:
+            paid_apps = supabase_service.list_applications(is_payed=True)
+        except Exception as exc:
+            logger.warning("Could not list paid applications from Supabase (offline/mock): %s", exc)
+            paid_apps = []
+
+        existing_records = onboarding_tracker.get_all_records()
+
+        for app in paid_apps:
+            app_id = str(app.get("id") or "").strip()
+            if not app_id:
+                continue
+
+            try:
+                if app_id not in existing_records:
+                    # New paid candidate: run full onboarding pipeline
+                    onboard_res = candidate_onboarding_service.onboard_candidate(app_id)
+                    cid = onboard_res.get("client_id")
+                    if cid:
+                        self.on_client_onboarded(cid, missing_fields=onboard_res.get("missing_fields"))
+                        new_count += 1
+                else:
+                    # Already tracked: verify dossier is initialized in conductor
+                    rec = existing_records[app_id]
+                    cid = rec.get("client_id")
+                    if cid:
+                        self.store.get_client_config(cid)
+                        synced_count += 1
+            except Exception as item_err:
+                errors.append(f"App {app_id}: {str(item_err)}")
+                logger.error("Error syncing application %s: %s", app_id, item_err)
+
+        local_clients = client_manager.list_clients()
+        for lc in local_clients:
+            self.store.get_client_config(lc["id"])
+
+        summary = f"Synced with Supabase: {new_count} newly imported, {synced_count} up-to-date. Total managed: {len(local_clients)}."
+        self.store.update_task(task_id, {
+            "status": "completed",
+            "result_summary": summary,
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        })
+        self.store.log_event("SUCCESS", "conductor", summary, client_id="system")
+
+        return {
+            "success": True,
+            "task_id": task_id,
+            "newly_imported": new_count,
+            "synced_existing": synced_count,
+            "total_managed_clients": len(local_clients),
+            "errors": errors,
+            "summary": summary,
+        }
+
     def get_status(self) -> Dict[str, Any]:
         """Returns comprehensive status, metrics, tasks, and activity logs."""
         counts = self.store.count_matches_by_status()
@@ -403,15 +499,79 @@ class ConductorEngine:
         client_configs = self.store.list_client_configs()
 
         cfg_map = {cfg["client_id"]: cfg for cfg in client_configs}
+        export_datasets = self.search_runner._list_export_datasets()
         managed_clients = []
         for c in clients:
             cid = c["id"]
             cfg = cfg_map.get(cid, self.store.get_client_config(cid))
             c_counts = self.store.count_matches_by_status(cid)
+
+            # Quota calculations
+            pkg = c.get("package") or {}
+            total_limit = int(pkg.get("total_limit") or 500)
+            applied_total = c_counts.get("applied", 0)
+            remaining_quota = max(0, total_limit - applied_total)
+            quota_exhausted = remaining_quota <= 0
+
+            # Payment verification
+            is_paid = bool(pkg.get("payment_verified") or c.get("supabase_application_id"))
+            payment_status = "paid" if is_paid else "pending"
+
+            # Dataset availability matching
+            target_prof = c.get("target_profession") or c.get("title") or "Fachinformatiker"
+            ds_match = evaluate_profession_match(target_prof, export_datasets)
+            available_listings = sum(int(d.get("row_count") or 0) for d in ds_match.get("matched_datasets", []))
+
+            # Channel stats (email vs portal leads)
+            client_matches = self.store.list_matches(client_id=cid, limit=500)
+            email_leads = sum(1 for m in client_matches if m.get("application_method") == "email" or "@" in (m.get("email") or ""))
+            portal_leads = sum(1 for m in client_matches if m.get("application_method") == "form" or bool(m.get("apply_url")))
+            cover_letters_ready = sum(1 for m in client_matches if bool(m.get("cover_letter_path")))
+
+            # Automation readiness & blockers
+            blocking_reasons = []
+            if cfg.get("is_paused", 0):
+                blocking_reasons.append("Automation is paused")
+            if not is_paid:
+                blocking_reasons.append("Payment unverified or pending")
+            if not c.get("has_cv"):
+                blocking_reasons.append("Missing CV document")
+            if quota_exhausted:
+                blocking_reasons.append("Application quota exhausted")
+
             managed_clients.append({
                 **c,
                 "automation": cfg,
                 "matches_stats": c_counts,
+                "quota": {
+                    "package_name": pkg.get("name") or "Standard (500)",
+                    "total_limit": total_limit,
+                    "applied": applied_total,
+                    "remaining": remaining_quota,
+                    "is_exhausted": quota_exhausted,
+                    "percent_used": round((applied_total / total_limit) * 100, 1) if total_limit else 0.0,
+                },
+                "payment": {
+                    "is_paid": is_paid,
+                    "status": payment_status,
+                    "bank": pkg.get("bank", ""),
+                },
+                "dataset_availability": {
+                    "status": ds_match.get("status", "none"),
+                    "available_listings": available_listings,
+                    "matched_files_count": len(ds_match.get("matched_datasets", [])),
+                    "details": ds_match.get("details", ""),
+                },
+                "channel_stats": {
+                    "email_leads": email_leads,
+                    "portal_leads": portal_leads,
+                    "cover_letters_ready": cover_letters_ready,
+                },
+                "readiness": {
+                    "is_ready_for_automation": len(blocking_reasons) == 0,
+                    "blocking_reasons": blocking_reasons,
+                    "premium_followup_eligible": is_paid and not quota_exhausted,
+                },
             })
 
         recent_tasks = self.store.list_tasks(limit=15)

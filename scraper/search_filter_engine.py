@@ -406,14 +406,6 @@ def is_profession_relevant(title: str, hauptberuf: str, search_keyword: str) -> 
     )
 
     if has_conflict:
-        # If there is a conflict profession word (like Kaufmann),
-        # only accept if a primary target variant (e.g. Koch) is explicitly present
-        primary_match = any(
-            re.search(r"\b" + re.escape(tok) + r"\b", combined_text, re.I)
-            or re.search(r"\b" + re.escape(tok) + r"\b", combined_norm, re.I)
-            or any(re.search(r"\b" + re.escape(v) + r"\b", combined_text, re.I) for v in token_meta["variants"] if len(v) >= 4)
-            for tok in token_meta["core_tokens"]
-        )
         # For Koch, if title has Kaufmann and no Koch, reject!
         if "koch" in token_meta["core_tokens"] and not any(k in combined_text for k in ["koch", "köch", "koech", "küch", "kuech"]):
             return False

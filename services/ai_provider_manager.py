@@ -26,7 +26,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Optional
 
 import requests
 
@@ -317,7 +317,6 @@ class AIProviderManager:
         Safely verifies Gemini credentials by querying available models.
         """
         effective_key = api_key or key_override or self.config.get("gemini_api_key")
-        effective_model = model or model_override or self.config.get("gemini_model", "gemini-2.5-flash")
 
         if not effective_key:
             return {"success": False, "error": "Kein Google Gemini API Key vorhanden."}

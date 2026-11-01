@@ -64,13 +64,6 @@
             return new Intl.DateTimeFormat("de-DE", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" }).format(d);
         }
 
-        function fmtDateShort(value) {
-            if (!value) return "\u2014";
-            var d = new Date(value);
-            if (isNaN(d.getTime())) return "\u2014";
-            return new Intl.DateTimeFormat("de-DE", { day:"2-digit", month:"2-digit", year:"numeric" }).format(d);
-        }
-
         function fmtDateISO(value) {
             if (!value) return "";
             var d = new Date(value);
@@ -130,32 +123,10 @@
         // ---- Render functions ----
 
         function renderSmartInsights() {
-            var thisMonth = getThisMonthRows();
-            var lastMonth = getLastMonthRows();
-            var thisTotal = sumMoney(thisMonth);
-            var lastTotal = sumMoney(lastMonth);
-            var thisCount = thisMonth.length;
-            var avg = thisCount > 0 ? Math.round(thisTotal / thisCount) : 0;
-
-            var parts = [];
-            if (lastTotal > 0) {
-                var pct = Math.round(((thisTotal - lastTotal) / lastTotal) * 100);
-                var dir = pct >= 0 ? "mehr" : "weniger";
-                parts.push("Du hast diesen Monat <strong>" + Math.abs(pct) + "% " + dir + "</strong> erhalten als letzten Monat.");
-            }
-            if (avg > 0) {
-                parts.push("Die durchschnittliche Zahlung betr&auml;gt <strong>" + fmtMoney(avg) + "</strong>.");
-            }
-            var highest = allRows.length ? allRows.reduce(function(a,b){ return a.money > b.money ? a : b; }) : null;
-            if (highest) {
-                parts.push("H&ouml;chste Einzelzahlung: <strong>" + fmtMoney(highest.money) + "</strong> von <strong>" + escapeHTML(highest.name) + "</strong>.");
-            }
-
-            if (parts.length) {
-                insightsBox.innerHTML = parts.join(" ");
-                insightsBox.hidden = false;
-            } else {
+            if (insightsBox) {
+                insightsBox.innerHTML = "";
                 insightsBox.hidden = true;
+                insightsBox.style.display = "none";
             }
         }
 

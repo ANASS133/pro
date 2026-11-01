@@ -1,7 +1,6 @@
 // popup.js - Compact Single-Column Review Screen, Multi-step forms, Correction Memory & Safeguards
 
 let BACKEND_BASE = "http://localhost:5000";
-let MAP_FIELDS_URL = `${BACKEND_BASE}/api/map-fields`;
 let PROFILES_URL = `${BACKEND_BASE}/api/profiles`;
 let TEMPLATE_URL = `${BACKEND_BASE}/api/template`;
 let CORRECTIONS_URL = `${BACKEND_BASE}/api/corrections`;
@@ -13,7 +12,6 @@ async function detectBackend() {
       const res = await fetch(`${base}/api/profiles`, { method: "GET", signal: AbortSignal.timeout(800) });
       if (res.ok) {
         BACKEND_BASE = base;
-        MAP_FIELDS_URL = `${BACKEND_BASE}/api/map-fields`;
         PROFILES_URL = `${BACKEND_BASE}/api/profiles`;
         TEMPLATE_URL = `${BACKEND_BASE}/api/template`;
         CORRECTIONS_URL = `${BACKEND_BASE}/api/corrections`;

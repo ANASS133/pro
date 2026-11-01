@@ -10,7 +10,6 @@ Automatically dismisses cookie consent dialogues across:
 
 import logging
 import time
-from typing import Optional
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import (
     ElementClickInterceptedException,

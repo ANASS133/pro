@@ -4,10 +4,8 @@ Manages candidate profiles, documents, CV ingestion, and active client tracking.
 Maintains bi-directional compatibility with ai-job-autofill/server/profiles/.
 """
 
-import io
 import json
 import logging
-import os
 import re
 import shutil
 from datetime import datetime, timezone
@@ -54,9 +52,20 @@ def _extract_name_from_filename(filename: str) -> str:
 class ClientManager:
     """Manages multi-client applicant dossiers, CV parsing, and active client state."""
 
-    def __init__(self, clients_dir: Path = CLIENTS_DIR, autofill_dir: Path = AUTOFILL_PROFILES_DIR):
+    def __init__(
+        self,
+        clients_dir: Path = CLIENTS_DIR,
+        autofill_dir: Path = AUTOFILL_PROFILES_DIR,
+        active_client_file: Optional[Path] = None,
+    ):
         self.clients_dir = Path(clients_dir)
         self.autofill_dir = Path(autofill_dir)
+        if active_client_file is not None:
+            self.active_client_file = Path(active_client_file)
+        elif self.clients_dir.resolve() != CLIENTS_DIR.resolve():
+            self.active_client_file = self.clients_dir / ".active_client.json"
+        else:
+            self.active_client_file = ACTIVE_CLIENT_FILE
         self.clients_dir.mkdir(parents=True, exist_ok=True)
         self.autofill_dir.mkdir(parents=True, exist_ok=True)
         self._profile_cache: Dict[str, Tuple[int, Dict[str, Any]]] = {}
@@ -146,9 +155,9 @@ class ClientManager:
 
     def get_active_client_id(self) -> str:
         """Returns the ID of the currently active client."""
-        if ACTIVE_CLIENT_FILE.exists():
+        if self.active_client_file.exists():
             try:
-                with open(ACTIVE_CLIENT_FILE, "r", encoding="utf-8") as f:
+                with open(self.active_client_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     client_id = data.get("active_client_id", "")
                     if client_id and (self.clients_dir / client_id).is_dir():
@@ -173,8 +182,8 @@ class ClientManager:
                 return False
 
         try:
-            ACTIVE_CLIENT_FILE.parent.mkdir(parents=True, exist_ok=True)
-            with open(ACTIVE_CLIENT_FILE, "w", encoding="utf-8") as f:
+            self.active_client_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.active_client_file, "w", encoding="utf-8") as f:
                 json.dump({
                     "active_client_id": clean_id,
                     "updated_at": datetime.now(timezone.utc).isoformat()
@@ -185,7 +194,7 @@ class ClientManager:
             return False
 
     def list_clients(self) -> List[Dict[str, Any]]:
-        """Lists all client dossiers with metadata and active state."""
+        """Lists all client dossiers with metadata, preferences, documents, package quota, and active state."""
         active_id = self.get_active_client_id()
         clients = []
 
@@ -201,7 +210,22 @@ class ClientManager:
                 "phone": "",
                 "title": "",
                 "city": "",
+                "address": {},
+                "opportunity_type": "Ausbildung",
+                "target_profession": "",
+                "primary_fields": [],
+                "summary_de": "",
+                "target_cities": [],
+                "willing_to_relocate": False,
+                "availability": "Sofort",
+                "work_model": {},
+                "languages": [],
+                "documents": [],
                 "doc_count": 0,
+                "has_cv": False,
+                "supabase_application_id": "",
+                "onboarded_at": "",
+                "package": None,
                 "is_active": (cid == active_id),
                 "created_at": datetime.fromtimestamp(cdir.stat().st_ctime, timezone.utc).isoformat()
             }
@@ -212,21 +236,75 @@ class ClientManager:
                 personal = applicant.get("personal", {})
                 contact = applicant.get("contact", {})
                 prof = applicant.get("professional_profile", {})
+                meta_dict = pdata.get("metadata", {})
 
                 full_name = personal.get("full_name") or f"{personal.get('first_name', '')} {personal.get('last_name', '')}".strip()
                 if full_name:
                     meta["name"] = full_name
                 meta["email"] = contact.get("email", "")
-                meta["phone"] = contact.get("phone_display") or contact.get("phone", "")
+                meta["phone"] = contact.get("phone_display") or contact.get("phone", "") or contact.get("whatsapp", "")
                 meta["city"] = contact.get("address", {}).get("city", "")
+                meta["address"] = contact.get("address", {})
                 meta["title"] = prof.get("current_title") or prof.get("headline", "")
+                meta["target_profession"] = meta["title"]
+                meta["primary_fields"] = prof.get("primary_fields", [])
+                meta["summary_de"] = prof.get("summary_de", "")
+                meta["supabase_application_id"] = meta_dict.get("supabase_application_id", "")
+                meta["onboarded_at"] = meta_dict.get("onboarded_at", "")
+                meta["package"] = pdata.get("package")
 
-            # Count documents
+                # Detect opportunity type
+                orig_field = str(meta_dict.get("original_field", "")).lower()
+                title_low = str(meta["title"]).lower()
+                if "ausbildung" in orig_field or "ausbildung" in title_low:
+                    meta["opportunity_type"] = "Ausbildung"
+                elif "duales studium" in orig_field or "dual" in orig_field or "duales studium" in title_low:
+                    meta["opportunity_type"] = "Duales Studium"
+                elif "praktikum" in orig_field or "praktikum" in title_low:
+                    meta["opportunity_type"] = "Praktikum"
+                else:
+                    meta["opportunity_type"] = "Job"
+
+                # Preferences & relocation
+                job_app = applicant.get("job_application") or {}
+                reloc = job_app.get("relocation") or {}
+                meta["target_cities"] = reloc.get("target_cities") or ([meta["city"]] if meta["city"] else [])
+                meta["willing_to_relocate"] = reloc.get("willing_to_relocate", False)
+                meta["availability"] = job_app.get("availability", {}).get("earliest_start_date") or job_app.get("availability", {}).get("notice_period") or "Sofort"
+                meta["work_model"] = job_app.get("work_model") or {}
+                meta["languages"] = applicant.get("languages", [])
+
+            # Documents catalog
+            docs_list = []
             doc_dir = cdir / "documents"
+            if not doc_dir.is_dir() and (self.autofill_dir / cid).is_dir():
+                doc_dir = self.autofill_dir / cid
+
             if doc_dir.is_dir():
-                meta["doc_count"] = len([f for f in doc_dir.iterdir() if f.is_file()])
-            elif (self.autofill_dir / cid).is_dir():
-                meta["doc_count"] = len([f for f in (self.autofill_dir / cid).iterdir() if f.is_file()])
+                for f in sorted(doc_dir.iterdir(), key=lambda x: x.name):
+                    if f.is_file():
+                        fname = f.name
+                        low = fname.lower()
+                        cat = "Sonstiges"
+                        if "cv" in low or "lebenslauf" in low:
+                            cat = "CV"
+                        elif "zeugnis" in low or "transkript" in low:
+                            cat = "Zeugnis"
+                        elif any(w in low for w in ["zertifikat", "telc", "goethe", "zab", "diplom"]):
+                            cat = "Zertifikat"
+                        elif "anschreiben" in low or "cover" in low:
+                            cat = "Anschreiben"
+                        elif any(w in low for w in ["pass", "ausweis", "aufenthalt"]):
+                            cat = "Identität"
+                        docs_list.append({
+                            "filename": fname,
+                            "category": cat,
+                            "size_kb": round(f.stat().st_size / 1024, 1),
+                            "modified_at": datetime.fromtimestamp(f.stat().st_mtime, timezone.utc).isoformat(),
+                        })
+            meta["documents"] = docs_list
+            meta["doc_count"] = len(docs_list)
+            meta["has_cv"] = any(d["category"] == "CV" for d in docs_list) or bool((pdata or {}).get("applicant", {}).get("documents"))
 
             clients.append(meta)
 

@@ -5,14 +5,11 @@ Eliminates the 3-5s overhead of spawning a new browser process on every document
 
 import atexit
 import base64
-import io
 import logging
 import threading
-import time
 from contextlib import contextmanager
-from typing import Optional, Tuple
+from typing import Optional
 
-from pypdf import PdfReader, PdfWriter
 from scraper.browser_driver import find_browser, new_options, start_driver
 
 logger = logging.getLogger(__name__)

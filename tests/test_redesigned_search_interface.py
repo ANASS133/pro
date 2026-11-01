@@ -262,11 +262,16 @@ class TestRedesignedSearchInterface(unittest.TestCase):
             }
         ]
 
-        response = self.client.get("/api/search/download")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", response.content_type)
-
-        excel_data = io.BytesIO(response.data)
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch("app.AUTO_EXTRACTION_EXPORT_DIR", Path(tmp_dir)):
+                response = self.client.get("/api/search/download")
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", response.content_type)
+                raw_bytes = response.data
+                response.close()
+        excel_data = io.BytesIO(raw_bytes)
         df = pd.read_excel(excel_data, sheet_name=0)
         exported_cols = list(df.columns)
         self.assertEqual(exported_cols, canonical_columns, "Exported columns must match the 21 canonical columns in exact order")

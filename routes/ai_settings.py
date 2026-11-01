@@ -86,7 +86,7 @@ def update_ai_settings():
             except (ValueError, TypeError):
                 pass
 
-        saved_config = ai_manager.save_config(updates)
+        ai_manager.save_config(updates)
         return jsonify({
             "success": True,
             "message": "AI-Einstellungen erfolgreich gespeichert.",
@@ -145,7 +145,6 @@ def reset_ai_cache():
     """Clear AI response cache."""
     try:
         ai_manager.cache.clear()
-        cache_file = ai_manager.cache_file if hasattr(ai_manager, "cache_file") else None
         from pathlib import Path
         cache_path = Path(__file__).resolve().parent.parent / "data" / "ai_cache.json"
         if cache_path.exists():

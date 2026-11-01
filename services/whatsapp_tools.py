@@ -14,9 +14,7 @@ Security Principles:
    SupabaseService, ProfessionMatcher, KnowledgeBase).
 """
 
-import json
 import logging
-import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from services.client_manager import client_manager

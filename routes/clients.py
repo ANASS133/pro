@@ -3,11 +3,8 @@ Multi-Client Dossier API Routes.
 Provides endpoints for client intake, CV parsing, document management, and active client switching.
 """
 
-import io
-import json
 import logging
 from datetime import datetime
-from pathlib import Path
 from flask import Blueprint, Response, jsonify, request, send_file
 from werkzeug.utils import secure_filename
 

@@ -10,18 +10,14 @@ import logging
 import re
 import threading
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from services.client_manager import ClientManager, _slugify, client_manager
 from services.cv_parser import CVParser
 from services.onboarding_tracker import OnboardingStatus, OnboardingTracker, onboarding_tracker
 from services.supabase_service import (
-    ApplicationNotFoundError,
-    DocumentDownloadError,
     PaymentUnverifiedError,
     SupabaseService,
-    SupabaseServiceError,
     supabase_service,
 )
 
@@ -48,11 +44,17 @@ class CandidateOnboardingService:
         cv_parser: Optional[CVParser] = None,
         tracker: Optional[OnboardingTracker] = None,
         manager: Optional[ClientManager] = None,
+        whatsapp_store: Any = None,
+        conductor_engine: Any = None,
     ):
-        self.client_manager = client_manager or manager or globals().get("client_manager")
+        default_mgr = globals().get("client_manager")
+        self.client_manager = client_manager or manager or default_mgr
+        self._is_default_manager = self.client_manager is default_mgr
         self.supabase_service = supabase_service or globals().get("supabase_service")
         self.cv_parser = cv_parser or CVParser()
         self.tracker = tracker or onboarding_tracker
+        self.whatsapp_store = whatsapp_store
+        self.conductor_engine = conductor_engine
         self._application_locks: Dict[str, threading.Lock] = {}
         self._master_lock = threading.Lock()
 
@@ -126,10 +128,7 @@ class CandidateOnboardingService:
                     )
 
                 full_name = str(application.get("full_name") or "").strip()
-                email = str(application.get("email") or "").strip()
                 whatsapp = str(application.get("whatsapp") or "").strip()
-                field_label = str(application.get("field") or "").strip()
-                lang_level = str(application.get("language_level") or "").strip()
                 pack_label = str(application.get("pack") or "").strip()
 
                 if not full_name:
@@ -219,7 +218,7 @@ class CandidateOnboardingService:
                 )
 
                 # 11. Record Persistent Onboarding State
-                record = self.tracker.set_status(
+                self.tracker.set_status(
                     application_id=clean_app_id,
                     status=final_status,
                     client_id=client_id,
@@ -251,26 +250,32 @@ class CandidateOnboardingService:
                     clean_wa_digits = re.sub(r"\D", "", str(whatsapp))
                     if len(clean_wa_digits) >= 6:
                         try:
-                            from services.whatsapp_store import whatsapp_store
-                            conv = whatsapp_store.get_conversation_by_wa_id(clean_wa_digits)
-                            if conv:
-                                whatsapp_store.update_conversation(
-                                    conv["id"],
-                                    {"client_id": client_id, "display_name": full_name}
-                                )
-                            else:
-                                whatsapp_store.get_or_create_conversation(
-                                    clean_wa_digits,
-                                    client_id=client_id,
-                                    display_name=full_name
-                                )
-                            logger.info("Synchronized WhatsApp conversation for candidate %s (%s)", client_id, clean_wa_digits)
+                            wa_store = self.whatsapp_store
+                            if wa_store is None and self._is_default_manager:
+                                from services.whatsapp_store import whatsapp_store as wa_store
+                            if wa_store is not None:
+                                conv = wa_store.get_conversation_by_wa_id(clean_wa_digits)
+                                if conv:
+                                    wa_store.update_conversation(
+                                        conv["id"],
+                                        {"client_id": client_id, "display_name": full_name}
+                                    )
+                                else:
+                                    wa_store.get_or_create_conversation(
+                                        clean_wa_digits,
+                                        client_id=client_id,
+                                        display_name=full_name
+                                    )
+                                logger.info("Synchronized WhatsApp conversation for candidate %s (%s)", client_id, clean_wa_digits)
                         except Exception as wa_sync_err:
                             logger.warning("WhatsApp conversation linking failed for %s: %s", client_id, wa_sync_err)
 
                 try:
-                    from services.conductor_engine import conductor_engine
-                    conductor_engine.on_client_onboarded(client_id, missing_fields=missing_fields)
+                    cond_engine = self.conductor_engine
+                    if cond_engine is None and self._is_default_manager:
+                        from services.conductor_engine import conductor_engine as cond_engine
+                    if cond_engine is not None:
+                        cond_engine.on_client_onboarded(client_id, missing_fields=missing_fields)
                 except Exception as cond_err:
                     logger.debug("Conductor onboarding hook skipped for %s: %s", client_id, cond_err)
 

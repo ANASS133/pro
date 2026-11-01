@@ -3,7 +3,6 @@ Background PDF templates generator for JobScout Anschreiben.
 Generates and manages beautiful, professional A4 letterhead/stationery templates.
 """
 
-import os
 from pathlib import Path
 from typing import Dict, List, Optional
 from fpdf import FPDF
@@ -15,7 +14,7 @@ BACKGROUND_TEMPLATES: List[Dict] = [
         "id": "modern_indigo",
         "name": "Modern Indigo",
         "category": "Tech & Modern",
-        "description": "Sleeker Indigoblau-Header mit feiner Akzentlinie, dezenten DIN 5008 Falzmarken und minimalistischer Fußzeile.",
+        "description": "Sleek indigo header with a fine accent line, subtle DIN 5008 fold marks, and a minimalist footer.",
         "primaryColor": "#4F46E5",
         "secondaryColor": "#818CF8",
         "recommendedMargins": {
@@ -33,7 +32,7 @@ BACKGROUND_TEMPLATES: List[Dict] = [
         "id": "executive_navy",
         "name": "Executive Navy & Gold",
         "category": "Management & Executive",
-        "description": "Edles Mitternachtsblau mit champagnergoldener Kontrastleiste und klassischem Kanzlei-/Vorstands-Briefkopf.",
+        "description": "Refined midnight blue with a champagne gold accent bar and classic executive letterhead styling.",
         "primaryColor": "#0F2439",
         "secondaryColor": "#D4AF37",
         "recommendedMargins": {
@@ -50,8 +49,8 @@ BACKGROUND_TEMPLATES: List[Dict] = [
     {
         "id": "minimalist_swiss",
         "name": "Minimalist Swiss Emerald",
-        "category": "Clean & Architektur",
-        "description": "Ultra-cleanes Schweizer Design mit smaragdgrünem Akzentstreifen, feinen DIN 5008 Markierungen und dezentem Trenner.",
+        "category": "Clean & Architecture",
+        "description": "Ultra-clean Swiss design with an emerald green accent stripe, fine DIN 5008 marks, and a subtle divider.",
         "primaryColor": "#059669",
         "secondaryColor": "#34D399",
         "recommendedMargins": {
@@ -68,8 +67,8 @@ BACKGROUND_TEMPLATES: List[Dict] = [
     {
         "id": "creative_teal",
         "name": "Creative Teal & Cyan",
-        "category": "Kreativ & Start-up",
-        "description": "Frisches Petrol- und Mint-Design mit modernem Dual-Tone-Footer, ideal für Agenturen und dynamische Rollen.",
+        "category": "Creative & Startup",
+        "description": "Fresh teal and mint design with a modern dual-tone footer, ideal for agencies and dynamic roles.",
         "primaryColor": "#0D9488",
         "secondaryColor": "#2DD4BF",
         "recommendedMargins": {
@@ -86,8 +85,8 @@ BACKGROUND_TEMPLATES: List[Dict] = [
     {
         "id": "burgundy_elegance",
         "name": "Burgundy Elegance",
-        "category": "Consulting & Finanzen",
-        "description": "Tiefes Bordeaux-Rot mit warmer Roségold-Akzentlinie. Repräsentativ, souverän und zeitlos stilvoll.",
+        "category": "Consulting & Finance",
+        "description": "Deep burgundy red with a warm rose-gold accent line. Distinguished, confident, and timelessly stylish.",
         "primaryColor": "#831843",
         "secondaryColor": "#FDA4AF",
         "recommendedMargins": {
@@ -105,7 +104,7 @@ BACKGROUND_TEMPLATES: List[Dict] = [
         "id": "slate_graphite",
         "name": "Slate Graphite ATS",
         "category": "Allrounder & Engineering",
-        "description": "Dezente Schiefergrau-Optik mit maximalem Kontrast und 100 % ATS-Sicherheit für alle Branchen.",
+        "description": "Subtle slate gray look with maximum contrast and 100% ATS compatibility across all industries.",
         "primaryColor": "#1E293B",
         "secondaryColor": "#94A3B8",
         "recommendedMargins": {

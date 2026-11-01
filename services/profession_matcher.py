@@ -9,14 +9,11 @@ Determines 3 availability states:
 - "missing" (Nicht vorhanden, Red): No matching or related dataset exists.
 """
 
-import re
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Set
 
 from scraper.search_filter_engine import (
     extract_profession_tokens,
     normalize_umlauts,
-    PROFESSION_KNOWLEDGE_BASE,
-    GERMAN_STOP_WORDS,
 )
 
 # Generic German compound word affixes to exclude from stem matching

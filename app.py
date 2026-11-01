@@ -8,7 +8,6 @@ import os
 import threading
 import time
 import json
-import smtplib
 import queue
 import re
 import shutil
@@ -18,10 +17,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from email.mime.base import MIMEBase
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email import encoders
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -51,8 +46,6 @@ from scraper.google_maps_scraper import GoogleMapsBusinessScraper
 from scraper.working_email_extractor import WorkingEmailExtractor
 from scraper.application_form_discovery import (
     EXCEL_COLUMNS,
-    ApplicationFormDiscovery,
-    classify_application_method,
     normalize_job_opportunity_row,
 )
 
@@ -114,6 +107,14 @@ CAPTCHA_USERID = os.getenv("TRUECAPTCHA_USERID", "").strip()
 CAPTCHA_APIKEY = os.getenv("TRUECAPTCHA_APIKEY", "").strip()
 SUPABASE_URL = os.getenv("VITE_SUPABASE_URL", os.getenv("SUPABASE_URL", ""))
 SUPABASE_ANON_KEY = os.getenv("VITE_SUPABASE_ANON_KEY", os.getenv("SUPABASE_ANON_KEY", ""))
+
+@app.context_processor
+def inject_global_template_context():
+    return {
+        "supabase_url": SUPABASE_URL,
+        "supabase_anon_key": SUPABASE_ANON_KEY,
+        "initial_section": "search",
+    }
 
 if not CAPTCHA_USERID:
     logger.warning("TRUECAPTCHA_USERID is not set; auto-captcha solving will be disabled.")
@@ -454,18 +455,12 @@ def _list_auto_extraction_export_files() -> List[Dict]:
     return exports
 
 
-def _list_available_ausbildung_domains() -> List[str]:
-    domains: List[str] = []
-    seen: Set[str] = set()
+def _invalidate_export_files_cache() -> None:
+    with _EXPORT_CACHE_LOCK:
+        _EXPORT_FILES_LIST_CACHE["timestamp"] = 0.0
+        _EXPORT_FILES_LIST_CACHE["result"] = []
 
-    for item in _list_auto_extraction_export_files():
-        domain_name = str(item.get("domain_name") or "").strip()
-        if not domain_name or domain_name in seen:
-            continue
-        seen.add(domain_name)
-        domains.append(domain_name)
 
-    return domains
 
 
 def _resolve_auto_extraction_export_path(filename: str) -> Optional[Path]:
@@ -590,7 +585,6 @@ def _create_ausbildungen_update_job(file_path: Path) -> Dict:
     existing_rows = _load_spreadsheet_records(file_path)
     domain_name = _format_auto_export_domain_name(file_path)
     existing_row_count = len(existing_rows)
-    existing_email_count = len(_extract_valid_emails_from_records(existing_rows))
     job_id = str(uuid.uuid4())
     now = datetime.now().isoformat()
 
@@ -1715,20 +1709,8 @@ def _normalize_arbeitsgeber_value(value: str) -> str:
     return re.sub(r"\s+", " ", match.group(0)).strip().lower()
 
 
-def _extract_arbeitsgeber_from_text(value: str) -> str:
-    if not value:
-        return ""
-    match = ARBEITGEBER_PATTERN.search(value)
-    return _normalize_arbeitsgeber_value(match.group(0) if match else "")
 
 
-def _build_anrede(arbeitsgeber: str) -> str:
-    contact = str(arbeitsgeber or "").strip().lower()
-    if contact.startswith("herr") or contact.startswith("herrn"):
-        return "Sehr geehrter"
-    if contact.startswith("frau"):
-        return "Sehr geehrte"
-    return "Sehr geehrte Damen und Herren"
 
 
 def _prepare_download_jobs(
@@ -1784,38 +1766,6 @@ def _prepare_download_jobs(
     return filtered
 
 
-def _load_previously_collected_emails() -> Set[str]:
-    known: Set[str] = set()
-    candidates = [
-        DOWNLOAD_EXPORT_DIR / "extraction_results.xlsx",
-        DOWNLOAD_EXPORT_DIR / "auto_extraction_results.xlsx",
-        PROGRESS_DIR / "extraction_progress.csv",
-        PROGRESS_DIR / "auto_extraction_progress.csv",
-        Path("extraction_results.csv"),
-        Path("auto_extraction_results.csv"),
-        Path("auto_extraction_progress.csv"),
-    ]
-    for file_path in candidates:
-        if not file_path.exists():
-            continue
-        try:
-            if file_path.suffix.lower() == ".xlsx":
-                df = pd.read_excel(file_path)
-            else:
-                df = pd.read_csv(file_path)
-            if "email" in df.columns:
-                for value in df["email"].dropna().tolist():
-                    email = _normalize_email(value)
-                    if (
-                        email
-                        and "@" in email
-                        and not email.startswith("error:")
-                        and email != "captcha_failed"
-                    ):
-                        known.add(email)
-        except Exception as exc:
-            logger.warning("Could not load previous emails from %s: %s", file_path, exc)
-    return known
 
 
 def _save_search_cache_to_disk(
@@ -1867,189 +1817,16 @@ def _get_jobs_for_extraction() -> list:
     return jobs
 
 
-def _create_email_message(
-    sender_email: str,
-    recipient_email: str,
-    subject: str,
-    body: str,
-    attachment_path: str = "",
-):
-    message = MIMEMultipart()
-    message["From"] = sender_email
-    message["To"] = recipient_email
-    message["Subject"] = subject
-    message.attach(MIMEText(body, "plain", "utf-8"))
-
-    if attachment_path:
-        file_path = Path(attachment_path)
-        if file_path.is_file():
-            with file_path.open("rb") as attachment:
-                part = MIMEBase("application", "octet-stream")
-                part.set_payload(attachment.read())
-            encoders.encode_base64(part)
-            part.add_header(
-                "Content-Disposition",
-                "attachment",
-                filename=("utf-8", "", file_path.name),
-            )
-            message.attach(part)
-    return message
 
 
-def _send_single_email(
-    smtp_server: str,
-    smtp_port: int,
-    sender_email: str,
-    sender_password: str,
-    recipient: str,
-    subject: str,
-    body: str,
-    attachment_path: str = "",
-) -> Tuple[bool, str]:
-    try:
-        message = _create_email_message(
-            sender_email=sender_email,
-            recipient_email=recipient,
-            subject=subject,
-            body=body,
-            attachment_path=attachment_path,
-        )
-        with smtplib.SMTP(smtp_server, smtp_port, timeout=30) as server:
-            server.starttls()
-            server.login(sender_email, sender_password)
-            server.send_message(message)
-        return True, ""
-    except Exception as exc:
-        return False, str(exc)
 
 
-def _parse_recipient_lines(text: str) -> List[str]:
-    if not text:
-        return []
-    candidates: List[str] = []
-    for line in text.replace(",", "\n").splitlines():
-        email = line.strip().lower()
-        if email:
-            candidates.append(email)
-    deduped: List[str] = []
-    seen = set()
-    for email in candidates:
-        if email in seen:
-            continue
-        seen.add(email)
-        if "@" in email and "." in email.split("@")[-1]:
-            deduped.append(email)
-    return deduped
 
 
-def _send_bulk_email_jobs(
-    smtp_server: str,
-    smtp_port: int,
-    sender_email: str,
-    sender_password: str,
-    jobs: List[Dict],
-    attachment_path: str = "",
-    max_workers: int = 3,
-    submit_delay_sec: float = 0.0,
-) -> Dict:
-    total = len(jobs)
-    details = []
-    sent = 0
-    failed = 0
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_recipient = {}
-        for job in jobs:
-            recipient = job.get("recipient", "")
-            subject = job.get("subject", "")
-            body = job.get("body", "")
-            future = executor.submit(
-                _send_single_email,
-                smtp_server,
-                smtp_port,
-                sender_email,
-                sender_password,
-                recipient,
-                subject,
-                body,
-                attachment_path,
-            )
-            future_to_recipient[future] = recipient
-            if submit_delay_sec > 0:
-                time.sleep(submit_delay_sec)
-
-        for future in as_completed(future_to_recipient):
-            recipient = future_to_recipient[future]
-            ok, error = future.result()
-            details.append({"recipient": recipient, "ok": ok, "error": error})
-            if ok:
-                sent += 1
-            else:
-                failed += 1
-
-    return {"total": total, "sent": sent, "failed": failed, "details": details}
 
 
-def _render_template_with_context(template_text: str, context: Dict) -> str:
-    if not template_text:
-        return ""
-
-    context_map = {str(k).strip().lower(): str(v) for k, v in context.items() if v is not None}
-
-    def _replace(match):
-        key = match.group(1).strip().lower()
-        return context_map.get(key, "")
-
-    return PLACEHOLDER_PATTERN.sub(_replace, template_text)
 
 
-def _load_recipients_from_spreadsheet(file_storage) -> Tuple[List[Dict], List[str]]:
-    filename = (file_storage.filename or "").strip()
-    suffix = Path(filename).suffix.lower()
-    if suffix == ".csv":
-        df = pd.read_csv(file_storage)
-    elif suffix in {".xlsx", ".xls"}:
-        df = pd.read_excel(file_storage)
-    else:
-        raise ValueError("Unsupported file type. Use .csv, .xlsx, or .xls")
-
-    if df.empty:
-        return [], []
-
-    original_columns = [str(c) for c in df.columns]
-    col_lookup = {str(c).strip().lower(): str(c) for c in df.columns}
-    email_candidates = ["email", "emails", "e-mail", "mail", "recipient", "to"]
-    email_col = ""
-    for candidate in email_candidates:
-        if candidate in col_lookup:
-            email_col = col_lookup[candidate]
-            break
-
-    if not email_col:
-        raise ValueError(
-            f"No email column found. Expected one of: {', '.join(email_candidates)}"
-        )
-
-    rows: List[Dict] = []
-    seen = set()
-    for _, row in df.iterrows():
-        email_value = _normalize_email(row.get(email_col))
-        if not email_value or "@" not in email_value:
-            continue
-        if email_value in seen:
-            continue
-        seen.add(email_value)
-
-        context: Dict[str, str] = {}
-        for col in df.columns:
-            value = row.get(col)
-            if pd.isna(value):
-                continue
-            context[str(col).strip()] = str(value).strip()
-        context["email"] = email_value
-        rows.append({"recipient": email_value, "context": context})
-
-    return rows, original_columns
 
 
 def _set_status(**kwargs):
@@ -2124,11 +1901,6 @@ def _sanitize_pdf_name(value, fallback):
     return _normalize_pdf_base_name(value, str(fallback or "").strip() or "dokument")
 
 
-def _company_name_from_row(row_data: Dict, index: int) -> str:
-    company_name = _extract_company_from_row(row_data)
-    if company_name:
-        return _sanitize_pdf_name(company_name, f"firma_{index + 1}")
-    return _sanitize_pdf_name("", f"firma_{index + 1}")
 
 
 def _read_binary_file_as_base64(path_value: str) -> Dict[str, str]:
@@ -3119,15 +2891,21 @@ def ausbildungen_file_download(filename: str):
 def ausbildungen_file_delete(filename: str):
     file_path = _resolve_auto_extraction_export_path(filename)
     if not file_path:
-        return jsonify({"success": False, "message": "Exportdatei nicht gefunden"}), 404
+        _invalidate_export_files_cache()
+        return jsonify({
+            "success": True,
+            "message": f"Dataset '{filename}' is already deleted or not found.",
+            "already_deleted": True,
+        }), 200
 
     running_job = _get_running_ausbildungen_update_for_file(file_path.name)
     if running_job and running_job.get("is_running"):
-        return jsonify({"success": False, "message": "Datei kann nicht gelöscht werden, solange ein Update-Prozess läuft."}), 400
+        return jsonify({"success": False, "message": "Cannot delete file while an update process is running."}), 400
 
     try:
-        file_path.unlink()
-        return jsonify({"success": True, "message": f"Datei '{file_path.name}' wurde erfolgreich gelöscht."})
+        file_path.unlink(missing_ok=True)
+        _invalidate_export_files_cache()
+        return jsonify({"success": True, "message": f"Dataset '{file_path.name}' deleted successfully."})
     except Exception as exc:
         logger.error("Error deleting file %s: %s", filename, exc)
         return jsonify({"success": False, "message": str(exc)}), 500
@@ -3141,16 +2919,16 @@ def ausbildungen_merge_files():
     output_name = str(data.get("output_name") or "").strip()
 
     if not isinstance(filenames, list) or len(filenames) < 2:
-        return jsonify({"success": False, "message": "Mindestens 2 Dateien müssen zum Zusammenführen ausgewählt werden."}), 400
+        return jsonify({"success": False, "message": "At least 2 files must be selected for merging."}), 400
 
     resolved_paths: List[Path] = []
     for fn in filenames:
         path = _resolve_auto_extraction_export_path(str(fn).strip())
         if not path:
-            return jsonify({"success": False, "message": f"Datei nicht gefunden: {fn}"}), 404
+            return jsonify({"success": False, "message": f"File not found: {fn}"}), 404
         job = _get_running_ausbildungen_update_for_file(path.name)
         if job and job.get("is_running"):
-            return jsonify({"success": False, "message": f"Datei {path.name} wird gerade aktualisiert und kann nicht zusammengeführt werden."}), 400
+            return jsonify({"success": False, "message": f"File {path.name} is currently updating and cannot be merged."}), 400
         resolved_paths.append(path)
 
     try:
@@ -3167,7 +2945,7 @@ def ausbildungen_merge_files():
                 detected_topics.append(dname)
 
         if not all_records:
-            return jsonify({"success": False, "message": "Die ausgewählten Dateien enthalten keine Datensätze."}), 400
+            return jsonify({"success": False, "message": "The selected files do not contain any records."}), 400
 
         deduped_map: Dict[str, Dict] = {}
         no_key_records: List[Dict] = []
@@ -3228,9 +3006,11 @@ def ausbildungen_merge_files():
                     except Exception as err:
                         logger.warning("Could not delete source file %s: %s", p.name, err)
 
+        _invalidate_export_files_cache()
+
         return jsonify({
             "success": True,
-            "message": f"Erfolgreich zusammengeführt: {len(final_records)} Datensätze ({duplicates_removed} Duplikate entfernt).",
+            "message": f"Successfully merged {len(final_records)} records ({duplicates_removed} duplicates removed).",
             "merged_filename": merged_filename,
             "total_source_files": len(resolved_paths),
             "total_input_rows": total_input_rows,
@@ -4209,8 +3989,6 @@ def _get_active_email_send_job_for_campaign(campaign_id: str) -> Optional[Dict]:
     return latest_job
 
 
-def _get_running_email_send_job_for_campaign(campaign_id: str) -> Optional[Dict]:
-    return _get_active_email_send_job_for_campaign(campaign_id)
 
 
 def _list_dashboard_campaigns_with_jobs() -> List[Dict]:
@@ -4259,7 +4037,6 @@ def _render_app_shell(initial_section: str = "search"):
         "ausbildungen",
         "create-anschreibens",
         "send-emails",
-        "google-maps",
         "autofill",
         "ai-settings",
         "ki-einstellungen",
@@ -6138,10 +5915,10 @@ def _fetch_combined_jobs(
 
     # 1. Arbeitsagentur
     if has_portals or source_clean in {"arbeitsagentur", "arbeitsagentur.de"}:
-        aa_label = "Arbeitsstellen" if mode_clean == "arbeit" else "Jobbörse / Ausbildung"
+        aa_label = "Live Jobs" if mode_clean == "arbeit" else "Vocational / Apprenticeships"
         report_progress({
             "source": "arbeitsagentur",
-            "stage": f"Arbeitsagentur ({aa_label}) wird durchsucht...",
+            "stage": f"Arbeitsagentur ({aa_label}): Fetching official live vacancies...",
             "percent": 15 if is_all else 20,
             "found": len(jobs),
             "status": "running",
@@ -6170,7 +5947,7 @@ def _fetch_combined_jobs(
             report_progress({
                 "source": "arbeitsagentur",
                 "finished_source": "arbeitsagentur",
-                "stage": f"Arbeitsagentur: {len(aa_jobs)} geprüft ({aa_valid} passende Treffer)",
+                "stage": f"Arbeitsagentur: {len(aa_jobs)} scanned ({aa_valid} matching positions)",
                 "percent": 25 if is_all else 100,
                 "found": valid_total,
                 "raw_found": len(jobs),
@@ -6184,7 +5961,7 @@ def _fetch_combined_jobs(
             report_progress({
                 "source": "arbeitsagentur",
                 "finished_source": "arbeitsagentur",
-                "stage": f"Arbeitsagentur Suche fehlgeschlagen: {exc}",
+                "stage": f"Arbeitsagentur search failed: {exc}",
                 "percent": 25 if is_all else 100,
                 "found": valid_total,
                 "raw_found": len(jobs),
@@ -6197,7 +5974,7 @@ def _fetch_combined_jobs(
         valid_total, _ = _calc_valid_counts()
         report_progress({
             "source": "ausbildung_de",
-            "stage": "Ausbildung.de wird durchsucht...",
+            "stage": "Ausbildung.de: Crawling apprenticeship listings...",
             "percent": 35 if is_all else 20,
             "found": valid_total,
             "raw_found": len(jobs),
@@ -6224,7 +6001,7 @@ def _fetch_combined_jobs(
             report_progress({
                 "source": "ausbildung_de",
                 "finished_source": "ausbildung_de",
-                "stage": f"Ausbildung.de: {len(adb_jobs)} geprüft ({adb_valid} passende Treffer)",
+                "stage": f"Ausbildung.de: {len(adb_jobs)} scanned ({adb_valid} matching positions)",
                 "percent": 50 if is_all else 100,
                 "found": valid_total,
                 "raw_found": len(jobs),
@@ -6238,7 +6015,7 @@ def _fetch_combined_jobs(
             report_progress({
                 "source": "ausbildung_de",
                 "finished_source": "ausbildung_de",
-                "stage": f"Ausbildung.de fehlgeschlagen: {exc}",
+                "stage": f"Ausbildung.de failed: {exc}",
                 "percent": 50 if is_all else 100,
                 "found": valid_total,
                 "raw_found": len(jobs),
@@ -6251,7 +6028,7 @@ def _fetch_combined_jobs(
         valid_total, _ = _calc_valid_counts()
         report_progress({
             "source": "azubiyo",
-            "stage": "Azubiyo (azubiyo.de) wird durchsucht...",
+            "stage": "Azubiyo: Querying vocational listings...",
             "percent": 55 if is_all else 20,
             "found": valid_total,
             "raw_found": len(jobs),
@@ -6277,7 +6054,7 @@ def _fetch_combined_jobs(
             report_progress({
                 "source": "azubiyo",
                 "finished_source": "azubiyo",
-                "stage": f"Azubiyo: {len(az_jobs)} geprüft ({az_valid} passende Treffer)",
+                "stage": f"Azubiyo: {len(az_jobs)} scanned ({az_valid} matching positions)",
                 "percent": 70 if is_all else 100,
                 "found": valid_total,
                 "raw_found": len(jobs),
@@ -6291,7 +6068,7 @@ def _fetch_combined_jobs(
             report_progress({
                 "source": "azubiyo",
                 "finished_source": "azubiyo",
-                "stage": f"Azubiyo fehlgeschlagen: {exc}",
+                "stage": f"Azubiyo failed: {exc}",
                 "percent": 70 if is_all else 100,
                 "found": valid_total,
                 "raw_found": len(jobs),
@@ -6304,7 +6081,7 @@ def _fetch_combined_jobs(
         valid_total, _ = _calc_valid_counts()
         report_progress({
             "source": "aubi_plus",
-            "stage": "AUBI-plus (aubi-plus.de) wird durchsucht...",
+            "stage": "AUBI-plus: Checking vocational database...",
             "percent": 75 if is_all else 20,
             "found": valid_total,
             "raw_found": len(jobs),
@@ -6330,7 +6107,7 @@ def _fetch_combined_jobs(
             report_progress({
                 "source": "aubi_plus",
                 "finished_source": "aubi_plus",
-                "stage": f"AUBI-plus: {len(aubi_jobs)} geprüft ({aubi_valid} passende Treffer)",
+                "stage": f"AUBI-plus: {len(aubi_jobs)} scanned ({aubi_valid} matching positions)",
                 "percent": 85 if is_all else 100,
                 "found": valid_total,
                 "raw_found": len(jobs),
@@ -6344,7 +6121,7 @@ def _fetch_combined_jobs(
             report_progress({
                 "source": "aubi_plus",
                 "finished_source": "aubi_plus",
-                "stage": f"AUBI-plus fehlgeschlagen: {exc}",
+                "stage": f"AUBI-plus failed: {exc}",
                 "percent": 85 if is_all else 100,
                 "found": valid_total,
                 "raw_found": len(jobs),
@@ -6357,7 +6134,7 @@ def _fetch_combined_jobs(
         valid_total, _ = _calc_valid_counts()
         report_progress({
             "source": "ihk",
-            "stage": "IHK Lehrstellenbörse (ihk.de) wird durchsucht...",
+            "stage": "IHK Lehrstellenbörse: Querying Chamber of Commerce registry...",
             "percent": 90 if is_all else 20,
             "found": valid_total,
             "raw_found": len(jobs),
@@ -6383,7 +6160,7 @@ def _fetch_combined_jobs(
             report_progress({
                 "source": "ihk",
                 "finished_source": "ihk",
-                "stage": f"IHK: {len(ihk_jobs)} geprüft ({ihk_valid} passende Treffer)",
+                "stage": f"IHK: {len(ihk_jobs)} scanned ({ihk_valid} matching positions)",
                 "percent": 98 if is_all else 100,
                 "found": valid_total,
                 "raw_found": len(jobs),
@@ -6397,7 +6174,7 @@ def _fetch_combined_jobs(
             report_progress({
                 "source": "ihk",
                 "finished_source": "ihk",
-                "stage": f"IHK fehlgeschlagen: {exc}",
+                "stage": f"IHK failed: {exc}",
                 "percent": 98 if is_all else 100,
                 "found": valid_total,
                 "raw_found": len(jobs),
@@ -6408,10 +6185,10 @@ def _fetch_combined_jobs(
     # 6. Google Maps (when selected explicitly or as part of all sources)
     if has_gmaps:
         valid_total, _ = _calc_valid_counts()
-        gmaps_label = "Unternehmen & Websites" if mode_clean == "arbeit" else "Lokale Betriebe & Ausbildungs-Websites"
+        gmaps_label = "Local Employers & Websites" if mode_clean == "arbeit" else "Local Training Companies & Career Websites"
         report_progress({
             "source": "google_maps",
-            "stage": f"Google Maps ({gmaps_label}) wird durchsucht...",
+            "stage": f"Google Maps ({gmaps_label}): Discovering businesses...",
             "percent": 95 if is_all else 20,
             "found": valid_total,
             "raw_found": len(jobs),
@@ -6446,7 +6223,7 @@ def _fetch_combined_jobs(
 
             report_progress({
                 "source": "google_maps",
-                "stage": f"Google Maps KI: Suche nach '{norm_keyword}' ({prof_info.get('sector', 'Allgemein')}) in {len(categories_to_query)} Branchen über {', '.join(target_cities[:3])}...",
+                "stage": f"Google Maps AI: Scanning '{norm_keyword}' ({prof_info.get('sector', 'General')}) across {len(categories_to_query)} industries in {', '.join(target_cities[:3])}...",
                 "percent": 96 if is_all else 30,
                 "found": valid_total,
                 "raw_found": len(jobs),
@@ -6526,7 +6303,7 @@ def _fetch_combined_jobs(
             search_cache["unconfirmed_maps_companies"] = unconfirmed_maps_companies
 
             valid_total, _ = _calc_valid_counts()
-            success_stage = f"Google Maps: {verified_count} Unternehmen erfasst" if mode_clean == "arbeit" else f"Google Maps: {verified_count} passende Betriebe/Stellen"
+            success_stage = f"Google Maps: {verified_count} businesses verified" if mode_clean == "arbeit" else f"Google Maps: {verified_count} matching training companies/positions"
             report_progress({
                 "source": "google_maps",
                 "finished_source": "google_maps",
@@ -6543,7 +6320,7 @@ def _fetch_combined_jobs(
             report_progress({
                 "source": "google_maps",
                 "finished_source": "google_maps",
-                "stage": f"Google Maps fehlgeschlagen: {exc}",
+                "stage": f"Google Maps failed: {exc}",
                 "percent": 99 if is_all else 100,
                 "found": valid_total,
                 "raw_found": len(jobs),
@@ -6564,7 +6341,7 @@ def _fetch_combined_jobs(
 
     report_progress({
         "source": "all",
-        "stage": f"Suche fertig: {len(final_jobs)} passende Stellen gefunden (von {len(jobs)} Angeboten)",
+        "stage": f"Search complete: {len(final_jobs)} matching positions verified (from {len(jobs)} total offers scanned)",
         "percent": 100,
         "found": len(final_jobs),
         "raw_found": len(jobs),
@@ -6688,15 +6465,13 @@ def api_search():
     _save_search_cache_to_disk(jobs, keyword, location, published_since)
 
     # Save newly discovered results to corresponding Ausbildung dataset when mode is ausbildung
-    saved_dataset_file = None
     if mode == "ausbildung" and jobs:
         try:
-            saved_path = _save_auto_extraction_export_records(
+            _save_auto_extraction_export_records(
                 jobs,
                 keyword,
                 fallback_slug="ausbildung_suche",
             )
-            saved_dataset_file = saved_path.name if saved_path else None
         except Exception as save_err:
             logger.warning("Could not automatically save search results to Ausbildung dataset: %s", save_err)
 
@@ -8578,7 +8353,7 @@ def _save_google_maps_export(job_id: str, businesses: List[Dict], query: str) ->
 
 @app.route("/google-maps")
 def google_maps_page():
-    return _render_app_shell("google-maps")
+    return redirect(url_for("index", source="google_maps"), code=302)
 
 
 @app.route("/api/google-maps/discover", methods=["POST"])

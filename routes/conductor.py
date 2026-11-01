@@ -164,6 +164,17 @@ def run_global_cycle():
         return jsonify({"success": False, "error": str(exc)}), 500
 
 
+@conductor_bp.route("/api/conductor/sync-applications", methods=["POST"])
+def sync_supabase_applications():
+    """Synchronizes all paid applications from Supabase into Conductor."""
+    try:
+        report = conductor_engine.sync_supabase_applications()
+        return jsonify(report), 200 if report.get("success") else 400
+    except Exception as exc:
+        logger.error("Error syncing applications with Conductor: %s", exc)
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
 @conductor_bp.route("/api/conductor/matches", methods=["GET"])
 def list_matches():
     """Lists discovered matches and staged applications."""
@@ -183,7 +194,7 @@ def approve_match(match_id):
     try:
         res = conductor_engine.approve_match(match_id)
         if not res.get("success"):
-            return jsonify(res), 404
+            return jsonify(res), (404 if res.get("error") == "Match not found" else 400)
         return jsonify(res), 200
     except Exception as exc:
         return jsonify({"success": False, "error": str(exc)}), 500

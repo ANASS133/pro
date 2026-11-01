@@ -63,6 +63,10 @@ class AutofillRoutesTestCase(unittest.TestCase):
         self.assertIn("email", field_ids)
 
     def test_autofill_log_and_get_applications(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
         log_payload = {
             "title": "Senior Frontend Developer",
             "company": "Tech Corp",
@@ -71,7 +75,23 @@ class AutofillRoutesTestCase(unittest.TestCase):
             "fieldsFilled": 8,
             "date": "25.10.2026"
         }
-        post_resp = self.client.post("/api/autofill/log-application", json=log_payload)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_log = Path(tmp_dir) / "autofill_applications.json"
+            with patch("routes.autofill.APPLICATIONS_FILE", str(tmp_log)):
+                post_resp = self.client.post("/api/autofill/log-application", json=log_payload)
+                self.assertEqual(post_resp.status_code, 200)
+                post_data = post_resp.get_json()
+                self.assertTrue(post_data.get("success"))
+
+                get_resp = self.client.get("/api/autofill/applications")
+                self.assertEqual(get_resp.status_code, 200)
+                get_data = get_resp.get_json()
+                self.assertIn("applications", get_data)
+                apps = get_data["applications"]
+                self.assertTrue(len(apps) >= 1)
+                titles = [a.get("title") for a in apps]
+                self.assertIn("Senior Frontend Developer", titles)
+                return
         self.assertEqual(post_resp.status_code, 200)
         post_data = post_resp.get_json()
         self.assertTrue(post_data.get("success"))

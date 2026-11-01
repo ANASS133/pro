@@ -88,6 +88,10 @@ class TestCVParser(unittest.TestCase):
         self.assertIn("Python", parsed["professional_profile"]["primary_fields"])
 
     def test_upload_cv_endpoint(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
         # Generate a small valid PDF in memory
         pdf = FPDF()
         pdf.add_page()
@@ -97,16 +101,18 @@ class TestCVParser(unittest.TestCase):
         pdf.cell(0, 10, 'Skills: Python, React, Docker, Git, SQL', ln=1)
         pdf_bytes = io.BytesIO(pdf.output())
 
-        client = flask_app.app.test_client()
-        resp = client.post(
-            '/api/autofill/upload-cv',
-            data={'cv_file': (pdf_bytes, 'lebenslauf.pdf'), 'profile_id': 'anass_sibbi'},
-            content_type='multipart/form-data'
-        )
-        self.assertEqual(resp.status_code, 200)
-        data = resp.get_json()
-        self.assertTrue(data.get('success'))
-        self.assertIn('Python', data['parsed_data']['skills']['technologies_from_cv'])
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch('routes.autofill.PROFILES_DIR', Path(tmp_dir)):
+                client = flask_app.app.test_client()
+                resp = client.post(
+                    '/api/autofill/upload-cv',
+                    data={'cv_file': (pdf_bytes, 'lebenslauf.pdf'), 'profile_id': 'anass_sibbi'},
+                    content_type='multipart/form-data'
+                )
+                self.assertEqual(resp.status_code, 200)
+                data = resp.get_json()
+                self.assertTrue(data.get('success'))
+                self.assertIn('Python', data['parsed_data']['skills']['technologies_from_cv'])
 
     def test_extract_text_from_pdf_corrupt_or_truncated_stream(self):
         """Verifies that truncated or malformed PDF streams do not raise PdfStreamError."""
@@ -120,17 +126,29 @@ class TestCVParser(unittest.TestCase):
 
     def test_ingest_cv_corrupt_stream_resilience(self):
         """Verifies that /api/clients/ingest-cv successfully ingests CV with malformed/truncated stream."""
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from services.client_manager import ClientManager
+
         corrupt_bytes = b"%PDF-1.4\n1 0 obj\n<< /Length 999 >>\nstream\n(corrupt incomplete stream without EOF"
-        client = flask_app.app.test_client()
-        resp = client.post(
-            "/api/clients/ingest-cv",
-            data={"cv_file": (io.BytesIO(corrupt_bytes), "Lebenslauf_Corrupt_Test.pdf")},
-            content_type="multipart/form-data"
-        )
-        self.assertEqual(resp.status_code, 200)
-        data = resp.get_json()
-        self.assertTrue(data.get("success"))
-        self.assertIn("Corrupt Test", data.get("client_name", ""))
+        with tempfile.TemporaryDirectory() as tmp_root:
+            tmp_path = Path(tmp_root)
+            isolated_mgr = ClientManager(
+                clients_dir=tmp_path / "clients",
+                autofill_dir=tmp_path / "autofill",
+            )
+            with patch("routes.clients.client_manager", isolated_mgr):
+                client = flask_app.app.test_client()
+                resp = client.post(
+                    "/api/clients/ingest-cv",
+                    data={"cv_file": (io.BytesIO(corrupt_bytes), "Lebenslauf_Corrupt_Test.pdf")},
+                    content_type="multipart/form-data"
+                )
+                self.assertEqual(resp.status_code, 200)
+                data = resp.get_json()
+                self.assertTrue(data.get("success"))
+                self.assertIn("Corrupt Test", data.get("client_name", ""))
 
 
 if __name__ == '__main__':

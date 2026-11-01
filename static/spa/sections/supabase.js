@@ -85,6 +85,10 @@
         const dName = document.getElementById("sp-drawer-name");
         const dStatusPill = document.getElementById("sp-drawer-status-pill");
         const dPackTag = document.getElementById("sp-drawer-pack-tag");
+        const dLangTag = document.getElementById("sp-drawer-lang-tag");
+        const dDossierPill = document.getElementById("sp-drawer-dossier-pill");
+        const dTabDocBadge = document.getElementById("sp-tab-doc-badge");
+        const dTabPayDot = document.getElementById("sp-tab-pay-dot");
         const dFullName = document.getElementById("sp-d-fullname");
         const dId = document.getElementById("sp-d-id");
         const dEmail = document.getElementById("sp-d-email");
@@ -94,10 +98,18 @@
         const dPack = document.getElementById("sp-d-pack");
         const dPrice = document.getElementById("sp-d-price");
         const dBank = document.getElementById("sp-d-bank");
+        const dPayBanner = document.getElementById("sp-d-pay-banner");
+        const dPayStatusBadge = document.getElementById("sp-d-pay-status-badge");
+        const dPayActionTitle = document.getElementById("sp-d-pay-action-title");
+        const dPayHelper = document.getElementById("sp-d-pay-helper");
         const dPayToggleBtn = document.getElementById("sp-d-pay-toggle-btn");
         const dDocCount = document.getElementById("sp-d-doc-count");
         const dDocsContainer = document.getElementById("sp-d-docs-container");
         const dCreated = document.getElementById("sp-d-created");
+        const dActivityImported = document.getElementById("sp-d-activity-imported");
+        const dActivitySource = document.getElementById("sp-d-activity-source");
+        const dActivityId = document.getElementById("sp-d-activity-id");
+        const dActivityTimeline = document.getElementById("sp-d-activity-timeline");
         const dNextStepBtn = document.getElementById("sp-d-next-step-btn");
         const dEditBtn = document.getElementById("sp-d-edit-btn");
         const dDeleteBtn = document.getElementById("sp-d-delete-btn");
@@ -106,6 +118,9 @@
         const copyIdBtn = document.getElementById("sp-copy-id");
         const dOnboardContainer = document.getElementById("sp-d-onboard-container");
         const dOnboardBtn = document.getElementById("sp-d-onboard-btn");
+        const drawerBody = detailsDrawer ? detailsDrawer.querySelector(".sp-drawer-body") : null;
+        const drawerTabButtons = detailsDrawer ? Array.from(detailsDrawer.querySelectorAll("[data-drawer-tab]")) : [];
+        const drawerTabPanels = detailsDrawer ? Array.from(detailsDrawer.querySelectorAll("[data-drawer-panel]")) : [];
 
         const APPLICATION_STORAGE_PREFIX = "create-anschreibens:application:";
         const LAST_APPLICATION_KEY = "create-anschreibens:last-application";
@@ -121,6 +136,7 @@
         const signedDocumentCache = new Map();
         const selectedIds = new Set();
         let activeApplicant = null;
+        let activeDrawerTab = "overview";
         let onboardingRecords = {};
         const importingIds = new Set();
 
@@ -177,6 +193,11 @@
             return String(str ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
         }
 
+        function isMissingVal(val) {
+            const s = String(val || "").trim();
+            return !s || s === "N/A" || s === "k. A." || s === "—";
+        }
+
         function getInitials(name) {
             const parts = String(name || "").trim().split(/\s+/);
             if (!parts.length || !parts[0]) return "??";
@@ -185,12 +206,12 @@
         }
 
         function formatCreatedAt(value) {
-            if (!value) return "k. A.";
+            if (!value) return "N/A";
             const date = new Date(value);
-            if (Number.isNaN(date.getTime())) return "k. A.";
-            return new Intl.DateTimeFormat("de-DE", {
+            if (Number.isNaN(date.getTime())) return "N/A";
+            return new Intl.DateTimeFormat("en-GB", {
                 day: "2-digit",
-                month: "2-digit",
+                month: "short",
                 year: "numeric",
                 hour: "2-digit",
                 minute: "2-digit"
@@ -201,7 +222,7 @@
             const normalized = String(pack || "").toLowerCase();
             if (normalized.includes("1000")) return "400 DH";
             if (normalized.includes("500")) return "200 DH";
-            return "k. A.";
+            return "N/A";
         }
 
         function getNumericPrice(pack) {
@@ -211,32 +232,65 @@
             return 0;
         }
 
+        function formatFileSize(bytes) {
+            const num = Number(bytes);
+            if (!Number.isFinite(num) || num <= 0) return "";
+            if (num < 1024) return `${num} B`;
+            if (num < 1024 * 1024) return `${(num / 1024).toFixed(1)} KB`;
+            return `${(num / (1024 * 1024)).toFixed(2)} MB`;
+        }
+
+        function getFileTypeInfo(filenameOrPath, mimeType = "") {
+            const clean = String(filenameOrPath || "").split("?")[0].trim();
+            const extMatch = clean.match(/\.([a-zA-Z0-9]{1,8})$/);
+            const ext = extMatch ? extMatch[1].toUpperCase() : (mimeType ? mimeType.split("/").pop().toUpperCase() : "FILE");
+            const typeMap = {
+                PDF: "PDF Document",
+                DOC: "Word Document",
+                DOCX: "Word Document",
+                JPG: "JPEG Image",
+                JPEG: "JPEG Image",
+                PNG: "PNG Image",
+                WEBP: "WebP Image",
+                TXT: "Text File",
+                ZIP: "ZIP Archive"
+            };
+            return {
+                ext: ext.slice(0, 6),
+                typeLabel: typeMap[ext] || `${ext} File`
+            };
+        }
+
         /**
          * Clean Document Filename Mapper:
-         * Replaces ugly UUID strings with clean, readable document labels.
+         * Maps raw storage paths or UUID-prefixed filenames to readable English document names
+         * while preserving the original filename for display and tooltips.
          */
         function getHumanDocumentName(path) {
             const clean = String(path || "").split("?")[0].trim();
-            const rawFilename = clean.split("/").pop() || clean || "Dokument.pdf";
+            const rawFilename = clean.split("/").pop() || clean || "Document.pdf";
+            const extMatch = rawFilename.match(/\.[a-zA-Z0-9]{1,8}$/);
+            const ext = extMatch ? extMatch[0].toLowerCase() : ".pdf";
             const lower = rawFilename.toLowerCase();
 
             if (lower.includes("cv") || lower.includes("lebenslauf") || lower.includes("resume")) {
-                return "Lebenslauf.pdf";
+                return `Resume / CV${ext}`;
             }
-            if (lower.includes("sprache") || lower.includes("zertifikat") || lower.includes("goethe") || lower.includes("telc")) {
-                if (lower.includes("b2")) return "Sprachzertifikat (B2).pdf";
-                if (lower.includes("b1")) return "Sprachzertifikat (B1).pdf";
-                if (lower.includes("c1")) return "Sprachzertifikat (C1).pdf";
-                return "Sprachzertifikat.pdf";
+            if (lower.includes("sprache") || lower.includes("zertifikat") || lower.includes("goethe") || lower.includes("telc") || lower.includes("osd") || lower.includes("language")) {
+                if (lower.includes("b2")) return `Language Certificate (B2)${ext}`;
+                if (lower.includes("b1")) return `Language Certificate (B1)${ext}`;
+                if (lower.includes("c1")) return `Language Certificate (C1)${ext}`;
+                if (lower.includes("a2")) return `Language Certificate (A2)${ext}`;
+                return `Language Certificate${ext}`;
             }
             if (lower.includes("motivation") || lower.includes("anschreiben") || lower.includes("cover")) {
-                return "Motivationsschreiben.pdf";
+                return `Cover Letter${ext}`;
             }
-            if (lower.includes("zeugnis") || lower.includes("diplom") || lower.includes("abitur") || lower.includes("bachelor") || lower.includes("master")) {
-                return "Abschlusszeugnis.pdf";
+            if (lower.includes("zeugnis") || lower.includes("diplom") || lower.includes("abitur") || lower.includes("bachelor") || lower.includes("master") || lower.includes("certificate") || lower.includes("degree")) {
+                return `Degree / Certificate${ext}`;
             }
             if (lower.includes("pass") || lower.includes("ausweis") || lower.includes("id")) {
-                return "Ausweisdokument.pdf";
+                return `Identity Document${ext}`;
             }
 
             // Fallback: strip leading UUIDs/hashes (36 chars) or timestamps
@@ -244,33 +298,33 @@
                 .replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}[_-]?/i, "")
                 .replace(/^\d{10,14}[_-]?/, "");
 
-            return stripped || "Dokument.pdf";
+            return stripped || `Document${ext}`;
         }
 
         function renderOnboardingAction(app, isCompact = false) {
             if (importingIds.has(app.id)) {
                 return `
                     <button type="button" class="sp-btn-action-onboard is-loading" disabled>
-                        <span class="sp-spin-inline">&#9696;</span> <span>Importiere...</span>
+                        <span class="sp-spin-inline">&#9696;</span> <span>Importing...</span>
                     </button>
                 `;
             }
             if (!app.is_payed) {
-                return `<button type="button" class="sp-onboard-pill is-pending" data-action="details" data-app-id="${escapeHtml(app.id)}" title="Zahlung muss vor dem Import verifiziert werden (Klicken für Details)" style="cursor: pointer; background: #f1f5f9; border: 1px dashed #cbd5e1;">Zahlung ausstehend</button>`;
+                return `<button type="button" class="sp-onboard-pill is-pending" data-action="details" data-app-id="${escapeHtml(app.id)}" title="Payment must be verified before importing (Click for details)" style="cursor: pointer; background: #f1f5f9; border: 1px dashed #cbd5e1;">Payment Pending</button>`;
             }
 
             const rec = onboardingRecords[app.id];
             if (rec && (rec.status === "READY" || rec.status === "PROFILE_REVIEW_REQUIRED" || rec.jobscout_client_id)) {
                 const clientId = escapeHtml(rec.jobscout_client_id || "");
                 return `
-                    <span class="sp-onboard-badge is-imported" title="Bewerber-Profil existiert">&#10003; Bewerber importiert</span>
-                    <button type="button" class="sp-btn-link-profile" data-action="open-candidate" data-client-id="${clientId}" title="In Autofill Hub öffnen">Profil öffnen &rarr;</button>
+                    <span class="sp-onboard-badge is-imported" title="Candidate profile exists in JobScout">&#10003; Imported</span>
+                    <button type="button" class="sp-btn-link-profile" data-action="open-candidate" data-client-id="${clientId}" title="Open in Autofill Hub">Open Profile &rarr;</button>
                 `;
             }
 
-            const label = (rec && rec.status === "IMPORT_FAILED") ? "Erneut importieren" : "Als Bewerber importieren";
+            const label = (rec && rec.status === "IMPORT_FAILED") ? "Retry Import" : "Import Candidate";
             return `
-                <button type="button" class="sp-btn-action-onboard" data-action="onboard" data-app-id="${escapeHtml(app.id)}" title="Automatisches Onboarding in JobScout starten">
+                <button type="button" class="sp-btn-action-onboard" data-action="onboard" data-app-id="${escapeHtml(app.id)}" title="Start automated onboarding in JobScout">
                     <span>${label}</span>
                 </button>
             `;
@@ -285,31 +339,51 @@
             }).filter(Boolean);
         }
 
+        function extractDocumentMetadataMap(value) {
+            const metaMap = {};
+            if (!Array.isArray(value)) return metaMap;
+            value.forEach(entry => {
+                if (entry && typeof entry === "object") {
+                    const p = String(entry.path || entry.storagePath || entry.name || "").trim();
+                    if (p) {
+                        metaMap[p] = {
+                            size: entry.size ?? entry.fileSize ?? entry.file_size ?? null,
+                            mimeType: entry.mimeType || entry.mime_type || entry.type || "",
+                            originalName: entry.originalName || entry.original_name || entry.fileName || entry.name || ""
+                        };
+                    }
+                }
+            });
+            return metaMap;
+        }
+
         function normalizeApplication(row) {
             const documents = normalizeDocumentPaths(row.documents);
+            const documentMeta = extractDocumentMetadataMap(row.documents);
             const createdAt = row.created_at || "";
-            const fullName = String(row.full_name || "").trim() || "Unbenannter Bewerber";
-            const field = String(row.field || "").trim() || "k. A.";
-            const pack = String(row.pack || "").trim() || "k. A.";
-            const languageLevel = String(row.language_level || "").trim() || "k. A.";
+            const fullName = String(row.full_name || "").trim() || "Unnamed Candidate";
+            const field = String(row.field || "").trim() || "N/A";
+            const pack = String(row.pack || "").trim() || "N/A";
+            const languageLevel = String(row.language_level || "").trim() || "N/A";
 
             return {
                 id: String(row.id || "").trim(),
                 source_label: "Supabase",
                 full_name: fullName,
                 fullName: fullName,
-                email: String(row.email || "").trim() || "k. A.",
-                whatsapp: String(row.whatsapp || "").trim() || "k. A.",
-                bank: String(row.bank || "").trim() || "k. A.",
+                email: String(row.email || "").trim() || "N/A",
+                whatsapp: String(row.whatsapp || "").trim() || "N/A",
+                bank: String(row.bank || "").trim() || "N/A",
                 language_level: languageLevel,
-                languageLevel: languageLevel !== "k. A." ? languageLevel : "",
+                languageLevel: !isMissingVal(languageLevel) ? languageLevel : "",
                 field: field,
-                bereich: field !== "k. A." ? field : "",
+                bereich: !isMissingVal(field) ? field : "",
                 pack: pack,
-                bewerbungen: pack !== "k. A." ? pack : "",
+                bewerbungen: !isMissingVal(pack) ? pack : "",
                 price: getPriceForPack(pack),
                 numeric_price: getNumericPrice(pack),
                 documents: documents,
+                document_meta: documentMeta,
                 document_count: documents.length,
                 created_at: createdAt,
                 created_at_display: formatCreatedAt(createdAt),
@@ -339,13 +413,13 @@
             if (refreshBtn) {
                 refreshBtn.disabled = isLoading;
                 refreshBtn.innerHTML = isLoading
-                    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-spin"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg> <span>Lade...</span>'
-                    : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg> <span>Aktualisieren</span>';
+                    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-spin"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg> <span>Loading...</span>'
+                    : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg> <span>Refresh</span>';
             }
         }
 
         // --- Lazy Signed Document Generator ---
-        async function getSignedDocument(path) {
+        async function getSignedDocument(path, metaHint = null) {
             const normalized = String(path || "").trim();
             if (!normalized) return null;
 
@@ -360,10 +434,17 @@
 
             if (response.error) throw response.error;
 
+            const rawName = (metaHint && metaHint.originalName) || normalized.split("/").pop() || normalized;
+            const fileInfo = getFileTypeInfo(rawName, metaHint ? metaHint.mimeType : "");
+            const sizeBytes = metaHint ? metaHint.size : null;
+
             const signedDoc = {
                 path: normalized,
                 name: getHumanDocumentName(normalized),
-                rawName: normalized.split("/").pop() || normalized,
+                rawName: rawName,
+                ext: fileInfo.ext,
+                typeLabel: fileInfo.typeLabel,
+                sizeLabel: formatFileSize(sizeBytes),
                 url: response.data.signedUrl,
                 downloadURL: response.data.signedUrl
             };
@@ -463,22 +544,22 @@
         function updateFilterDropdownOptions() {
             if (filterPack) {
                 const current = filterPack.value;
-                const packs = Array.from(new Set(allApplications.map(a => a.pack).filter(p => p && p !== "k. A."))).sort();
-                filterPack.innerHTML = '<option value="">Alle Pakete</option>' + packs.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("");
+                const packs = Array.from(new Set(allApplications.map(a => a.pack).filter(p => !isMissingVal(p)))).sort();
+                filterPack.innerHTML = '<option value="">All Packages</option>' + packs.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join("");
                 if (packs.includes(current)) filterPack.value = current;
             }
 
             if (filterField) {
                 const current = filterField.value;
-                const fields = Array.from(new Set(allApplications.map(a => a.field).filter(f => f && f !== "k. A."))).sort();
-                filterField.innerHTML = '<option value="">Alle Bereiche</option>' + fields.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join("");
+                const fields = Array.from(new Set(allApplications.map(a => a.field).filter(f => !isMissingVal(f)))).sort();
+                filterField.innerHTML = '<option value="">All Fields</option>' + fields.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join("");
                 if (fields.includes(current)) filterField.value = current;
             }
 
             if (filterBank) {
                 const current = filterBank.value;
-                const banks = Array.from(new Set(allApplications.map(a => a.bank).filter(b => b && b !== "k. A."))).sort();
-                filterBank.innerHTML = '<option value="">Alle Banken</option>' + banks.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join("");
+                const banks = Array.from(new Set(allApplications.map(a => a.bank).filter(b => !isMissingVal(b)))).sort();
+                filterBank.innerHTML = '<option value="">All Payment Methods</option>' + banks.map(b => `<option value="${escapeHtml(b)}">${escapeHtml(b)}</option>`).join("");
                 if (banks.includes(current)) filterBank.value = current;
             }
         }
@@ -488,14 +569,14 @@
             if (!activeFilterChips) return;
             const chips = [];
 
-            if (searchInput?.value.trim()) chips.push({ label: `Suche: "${searchInput.value.trim()}"`, clear: () => { searchInput.value = ""; searchClearBtn.hidden = true; } });
-            if (filterPack?.value) chips.push({ label: `Paket: ${filterPack.value}`, clear: () => { filterPack.value = ""; } });
-            if (filterLanguage?.value) chips.push({ label: `Sprache: ${filterLanguage.value}`, clear: () => { filterLanguage.value = ""; } });
-            if (filterPayment?.value) chips.push({ label: `Status: ${filterPayment.value === "paid" ? "Bezahlt" : "Offen"}`, clear: () => { filterPayment.value = ""; } });
-            if (filterField?.value) chips.push({ label: `Bereich: ${filterField.value}`, clear: () => { filterField.value = ""; } });
-            if (filterBank?.value) chips.push({ label: `Bank: ${filterBank.value}`, clear: () => { filterBank.value = ""; } });
-            if (filterDateFrom?.value) chips.push({ label: `Ab: ${filterDateFrom.value}`, clear: () => { filterDateFrom.value = ""; } });
-            if (filterDateTo?.value) chips.push({ label: `Bis: ${filterDateTo.value}`, clear: () => { filterDateTo.value = ""; } });
+            if (searchInput?.value.trim()) chips.push({ label: `Search: "${searchInput.value.trim()}"`, clear: () => { searchInput.value = ""; searchClearBtn.hidden = true; } });
+            if (filterPack?.value) chips.push({ label: `Package: ${filterPack.value}`, clear: () => { filterPack.value = ""; } });
+            if (filterLanguage?.value) chips.push({ label: `Language: ${filterLanguage.value}`, clear: () => { filterLanguage.value = ""; } });
+            if (filterPayment?.value) chips.push({ label: `Status: ${filterPayment.value === "paid" ? "Paid" : "Open"}`, clear: () => { filterPayment.value = ""; } });
+            if (filterField?.value) chips.push({ label: `Field: ${filterField.value}`, clear: () => { filterField.value = ""; } });
+            if (filterBank?.value) chips.push({ label: `Method: ${filterBank.value}`, clear: () => { filterBank.value = ""; } });
+            if (filterDateFrom?.value) chips.push({ label: `From: ${filterDateFrom.value}`, clear: () => { filterDateFrom.value = ""; } });
+            if (filterDateTo?.value) chips.push({ label: `To: ${filterDateTo.value}`, clear: () => { filterDateTo.value = ""; } });
 
             if (activeFilterCountBadge) {
                 activeFilterCountBadge.hidden = chips.length === 0;
@@ -512,7 +593,7 @@
             activeFilterChips.innerHTML = chips.map((c, i) => `
                 <span class="sp-chip">
                     <span>${escapeHtml(c.label)}</span>
-                    <button type="button" class="sp-chip-remove" data-chip-idx="${i}" title="Filter entfernen">&times;</button>
+                    <button type="button" class="sp-chip-remove" data-chip-idx="${i}" title="Remove filter">&times;</button>
                 </span>
             `).join("") + '<button type="button" id="sp-chip-clear-all" class="sp-btn-link-sm">Clear all filters</button>';
 
@@ -546,34 +627,34 @@
         // DATASET AVAILABILITY INTELLIGENCE & BADGE ENGINE
         // Matches client profession against existing JobScout Ausbildung datasets.
         // Statuses:
-        // - "available" (Green "Vorhanden"): Matching Ausbildung dataset exists.
-        // - "similar" (Yellow "Ähnlich"): Related profession dataset exists.
-        // - "missing" (Red "Nicht vorhanden"): No matching or related dataset exists.
+        // - "available" (Green "Available"): Matching Ausbildung dataset exists.
+        // - "similar" (Yellow "Similar"): Related profession dataset exists.
+        // - "missing" (Red "Unavailable"): No matching or related dataset exists.
         // =====================================================================
 
         const PROFESSION_CLUSTERS = {
             it: {
-                name: "IT & Informatik",
+                name: "IT & Computer Science",
                 tokens: ["fachinformatiker", "fachinformatikerin", "fachinformatik", "informatik", "informatiker", "informatikerin", "anwendungsentwicklung", "systemintegration", "daten- und prozessanalyse", "datenanalyse", "digitale vernetzung", "softwareentwickler", "softwareentwicklerin", "it-system", "it-system-management", "it-systemkaufmann", "it-systemkauffrau", "informatikkaufmann", "informatikkauffrau", "medieninformatik", "medieninformatiker", "fachberater", "webentwickler", "systemadministrator", "programmierer", "fachberater integrierte systeme"]
             },
             pflege_gesundheit: {
-                name: "Pflege & Gesundheit",
+                name: "Nursing & Healthcare",
                 tokens: ["pflegefachmann", "pflegefachfrau", "pflegefachkraft", "altenpfleger", "altenpflegerin", "gesundheits- und krankenpfleger", "krankenpfleger", "krankenschwester", "pflegehelfer", "pflegehelferin", "pflegeassistent", "notfallsanitaeter", "notfallsanitaeterin", "notfallsanitäter", "mfa", "medizinische fachangestellte", "zfa", "zmfa", "zahnmedizinische fachangestellte", "physiotherapeut", "physiotherapeutin", "ergotherapeut", "hebamme", "ota", "operationstechnischer assistent"]
             },
             gastronomie_ernaehrung: {
-                name: "Gastronomie & Ernährung",
+                name: "Hospitality & Culinary",
                 tokens: ["koch", "kochin", "koechin", "koche", "koeche", "beikoch", "beikoechin", "chefkoch", "jungkoch", "kuechenchef", "gastronomiekoch", "diaetkoch", "restaurantfachmann", "restaurantfachfrau", "hotelfachmann", "hotelfachfrau", "fachkraft gastgewerbe", "gastronom", "baecker", "baeckerin", "konditor", "konditorin", "fleischer", "fleischerin", "metzger", "metzgerin", "fachverkaeufer lebensmittel"]
             },
             lager_logistik: {
-                name: "Lager & Logistik",
+                name: "Warehouse & Logistics",
                 tokens: ["fachkraft fuer lagerlogistik", "lagerlogistik", "fachlagerist", "fachlageristin", "lagerist", "lageristin", "kommissionierer", "logistik", "spedition", "kaufmann fuer spedition", "kauffrau fuer spedition", "spedition und logistikdienstleistung", "berufskraftfahrer", "berufskraftfahrerin", "fachkraft f r lagerlogistik"]
             },
             wirtschaft_kaufmaennisch: {
-                name: "Wirtschaft & Verwaltung",
+                name: "Business & Administration",
                 tokens: ["kaufmann", "kauffrau", "kaufleute", "industriekaufmann", "industriekauffrau", "industriekaufleute", "bueromanagement", "einzelhandel", "verkaeufer", "verkaeuferin", "grosshandel", "aussenhandel", "bankkaufmann", "bankkauffrau", "immobilienkaufmann", "immobilienkauffrau", "automobilkaufmann", "automobilkauffrau", "e-commerce", "steuerfachangestellter", "steuerfachangestellte", "verwaltungsfachangestellter", "handelsfachwirt"]
             },
             technik_elektro: {
-                name: "Technik & Handwerk",
+                name: "Engineering & Skilled Trades",
                 tokens: ["mechatroniker", "mechatronikerin", "kfz-mechatroniker", "kfz-mechatronikerin", "kraftfahrzeugmechatroniker", "industriemechaniker", "industriemechanikerin", "anlagenmechaniker", "anlagenmechanikerin", "konstruktionsmechaniker", "zerspanungsmechaniker", "elektroniker", "elektronikerin", "elektriker", "elektroinstallateur", "elektrotechnik", "schreiner", "schreinerin", "tischler", "tischlerin", "maler", "lackierer", "dachdecker", "zimmerer", "metallbauer", "feinwerkmechaniker"]
             }
         };
@@ -674,11 +755,11 @@
 
         function formatNumber(num) {
             if (num === null || num === undefined || isNaN(num)) return "0";
-            return Number(num).toLocaleString("de-DE");
+            return Number(num).toLocaleString("en-US");
         }
 
         function formatDateDisplay(val) {
-            if (!val) return "k. A.";
+            if (!val) return "N/A";
             if (typeof val === "string" && /^\d{2}\.\d{2}\.\d{4}/.test(val)) {
                 return val;
             }
@@ -694,17 +775,17 @@
 
         function getDatasetMatchForProfession(professionStr) {
             const query = String(professionStr || "").trim();
-            if (!query || /^(k\.?\s*a\.?|n\/?a|undefined|null|bewerber)$/i.test(query)) {
+            if (!query || /^(k\.?\s*a\.?|n\/?a|undefined|null|bewerber|unnamed candidate)$/i.test(query)) {
                 return {
                     status: "missing",
-                    label: "Nicht vorhanden",
+                    label: "Unavailable",
                     match_type: null,
                     matched_profession: null,
                     query_profession: query,
                     matched_dataset: null,
                     matched_datasets: [],
                     total_listings: 0,
-                    details: "Kein passender Datensatz gefunden."
+                    details: "No matching dataset found."
                 };
             }
 
@@ -712,32 +793,32 @@
             if (!clientTokens.length) {
                 return {
                     status: "missing",
-                    label: "Nicht vorhanden",
+                    label: "Unavailable",
                     match_type: null,
                     matched_profession: null,
                     query_profession: query,
                     matched_dataset: null,
                     matched_datasets: [],
                     total_listings: 0,
-                    details: "Kein passender Datensatz gefunden."
+                    details: "No matching dataset found."
                 };
             }
 
             if (!cachedDatasets || !cachedDatasets.length) {
                 return {
                     status: "missing",
-                    label: "Nicht vorhanden",
+                    label: "Unavailable",
                     match_type: null,
                     matched_profession: null,
                     query_profession: query,
                     matched_dataset: null,
                     matched_datasets: [],
                     total_listings: 0,
-                    details: "Kein passender Datensatz gefunden."
+                    details: "No matching dataset found."
                 };
             }
 
-            // PASS 1: Direct / Exact Match ("available" -> Green "Vorhanden")
+            // PASS 1: Direct / Exact Match ("available" -> Green "Available")
             const exactMatches = [];
             const seenExactFiles = new Set();
 
@@ -781,17 +862,17 @@
                 const matchedProf = primaryDs.domain_name || primaryDs.filename || query;
                 return {
                     status: "available",
-                    label: "Vorhanden",
-                    match_type: "Exakt",
+                    label: "Available",
+                    match_type: "Exact",
                     matched_profession: formatProfessionTitle(matchedProf),
                     matched_dataset: primaryDs,
                     matched_datasets: exactMatches,
                     total_listings: totalListings,
-                    details: `Passender Datensatz vorhanden (${totalListings} Stellen in ${exactMatches.length} Datei(en))`
+                    details: `Matching dataset available (${totalListings} listings in ${exactMatches.length} file(s))`
                 };
             }
 
-            // PASS 2: Related / Cluster Match ("similar" -> Yellow "Ähnlich")
+            // PASS 2: Related / Cluster Match ("similar" -> Yellow "Similar")
             const clientClusters = getClustersForTokens(clientTokens);
             const similarMatches = [];
             const seenSimilarFiles = new Set();
@@ -836,27 +917,27 @@
                 const matchedProf = primaryDs.domain_name || primaryDs.filename || query;
                 return {
                     status: "similar",
-                    label: "Ähnlich",
-                    match_type: "Ähnlich",
+                    label: "Similar",
+                    match_type: "Similar",
                     matched_profession: formatProfessionTitle(matchedProf),
                     matched_dataset: primaryDs,
                     matched_datasets: similarMatches,
                     total_listings: totalListings,
-                    details: `Ähnlicher Datensatz vorhanden (${totalListings} Stellen in ${similarMatches.length} Datei(en))`
+                    details: `Related dataset available (${totalListings} listings in ${similarMatches.length} file(s))`
                 };
             }
 
-            // PASS 3: No Match ("missing" -> Red "Nicht vorhanden")
+            // PASS 3: No Match ("missing" -> Red "Unavailable")
             return {
                 status: "missing",
-                label: "Nicht vorhanden",
+                label: "Unavailable",
                 match_type: null,
                 matched_profession: null,
                 query_profession: query,
                 matched_dataset: null,
                 matched_datasets: [],
                 total_listings: 0,
-                details: "Kein passender Datensatz gefunden."
+                details: "No matching dataset found."
             };
         }
 
@@ -864,7 +945,7 @@
             const match = getDatasetMatchForProfession(fieldStr);
             const idAttr = extraId ? ` id="${escapeHtml(extraId)}"` : "";
             const locAttr = locationStr ? ` data-location="${escapeHtml(locationStr)}"` : "";
-            const ariaLabel = `Datensatz: ${match.label} - ${match.details || ""}`;
+            const ariaLabel = `Dataset: ${match.label} - ${match.details || ""}`;
             return `
                 <span class="sp-dataset-badge sp-dataset-badge--${match.status}" data-profession="${escapeHtml(fieldStr || "")}"${locAttr}${idAttr} tabindex="0" role="button" aria-haspopup="dialog" aria-label="${escapeHtml(ariaLabel)}">
                     <span class="sp-dataset-badge-dot"></span>
@@ -904,7 +985,7 @@
         function renderTooltipContent(match, locationStr = "") {
             if (match.status === "missing") {
                 const rawProfession = match.query_profession || "";
-                const displayProfession = formatProfessionTitle(rawProfession) || "Ausbildungsberuf";
+                const displayProfession = formatProfessionTitle(rawProfession) || "Profession";
                 const locAttr = locationStr ? ` data-location="${escapeHtml(locationStr)}"` : "";
                 return `
                     <div class="sp-dt-card sp-dt-card--missing">
@@ -913,7 +994,7 @@
                                 ${escapeHtml(displayProfession)}
                             </div>
                             <span class="sp-dt-badge sp-dt-badge--missing">
-                                <span class="sp-dt-dot"></span> Nicht vorhanden
+                                <span class="sp-dt-dot"></span> Unavailable
                             </span>
                         </div>
                         <div class="sp-dt-missing-body">
@@ -923,14 +1004,14 @@
                                     <line x1="12" y1="8" x2="12" y2="12"></line>
                                     <line x1="12" y1="16" x2="12.01" y2="16"></line>
                                 </svg>
-                                <span>Kein passender Datensatz gefunden.</span>
+                                <span>No matching dataset found.</span>
                             </div>
                             <button type="button" class="sp-dt-action-btn" data-action="search-ausbildung" data-profession="${escapeHtml(rawProfession || displayProfession)}"${locAttr}>
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                                     <circle cx="11" cy="11" r="8"></circle>
                                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                                 </svg>
-                                <span>Jetzt Ausbildung suchen</span>
+                                <span>Search Ausbildung Now</span>
                             </button>
                         </div>
                     </div>
@@ -939,13 +1020,13 @@
 
             const isAvailable = match.status === "available";
             const badgeClass = isAvailable ? "sp-dt-badge--available" : "sp-dt-badge--similar";
-            const matchTypeLabel = match.match_type || (isAvailable ? "Exakt" : "Ähnlich");
-            const matchedProf = match.matched_profession || "Ausbildungsberuf";
+            const matchTypeLabel = match.match_type || (isAvailable ? "Exact" : "Similar");
+            const matchedProf = match.matched_profession || "Profession";
             const totalRows = Number(match.total_listings) || 0;
             const datasets = match.matched_datasets || (match.matched_dataset ? [match.matched_dataset] : []);
             const isMulti = datasets.length > 1;
 
-            let latestDate = "k. A.";
+            let latestDate = "N/A";
             if (datasets.length > 0) {
                 const dates = datasets.map(d => d.modified_at).filter(Boolean);
                 if (dates.length > 0) {
@@ -957,15 +1038,15 @@
             if (isMulti) {
                 datasetsHtml = `
                     <div class="sp-dt-section">
-                        <div class="sp-dt-section-title">Zugehörige Datensätze (${datasets.length}):</div>
+                        <div class="sp-dt-section-title">Related Datasets (${datasets.length}):</div>
                         <div class="sp-dt-files-list">
                             ${datasets.map(d => `
                                 <div class="sp-dt-file-item">
                                     <div class="sp-dt-file-name" title="${escapeHtml(d.filename || "")}">
-                                        ${escapeHtml(d.filename || "Datensatz")}
+                                        ${escapeHtml(d.filename || "Dataset")}
                                     </div>
                                     <div class="sp-dt-file-meta">
-                                        <span class="sp-dt-file-rows">${formatNumber(d.row_count || 0)} Zeilen</span>
+                                        <span class="sp-dt-file-rows">${formatNumber(d.row_count || 0)} rows</span>
                                         <span class="sp-dt-file-sep">&bull;</span>
                                         <span class="sp-dt-file-date">${escapeHtml(formatDateDisplay(d.modified_at))}</span>
                                     </div>
@@ -978,9 +1059,9 @@
                 const ds = datasets[0];
                 datasetsHtml = `
                     <div class="sp-dt-row">
-                        <span class="sp-dt-label">Dateiname:</span>
+                        <span class="sp-dt-label">Filename:</span>
                         <span class="sp-dt-val sp-dt-val--file" title="${escapeHtml(ds.filename || "")}">
-                            ${escapeHtml(ds.filename || "k. A.")}
+                            ${escapeHtml(ds.filename || "N/A")}
                         </span>
                     </div>
                 `;
@@ -999,17 +1080,17 @@
 
                     <div class="sp-dt-body">
                         <div class="sp-dt-row">
-                            <span class="sp-dt-label">Match-Typ:</span>
+                            <span class="sp-dt-label">Match Type:</span>
                             <span class="sp-dt-val">${escapeHtml(matchTypeLabel)}</span>
                         </div>
                         <div class="sp-dt-row">
-                            <span class="sp-dt-label">Stellenangebote:</span>
+                            <span class="sp-dt-label">Job Listings:</span>
                             <span class="sp-dt-val sp-dt-val--highlight">
-                                ${formatNumber(totalRows)} Zeilen${isMulti ? " (Gesamt)" : ""}
+                                ${formatNumber(totalRows)} rows${isMulti ? " (Total)" : ""}
                             </span>
                         </div>
                         <div class="sp-dt-row">
-                            <span class="sp-dt-label">Letztes Update:</span>
+                            <span class="sp-dt-label">Last Updated:</span>
                             <span class="sp-dt-val">${escapeHtml(latestDate)}</span>
                         </div>
                         ${datasetsHtml}
@@ -1131,7 +1212,7 @@
                 const profession = node.dataset.profession || "";
                 const match = getDatasetMatchForProfession(profession);
                 node.className = `sp-dataset-badge sp-dataset-badge--${match.status}`;
-                node.setAttribute("aria-label", `Datensatz: ${match.label} - ${match.details || ""}`);
+                node.setAttribute("aria-label", `Dataset: ${match.label} - ${match.details || ""}`);
                 const labelSpan = node.querySelector("span:last-child");
                 if (labelSpan) {
                     labelSpan.textContent = match.label;
@@ -1213,8 +1294,8 @@
             cardsView.innerHTML = items.map(app => {
                 const initials = getInitials(app.full_name);
                 const statusBadge = app.is_payed
-                    ? '<span class="sp-status-pill is-paid">&#10003; Bezahlt</span>'
-                    : '<span class="sp-status-pill is-open">Offen</span>';
+                    ? '<span class="sp-status-pill is-paid">&#10003; Paid</span>'
+                    : '<span class="sp-status-pill is-open">Open</span>';
 
                 return `
                     <article class="sp-card" data-app-id="${escapeHtml(app.id)}">
@@ -1237,7 +1318,7 @@
                         <div class="sp-card-badges-row">
                             ${vis.language ? `<span class="sp-tag-pill sp-pill-lang">${escapeHtml(app.language_level)}</span>` : ""}
                             ${vis.pack ? `<span class="sp-tag-pill">${escapeHtml(app.pack)}</span>` : ""}
-                            ${vis.documents ? `<span class="sp-tag-pill sp-pill-doc">${app.document_count} Dok.</span>` : ""}
+                            ${vis.documents ? `<span class="sp-tag-pill sp-pill-doc">${app.document_count} ${app.document_count === 1 ? "Doc" : "Docs"}</span>` : ""}
                         </div>
 
                         <div class="sp-card-meta">
@@ -1245,16 +1326,16 @@
                                 <div class="sp-meta-item">
                                     <span class="sp-meta-key">
                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                                        Preis:
+                                        Amount:
                                     </span>
                                     <strong class="sp-meta-val sp-price-val">${escapeHtml(app.price)}</strong>
                                 </div>
                             ` : ""}
-                            ${vis.bank && app.bank !== "k. A." ? `
+                            ${vis.bank && !isMissingVal(app.bank) ? `
                                 <div class="sp-meta-item">
                                     <span class="sp-meta-key">
                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
-                                        Bank:
+                                        Method:
                                     </span>
                                     <strong class="sp-meta-val">${escapeHtml(app.bank)}</strong>
                                 </div>
@@ -1263,7 +1344,7 @@
                                 <div class="sp-meta-item">
                                     <span class="sp-meta-key">
                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                                        Eingereicht:
+                                        Submitted:
                                     </span>
                                     <span class="sp-meta-val">${escapeHtml(app.created_at_display)}</span>
                                 </div>
@@ -1275,10 +1356,10 @@
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
                                 <span>Details</span>
                             </button>
-                            <button type="button" class="sp-btn-action-primary" data-action="next-step" data-app-id="${escapeHtml(app.id)}">Next step</button>
+                            <button type="button" class="sp-btn-action-primary" data-action="next-step" data-app-id="${escapeHtml(app.id)}">Next Step</button>
                             ${renderOnboardingAction(app)}
                             ${!app.is_payed ? `
-                                <button type="button" class="sp-btn-action-ghost" data-action="pay" data-app-id="${escapeHtml(app.id)}" title="Als bezahlt markieren">✓ Bezahlt</button>
+                                <button type="button" class="sp-btn-action-ghost" data-action="pay" data-app-id="${escapeHtml(app.id)}" title="Mark as Paid">✓ Mark Paid</button>
                             ` : ""}
                         </div>
                     </article>
@@ -1303,8 +1384,8 @@
             compactView.innerHTML = items.map(app => {
                 const initials = getInitials(app.full_name);
                 const statusBadge = app.is_payed
-                    ? '<span class="sp-status-pill is-paid">&#10003; Bezahlt</span>'
-                    : '<span class="sp-status-pill is-open">Offen</span>';
+                    ? '<span class="sp-status-pill is-paid">&#10003; Paid</span>'
+                    : '<span class="sp-status-pill is-open">Open</span>';
 
                 return `
                     <div class="sp-compact-row" data-app-id="${escapeHtml(app.id)}">
@@ -1312,7 +1393,7 @@
                             <div class="sp-avatar sp-avatar-sm">${escapeHtml(initials)}</div>
                             <div class="sp-compact-user-meta">
                                 <strong class="sp-compact-name">${escapeHtml(app.full_name)}</strong>
-                                <span class="sp-compact-sub">${escapeHtml(app.email !== "k. A." ? app.email : app.whatsapp)}</span>
+                                <span class="sp-compact-sub">${escapeHtml(!isMissingVal(app.email) ? app.email : app.whatsapp)}</span>
                             </div>
                         </div>
 
@@ -1325,7 +1406,7 @@
                             ` : ""}
                             ${vis.language ? `<span class="sp-tag-pill sp-pill-lang">${escapeHtml(app.language_level)}</span>` : ""}
                             ${vis.pack ? `<strong class="sp-price-val">${escapeHtml(app.price)}</strong>` : ""}
-                            ${vis.documents ? `<span class="sp-tag-pill sp-pill-doc">${app.document_count} Dok.</span>` : ""}
+                            ${vis.documents ? `<span class="sp-tag-pill sp-pill-doc">${app.document_count} ${app.document_count === 1 ? "Doc" : "Docs"}</span>` : ""}
                             ${vis.date ? `<span class="sp-compact-sub">${escapeHtml(app.created_at_display)}</span>` : ""}
                         </div>
 
@@ -1333,10 +1414,10 @@
                             ${vis.status ? statusBadge : ""}
                             ${renderOnboardingAction(app, true)}
                             ${!app.is_payed ? `
-                                <button type="button" class="sp-btn-action-ghost" data-action="pay" data-app-id="${escapeHtml(app.id)}" title="Als bezahlt markieren">✓ Bezahlt</button>
+                                <button type="button" class="sp-btn-action-ghost" data-action="pay" data-app-id="${escapeHtml(app.id)}" title="Mark as Paid">✓ Mark Paid</button>
                             ` : ""}
                             <button type="button" class="sp-btn-action-ghost" data-action="details" data-app-id="${escapeHtml(app.id)}">Details</button>
-                            <button type="button" class="sp-btn-action-primary" data-action="next-step" data-app-id="${escapeHtml(app.id)}">Next step</button>
+                            <button type="button" class="sp-btn-action-primary" data-action="next-step" data-app-id="${escapeHtml(app.id)}">Next Step</button>
                         </div>
                     </div>
                 `;
@@ -1367,8 +1448,8 @@
             tableBody.innerHTML = items.map(app => {
                 const isSelected = selectedIds.has(app.id);
                 const statusBadge = app.is_payed
-                    ? '<span class="sp-status-pill is-paid">&#10003; Bezahlt</span>'
-                    : '<span class="sp-status-pill is-open">Offen</span>';
+                    ? '<span class="sp-status-pill is-paid">&#10003; Paid</span>'
+                    : '<span class="sp-status-pill is-open">Open</span>';
 
                 return `
                     <tr class="${isSelected ? "is-selected" : ""}" data-app-id="${escapeHtml(app.id)}">
@@ -1391,16 +1472,16 @@
                         </td>
                         <td data-col="bank">${escapeHtml(app.bank)}</td>
                         <td data-col="status">${statusBadge}</td>
-                        <td data-col="documents"><span class="sp-tag-pill sp-pill-doc">${app.document_count} Dok.</span></td>
+                        <td data-col="documents"><span class="sp-tag-pill sp-pill-doc">${app.document_count} ${app.document_count === 1 ? "Doc" : "Docs"}</span></td>
                         <td data-col="date"><small>${escapeHtml(app.created_at_display)}</small></td>
                         <td class="td-actions">
                             <div style="display: flex; gap: 6px; justify-content: flex-end; align-items: center;">
                                 ${renderOnboardingAction(app, true)}
                                 ${!app.is_payed ? `
-                                    <button type="button" class="sp-btn-action-ghost" data-action="pay" data-app-id="${escapeHtml(app.id)}" title="Als bezahlt markieren">✓ Bezahlt</button>
+                                    <button type="button" class="sp-btn-action-ghost" data-action="pay" data-app-id="${escapeHtml(app.id)}" title="Mark as Paid">✓ Mark Paid</button>
                                 ` : ""}
                                 <button type="button" class="sp-btn-action-ghost" data-action="details" data-app-id="${escapeHtml(app.id)}">Details</button>
-                                <button type="button" class="sp-btn-action-primary" data-action="next-step" data-app-id="${escapeHtml(app.id)}">Next</button>
+                                <button type="button" class="sp-btn-action-primary" data-action="next-step" data-app-id="${escapeHtml(app.id)}">Next Step</button>
                             </div>
                         </td>
                     </tr>
@@ -1460,7 +1541,7 @@
             if (!paginationBar) return;
             paginationBar.hidden = false;
 
-            if (pageInfo) pageInfo.textContent = `Zeige ${totalItems > 0 ? startIdx + 1 : 0}–${endIdx} von ${totalItems}`;
+            if (pageInfo) pageInfo.textContent = `Showing ${totalItems > 0 ? startIdx + 1 : 0}–${endIdx} of ${totalItems}`;
 
             if (pageFirstBtn) pageFirstBtn.disabled = preferences.currentPage <= 1;
             if (pagePrevBtn) pagePrevBtn.disabled = preferences.currentPage <= 1;
@@ -1507,26 +1588,217 @@
             renderView();
         });
 
+        // --- Details Drawer 4-Tab Controller ---
+        function switchDrawerTab(tabName, focusButton = false) {
+            const validTabs = ["overview", "documents", "payment", "activity"];
+            const targetTab = validTabs.includes(tabName) ? tabName : "overview";
+            activeDrawerTab = targetTab;
+
+            drawerTabButtons.forEach(btn => {
+                const isActive = btn.dataset.drawerTab === targetTab;
+                btn.classList.toggle("is-active", isActive);
+                btn.setAttribute("aria-selected", isActive ? "true" : "false");
+                btn.setAttribute("tabindex", isActive ? "0" : "-1");
+                if (isActive && focusButton) {
+                    btn.focus();
+                }
+            });
+
+            drawerTabPanels.forEach(panel => {
+                const isActive = panel.dataset.drawerPanel === targetTab;
+                panel.classList.toggle("is-active", isActive);
+                panel.hidden = !isActive;
+            });
+
+            if (drawerBody) {
+                drawerBody.scrollTop = 0;
+            }
+        }
+
+        drawerTabButtons.forEach((btn, idx) => {
+            btn.addEventListener("click", () => {
+                switchDrawerTab(btn.dataset.drawerTab, false);
+            });
+
+            btn.addEventListener("keydown", e => {
+                if (!drawerTabButtons.length) return;
+                let nextIdx = -1;
+                if (e.key === "ArrowRight") {
+                    nextIdx = (idx + 1) % drawerTabButtons.length;
+                } else if (e.key === "ArrowLeft") {
+                    nextIdx = (idx - 1 + drawerTabButtons.length) % drawerTabButtons.length;
+                } else if (e.key === "Home") {
+                    nextIdx = 0;
+                } else if (e.key === "End") {
+                    nextIdx = drawerTabButtons.length - 1;
+                }
+                if (nextIdx >= 0) {
+                    e.preventDefault();
+                    switchDrawerTab(drawerTabButtons[nextIdx].dataset.drawerTab, true);
+                }
+            });
+        });
+
+        function syncDrawerPaymentSection(app) {
+            const isPaid = Boolean(app.is_payed);
+
+            if (dStatusPill) {
+                dStatusPill.className = `sp-status-pill ${isPaid ? "is-paid" : "is-open"}`;
+                dStatusPill.innerHTML = isPaid ? "&#10003; Paid" : "Open";
+            }
+
+            if (dTabPayDot) {
+                dTabPayDot.className = `sp-drawer-tab-dot ${isPaid ? "is-paid" : "is-open"}`;
+                dTabPayDot.title = isPaid ? "Payment Status: Paid" : "Payment Status: Open";
+            }
+
+            if (dPayBanner) {
+                dPayBanner.classList.toggle("is-paid", isPaid);
+                dPayBanner.classList.toggle("is-open", !isPaid);
+            }
+
+            if (dPayStatusBadge) {
+                dPayStatusBadge.className = `sp-status-pill ${isPaid ? "is-paid" : "is-open"}`;
+                dPayStatusBadge.innerHTML = isPaid ? "&#10003; Paid" : "Payment Pending";
+            }
+
+            if (dPayActionTitle) {
+                dPayActionTitle.textContent = isPaid ? "Payment Confirmed" : "Confirm Candidate Payment";
+            }
+
+            if (dPayHelper) {
+                dPayHelper.textContent = isPaid
+                    ? "Payment has been verified. This candidate is eligible for JobScout onboarding and automated workflows."
+                    : "Verify that the invoice amount has been received before marking this application as paid.";
+            }
+
+            if (dPayToggleBtn) {
+                dPayToggleBtn.className = `sp-btn-pay-status ${isPaid ? "is-paid" : ""}`;
+                dPayToggleBtn.textContent = isPaid ? "✓ Marked as Paid" : "Mark as Paid";
+                dPayToggleBtn.disabled = isPaid;
+            }
+        }
+
+        function renderDrawerActivity(app) {
+            const rec = onboardingRecords[app.id];
+            const isImporting = importingIds.has(app.id);
+
+            if (dCreated) dCreated.textContent = app.created_at_display;
+            if (dActivityImported) {
+                dActivityImported.textContent = rec?.imported_at ? formatCreatedAt(rec.imported_at) : "Not imported";
+            }
+            if (dActivitySource) {
+                dActivitySource.textContent = "Supabase Online Applications";
+            }
+            if (dActivityId) {
+                dActivityId.textContent = app.id || "N/A";
+            }
+
+            if (!dActivityTimeline) return;
+
+            const events = [];
+
+            // 1. Submission event
+            events.push({
+                tone: "primary",
+                title: "Application Submitted",
+                meta: app.created_at_display || "N/A",
+                desc: `Candidate submitted ${escapeHtml(app.pack)} application for ${escapeHtml(app.field)} (${app.document_count} ${app.document_count === 1 ? "document" : "documents"} attached).`
+            });
+
+            // 2. Payment status event
+            if (app.is_payed) {
+                events.push({
+                    tone: "success",
+                    title: "Payment Verified",
+                    meta: `${app.price} via ${app.bank}`,
+                    desc: "Invoice payment confirmed and marked as paid."
+                });
+            } else {
+                events.push({
+                    tone: "warning",
+                    title: "Payment Pending",
+                    meta: `${app.price} (${app.bank})`,
+                    desc: "Waiting for payment confirmation before automated onboarding."
+                });
+            }
+
+            // 3. Onboarding / Talent Dossier event
+            if (isImporting) {
+                events.push({
+                    tone: "primary",
+                    title: "Talent Dossier Import in Progress",
+                    meta: "Running now",
+                    desc: "Downloading documents and extracting candidate profile into JobScout."
+                });
+            } else if (rec) {
+                if (rec.status === "IMPORT_FAILED") {
+                    events.push({
+                        tone: "danger",
+                        title: "Talent Dossier Import Failed",
+                        meta: rec.imported_at ? formatCreatedAt(rec.imported_at) : "Error",
+                        desc: escapeHtml(rec.last_error || "Import encountered an error.")
+                    });
+                } else if (rec.status === "READY" || rec.status === "PROFILE_REVIEW_REQUIRED" || rec.jobscout_client_id) {
+                    const missingNote = (rec.missing_fields && rec.missing_fields.length)
+                        ? `Missing fields: ${escapeHtml(rec.missing_fields.join(", "))}.`
+                        : "All core profile fields verified.";
+                    events.push({
+                        tone: rec.status === "PROFILE_REVIEW_REQUIRED" ? "warning" : "success",
+                        title: rec.status === "PROFILE_REVIEW_REQUIRED"
+                            ? "Imported to JobScout (Review Recommended)"
+                            : "Imported to JobScout Talent Dossier",
+                        meta: rec.imported_at ? formatCreatedAt(rec.imported_at) : (rec.jobscout_client_id || "Imported"),
+                        desc: `Client ID: ${escapeHtml(rec.jobscout_client_id || "N/A")} · ${rec.cv_parsed ? "CV extracted" : "No CV extraction"} · ${missingNote}`
+                    });
+                }
+            } else {
+                events.push({
+                    tone: "neutral",
+                    title: "Talent Dossier Not Imported",
+                    meta: "Pending import",
+                    desc: app.is_payed
+                        ? "Candidate is ready to be imported into JobScout."
+                        : "Requires payment confirmation before importing into JobScout."
+                });
+            }
+
+            dActivityTimeline.innerHTML = events.map(ev => `
+                <div class="sp-activity-item sp-activity-item--${ev.tone}">
+                    <div class="sp-activity-dot"></div>
+                    <div class="sp-activity-content">
+                        <div class="sp-activity-head">
+                            <strong class="sp-activity-title">${escapeHtml(ev.title)}</strong>
+                            <span class="sp-activity-meta">${escapeHtml(ev.meta)}</span>
+                        </div>
+                        <p class="sp-activity-desc">${ev.desc}</p>
+                    </div>
+                </div>
+            `).join("");
+        }
+
         // --- Details Drawer Logic ---
-        async function openDetailsDrawer(applicationId) {
+        async function openDetailsDrawer(applicationId, initialTab = null) {
             const app = allApplications.find(a => a.id === applicationId);
             if (!app) return;
+            const isSameApplicant = activeApplicant && activeApplicant.id === app.id && detailsDrawer && !detailsDrawer.hidden;
             activeApplicant = app;
 
             if (dAvatar) dAvatar.textContent = getInitials(app.full_name);
             if (dName) dName.textContent = app.full_name;
-            if (dStatusPill) {
-                dStatusPill.className = `sp-status-pill ${app.is_payed ? "is-paid" : "is-open"}`;
-                dStatusPill.innerHTML = app.is_payed ? "&#10003; Bezahlt" : "Offen";
-            }
             if (dPackTag) dPackTag.textContent = app.pack;
+            if (dLangTag) {
+                const hasLang = !isMissingVal(app.language_level);
+                dLangTag.hidden = !hasLang;
+                dLangTag.textContent = hasLang ? `Language: ${app.language_level}` : "";
+            }
 
             if (dFullName) dFullName.textContent = app.full_name;
             if (dId) dId.textContent = app.id;
 
             if (dEmail) {
                 dEmail.textContent = app.email;
-                dEmail.href = app.email !== "k. A." ? `mailto:${app.email}` : "#";
+                dEmail.href = !isMissingVal(app.email) ? `mailto:${app.email}` : "#";
             }
             if (dWhatsapp) {
                 dWhatsapp.textContent = app.whatsapp;
@@ -1543,69 +1815,106 @@
             if (dPrice) dPrice.textContent = app.price;
             if (dBank) dBank.textContent = app.bank;
 
-            if (dPayToggleBtn) {
-                dPayToggleBtn.className = `sp-btn-pay-status ${app.is_payed ? "is-paid" : ""}`;
-                dPayToggleBtn.textContent = app.is_payed ? "✓ Als bezahlt markiert" : "Als bezahlt markieren";
-                dPayToggleBtn.disabled = app.is_payed;
+            if (dTabDocBadge) {
+                dTabDocBadge.textContent = String(app.document_count || 0);
+            }
+            if (dDocCount) {
+                dDocCount.textContent = `${app.document_count} ${app.document_count === 1 ? "Document" : "Documents"}`;
             }
 
-            if (dCreated) dCreated.textContent = app.created_at_display;
-            if (dDocCount) dDocCount.textContent = `${app.document_count} Dokument${app.document_count === 1 ? "" : "e"}`;
+            syncDrawerPaymentSection(app);
+
+            // Switch to requested tab or default to Overview when opening a new candidate
+            if (initialTab) {
+                switchDrawerTab(initialTab, false);
+            } else if (!isSameApplicant) {
+                switchDrawerTab("overview", false);
+            }
 
             // Lazy generate signed URLs for documents in drawer
-            renderDrawerDocuments(app.documents);
+            renderDrawerDocuments(app.documents, app.document_meta || {});
 
             // Render Onboarding Dossier Section in Drawer
             renderDrawerOnboarding(app);
+
+            // Render Activity Tab
+            renderDrawerActivity(app);
 
             if (drawerBackdrop) drawerBackdrop.hidden = false;
             if (detailsDrawer) detailsDrawer.hidden = false;
         }
 
-        async function renderDrawerDocuments(paths) {
+        async function renderDrawerDocuments(paths, docMetaMap = {}) {
             if (!dDocsContainer) return;
-            if (!paths.length) {
-                dDocsContainer.innerHTML = '<div class="sp-doc-empty">No documents uploaded for this application.</div>';
+            if (!paths || !paths.length) {
+                dDocsContainer.innerHTML = `
+                    <div class="sp-doc-empty">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.75" style="margin-bottom:6px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                        <div>No application documents have been uploaded for this candidate.</div>
+                    </div>
+                `;
                 return;
             }
 
-            dDocsContainer.innerHTML = '<div class="sp-doc-empty">Lade Dokumenten-Links...</div>';
+            dDocsContainer.innerHTML = `
+                <div class="sp-doc-empty sp-doc-loading">
+                    <span class="sp-spin-inline">&#9696;</span>
+                    <span>Loading document links...</span>
+                </div>
+            `;
 
             try {
                 const signedDocs = await Promise.all(paths.map(async path => {
                     try {
-                        return await getSignedDocument(path);
+                        return await getSignedDocument(path, docMetaMap[path] || null);
                     } catch (e) {
-                        return { path, name: getHumanDocumentName(path), error: true };
+                        const rawName = String(path || "").split("/").pop() || String(path || "");
+                        const fileInfo = getFileTypeInfo(rawName);
+                        return {
+                            path,
+                            name: getHumanDocumentName(path),
+                            rawName,
+                            ext: fileInfo.ext,
+                            typeLabel: fileInfo.typeLabel,
+                            sizeLabel: "",
+                            error: true
+                        };
                     }
                 }));
 
                 dDocsContainer.innerHTML = signedDocs.map(doc => {
                     if (doc.error || !doc.url) {
                         return `
-                            <div class="sp-doc-item">
+                            <div class="sp-doc-item is-error">
                                 <div class="sp-doc-info">
-                                    <span class="sp-doc-badge">DOC</span>
-                                    <span class="sp-doc-name">${escapeHtml(doc.name)} (unavailable)</span>
+                                    <span class="sp-doc-badge">${escapeHtml(doc.ext || "DOC")}</span>
+                                    <div class="sp-doc-meta">
+                                        <strong class="sp-doc-name" title="${escapeHtml(doc.rawName || doc.name)}">${escapeHtml(doc.name)}</strong>
+                                        <span class="sp-doc-sub sp-doc-sub--error" title="${escapeHtml(doc.rawName || "")}">Link unavailable &bull; ${escapeHtml(doc.rawName || "Storage error")}</span>
+                                    </div>
                                 </div>
                             </div>
                         `;
                     }
 
-                    const ext = doc.name.split(".").pop().toUpperCase();
+                    const ext = (doc.ext || doc.name.split(".").pop() || "DOC").toUpperCase();
+                    const typeAndSize = [doc.typeLabel || `${ext} File`, doc.sizeLabel].filter(Boolean).join(" • ");
                     return `
                         <div class="sp-doc-item">
                             <div class="sp-doc-info">
-                                <span class="sp-doc-badge ${ext.toLowerCase()}">${escapeHtml(ext)}</span>
+                                <span class="sp-doc-badge ${escapeHtml(ext.toLowerCase())}">${escapeHtml(ext)}</span>
                                 <div class="sp-doc-meta">
-                                    <strong class="sp-doc-name">${escapeHtml(doc.name)}</strong>
-                                    <span class="sp-doc-sub">${escapeHtml(doc.rawName)}</span>
+                                    <div class="sp-doc-title-row">
+                                        <strong class="sp-doc-name" title="${escapeHtml(doc.name)}">${escapeHtml(doc.name)}</strong>
+                                        <span class="sp-doc-type-chip">${escapeHtml(typeAndSize)}</span>
+                                    </div>
+                                    <span class="sp-doc-sub" title="${escapeHtml(doc.rawName)}">${escapeHtml(doc.rawName)}</span>
                                 </div>
                             </div>
                             <div class="sp-doc-actions">
-                                <a href="${escapeHtml(doc.url)}" target="_blank" rel="noopener noreferrer" class="sp-doc-btn" title="Im Browser öffnen">Vorschau</a>
-                                <a href="${escapeHtml(doc.url)}" download="${escapeHtml(doc.name)}" class="sp-doc-btn" title="Herunterladen">Download</a>
-                                <button type="button" class="sp-doc-btn" data-copy-link="${escapeHtml(doc.url)}" title="Link kopieren">Kopieren</button>
+                                <a href="${escapeHtml(doc.url)}" target="_blank" rel="noopener noreferrer" class="sp-doc-btn" title="Preview document in new tab">Preview</a>
+                                <a href="${escapeHtml(doc.url)}" download="${escapeHtml(doc.name)}" class="sp-doc-btn" title="Download document">Download</a>
+                                <button type="button" class="sp-doc-btn" data-copy-link="${escapeHtml(doc.url)}" title="Copy signed document link">Copy</button>
                             </div>
                         </div>
                     `;
@@ -1615,13 +1924,14 @@
                     btn.addEventListener("click", () => {
                         const url = btn.dataset.copyLink;
                         navigator.clipboard?.writeText(url).then(() => {
-                            btn.textContent = "Kopiert!";
-                            setTimeout(() => { btn.textContent = "Kopieren"; }, 2000);
+                            btn.textContent = "Copied!";
+                            setStatus("Document link copied to clipboard.");
+                            setTimeout(() => { btn.textContent = "Copy"; }, 2000);
                         });
                     });
                 });
             } catch (err) {
-                dDocsContainer.innerHTML = '<div class="sp-doc-empty">Fehler beim Laden der Dokumente.</div>';
+                dDocsContainer.innerHTML = '<div class="sp-doc-empty sp-doc-error">Failed to load application documents. Please try refreshing.</div>';
             }
         }
 
@@ -1647,24 +1957,24 @@
         }
 
         copyEmailBtn?.addEventListener("click", () => {
-            if (activeApplicant?.email) {
+            if (activeApplicant?.email && !isMissingVal(activeApplicant.email)) {
                 navigator.clipboard?.writeText(activeApplicant.email);
                 flashCopiedState(copyEmailBtn);
-                setStatus("E-Mail in Zwischenablage kopiert!");
+                setStatus("Email copied to clipboard!");
             }
         });
         copyWhatsappBtn?.addEventListener("click", () => {
-            if (activeApplicant?.whatsapp) {
+            if (activeApplicant?.whatsapp && !isMissingVal(activeApplicant.whatsapp)) {
                 navigator.clipboard?.writeText(activeApplicant.whatsapp);
                 flashCopiedState(copyWhatsappBtn);
-                setStatus("WhatsApp-Nummer kopiert!");
+                setStatus("WhatsApp number copied!");
             }
         });
         copyIdBtn?.addEventListener("click", () => {
             if (activeApplicant?.id) {
                 navigator.clipboard?.writeText(activeApplicant.id);
                 flashCopiedState(copyIdBtn);
-                setStatus("Bewerber-ID kopiert!");
+                setStatus("Candidate ID copied!");
             }
         });
 
@@ -1675,10 +1985,10 @@
             dPayToggleBtn.textContent = "Saving...";
             try {
                 await markAsPayed(activeApplicant.id);
-                openDetailsDrawer(activeApplicant.id);
+                openDetailsDrawer(activeApplicant.id, activeDrawerTab);
             } catch (err) {
                 dPayToggleBtn.disabled = false;
-                dPayToggleBtn.textContent = "Als bezahlt markieren";
+                dPayToggleBtn.textContent = "Mark as Paid";
             }
         });
 
@@ -1701,80 +2011,163 @@
             }
         });
 
+        function formatMissingFieldName(fieldKey) {
+            const map = {
+                full_name: "Full Name",
+                email: "Email Address",
+                phone: "Phone / WhatsApp",
+                whatsapp: "WhatsApp",
+                profession: "Profession",
+                field: "Profession / Field",
+                german_level: "German Level",
+                language_level: "Language Level",
+                preferred_locations: "Preferred Locations",
+                address: "Address",
+                birth_date: "Date of Birth",
+                nationality: "Nationality",
+                education: "Education",
+                experience: "Work Experience",
+                cv: "Resume / CV"
+            };
+            const raw = String(fieldKey || "").trim();
+            if (!raw) return "";
+            if (map[raw.toLowerCase()]) return map[raw.toLowerCase()];
+            return raw
+                .replace(/_/g, " ")
+                .replace(/\b\w/g, c => c.toUpperCase());
+        }
+
         function renderDrawerOnboarding(app) {
             if (!dOnboardContainer) return;
             const rec = onboardingRecords[app.id];
-            const isImporting = importingIds.has(app.id);
+            const isImporting = importingIds.has(app.id) || (rec && rec.status === "IMPORTING");
+            const isImported = Boolean(
+                rec && (rec.status === "READY" || rec.status === "PROFILE_REVIEW_REQUIRED" || rec.jobscout_client_id)
+            );
+            const isFailed = Boolean(rec && rec.status === "IMPORT_FAILED");
 
-            let statusLabel = "Noch nicht importiert";
+            let statusLabel = "Not Imported";
             let statusPillClass = "sp-onboard-pill is-pending";
+            let importStatusValue = "Not Imported";
+            let headerPillClass = "sp-drawer-subtag sp-drawer-subtag--dossier is-neutral";
+            let headerPillText = "Not Imported";
 
             if (isImporting) {
-                statusLabel = "Import läuft...";
+                statusLabel = "Importing...";
                 statusPillClass = "sp-btn-action-onboard is-loading";
+                importStatusValue = "Import in Progress";
+                headerPillClass = "sp-drawer-subtag sp-drawer-subtag--dossier is-loading";
+                headerPillText = "Importing...";
+            } else if (isImported) {
+                if (rec.status === "PROFILE_REVIEW_REQUIRED") {
+                    statusLabel = "Review Recommended";
+                    statusPillClass = "sp-onboard-badge is-warning";
+                    importStatusValue = "Imported (Review Recommended)";
+                    headerPillClass = "sp-drawer-subtag sp-drawer-subtag--dossier is-warning";
+                    headerPillText = "Review Needed";
+                } else {
+                    statusLabel = "✓ Imported";
+                    statusPillClass = "sp-onboard-badge is-imported";
+                    importStatusValue = "Imported";
+                    headerPillClass = "sp-drawer-subtag sp-drawer-subtag--dossier is-imported";
+                    headerPillText = "Imported";
+                }
+            } else if (isFailed) {
+                statusLabel = "Import Failed";
+                statusPillClass = "sp-onboard-pill is-error";
+                importStatusValue = "Import Failed";
+                headerPillClass = "sp-drawer-subtag sp-drawer-subtag--dossier is-error";
+                headerPillText = "Import Failed";
             } else if (!app.is_payed) {
-                statusLabel = "Zahlung ausstehend";
+                statusLabel = "Payment Pending";
                 statusPillClass = "sp-onboard-pill is-pending";
-            } else if (rec) {
-                switch (rec.status) {
-                    case "READY":
-                        statusLabel = "Bereit (Profil angelegt)";
-                        statusPillClass = "sp-onboard-badge is-imported";
-                        break;
-                    case "PROFILE_REVIEW_REQUIRED":
-                        statusLabel = "Überprüfung empfohlen";
-                        statusPillClass = "sp-onboard-badge is-imported";
-                        break;
-                    case "IMPORT_FAILED":
-                        statusLabel = "Import fehlgeschlagen";
-                        statusPillClass = "sp-onboard-pill is-pending";
-                        break;
-                    case "IMPORTING":
-                        statusLabel = "Import läuft...";
-                        statusPillClass = "sp-btn-action-onboard is-loading";
-                        break;
-                    default:
-                        statusLabel = rec.status || "Bereit für Import";
-                        statusPillClass = "sp-onboard-badge";
+                importStatusValue = "Not Imported (Payment Pending)";
+                headerPillClass = "sp-drawer-subtag sp-drawer-subtag--dossier is-neutral";
+                headerPillText = "Not Imported";
+            } else {
+                statusLabel = "Not Imported";
+                statusPillClass = "sp-onboard-pill is-pending";
+                importStatusValue = "Not Imported (Ready to Import)";
+                headerPillClass = "sp-drawer-subtag sp-drawer-subtag--dossier is-neutral";
+                headerPillText = "Not Imported";
+            }
+
+            if (dDossierPill) {
+                dDossierPill.className = headerPillClass;
+                dDossierPill.textContent = headerPillText;
+            }
+
+            const clientId = (isImported && rec?.jobscout_client_id) ? rec.jobscout_client_id : "Not assigned";
+
+            let docCountDisplay = `${app.document_count} uploaded (Not imported)`;
+            if (isImported || (rec && typeof rec.document_count === "number")) {
+                const importedCount = Number(rec.document_count ?? 0);
+                docCountDisplay = `${importedCount} ${importedCount === 1 ? "Document" : "Documents"} Imported`;
+            }
+
+            let cvStatusDisplay = "Not Analyzed";
+            let cvToneClass = "is-muted";
+            if (isImported) {
+                if (rec.cv_parsed) {
+                    cvStatusDisplay = "Extracted";
+                    cvToneClass = "is-ok";
+                } else {
+                    cvStatusDisplay = "Not Extracted";
+                    cvToneClass = "is-warn";
+                }
+            } else if (isFailed) {
+                cvStatusDisplay = rec.cv_parsed ? "Extracted" : "Failed / Not Analyzed";
+                cvToneClass = "is-warn";
+            }
+
+            let missingDisplay = "Not analyzed yet";
+            let missingToneClass = "is-muted";
+            if (isImported || isFailed) {
+                if (Array.isArray(rec?.missing_fields) && rec.missing_fields.length > 0) {
+                    missingDisplay = rec.missing_fields.map(formatMissingFieldName).filter(Boolean).join(", ");
+                    missingToneClass = "is-warn";
+                } else if (isImported) {
+                    missingDisplay = "None";
+                    missingToneClass = "is-ok";
                 }
             }
 
-            const clientId = rec?.jobscout_client_id || "—";
-            const docCount = rec ? `${rec.document_count ?? 0} Dokument(e)` : "—";
-            const cvStatus = rec ? (rec.cv_parsed ? "Erfolgreich extrahiert" : "Keine CV-Extraktion") : "—";
-            const missing = (rec?.missing_fields && rec.missing_fields.length) ? rec.missing_fields.join(", ") : "Keine";
-            const importedAt = rec?.imported_at ? formatCreatedAt(rec.imported_at) : "—";
+            const importedAt = (rec && rec.imported_at) ? formatCreatedAt(rec.imported_at) : "Not imported";
 
             dOnboardContainer.innerHTML = `
                 <div class="sp-onboard-card-header">
-                    <span class="sp-onboard-card-title">Dossier-Status</span>
+                    <span class="sp-onboard-card-title">Dossier Status</span>
                     <span class="${statusPillClass}">${escapeHtml(statusLabel)}</span>
                 </div>
                 <div class="sp-onboard-kv-grid">
+                    <div class="sp-onboard-kv-item">
+                        <span class="sp-onboard-kv-label">Import Status</span>
+                        <span class="sp-onboard-kv-value">${escapeHtml(importStatusValue)}</span>
+                    </div>
+                    <div class="sp-onboard-kv-item">
+                        <span class="sp-onboard-kv-label">CV Analysis Status</span>
+                        <span class="sp-onboard-kv-value ${cvToneClass}">${escapeHtml(cvStatusDisplay)}</span>
+                    </div>
+                    <div class="sp-onboard-kv-item">
+                        <span class="sp-onboard-kv-label">Document Count</span>
+                        <span class="sp-onboard-kv-value">${escapeHtml(docCountDisplay)}</span>
+                    </div>
+                    <div class="sp-onboard-kv-item">
+                        <span class="sp-onboard-kv-label">Imported On</span>
+                        <span class="sp-onboard-kv-value">${escapeHtml(importedAt)}</span>
+                    </div>
                     <div class="sp-onboard-kv-item">
                         <span class="sp-onboard-kv-label">Client ID</span>
                         <code class="sp-onboard-kv-value">${escapeHtml(clientId)}</code>
                     </div>
                     <div class="sp-onboard-kv-item">
-                        <span class="sp-onboard-kv-label">Importiert am</span>
-                        <span class="sp-onboard-kv-value">${escapeHtml(importedAt)}</span>
-                    </div>
-                    <div class="sp-onboard-kv-item">
-                        <span class="sp-onboard-kv-label">Dokumente</span>
-                        <span class="sp-onboard-kv-value">${escapeHtml(docCount)}</span>
-                    </div>
-                    <div class="sp-onboard-kv-item">
-                        <span class="sp-onboard-kv-label">CV Analyse</span>
-                        <span class="sp-onboard-kv-value">${escapeHtml(cvStatus)}</span>
-                    </div>
-                    <div class="sp-onboard-kv-item" style="grid-column: span 2;">
-                        <span class="sp-onboard-kv-label">Fehlende Angaben</span>
-                        <span class="sp-onboard-kv-value">${escapeHtml(missing)}</span>
+                        <span class="sp-onboard-kv-label">Missing Information</span>
+                        <span class="sp-onboard-kv-value ${missingToneClass}">${escapeHtml(missingDisplay)}</span>
                     </div>
                 </div>
                 ${rec?.last_error ? `
                     <div class="sp-onboard-error-note">
-                        <strong>Fehler:</strong> ${escapeHtml(rec.last_error)}
+                        <strong>Error:</strong> ${escapeHtml(rec.last_error)}
                     </div>
                 ` : ""}
             `;
@@ -1783,19 +2176,21 @@
                 if (isImporting) {
                     dOnboardBtn.disabled = true;
                     dOnboardBtn.className = "sp-btn-action-onboard is-loading";
-                    dOnboardBtn.innerHTML = '<span class="sp-spin-inline">&#9696;</span> <span>Importiere...</span>';
+                    dOnboardBtn.innerHTML = '<span class="sp-spin-inline">&#9696;</span> <span>Importing...</span>';
                     dOnboardBtn.dataset.action = "";
                 } else if (!app.is_payed) {
                     dOnboardBtn.disabled = true;
                     dOnboardBtn.className = "sp-btn-action-onboard";
-                    dOnboardBtn.textContent = "Zahlung ausstehend";
+                    dOnboardBtn.textContent = "Payment Pending";
+                    dOnboardBtn.title = "Confirm payment before importing candidate";
                     dOnboardBtn.dataset.action = "";
-                } else if (rec && (rec.status === "READY" || rec.status === "PROFILE_REVIEW_REQUIRED" || rec.jobscout_client_id)) {
+                } else if (isImported) {
                     dOnboardBtn.disabled = false;
                     dOnboardBtn.className = "sp-btn-link-profile";
                     dOnboardBtn.style.padding = "9px 14px";
                     dOnboardBtn.style.fontSize = "12.5px";
-                    dOnboardBtn.innerHTML = '<span>✓ Profil in Autofill Hub öffnen &rarr;</span>';
+                    dOnboardBtn.title = "Open candidate profile in Autofill Hub";
+                    dOnboardBtn.innerHTML = '<span>✓ Open in Autofill Hub &rarr;</span>';
                     dOnboardBtn.dataset.action = "open-candidate";
                     dOnboardBtn.dataset.clientId = rec.jobscout_client_id || "";
                 } else {
@@ -1803,7 +2198,8 @@
                     dOnboardBtn.className = "sp-btn-action-onboard";
                     dOnboardBtn.style.padding = "9px 14px";
                     dOnboardBtn.style.fontSize = "12.5px";
-                    dOnboardBtn.textContent = (rec && rec.status === "IMPORT_FAILED") ? "Erneut importieren" : "Als Bewerber importieren";
+                    dOnboardBtn.title = "Import candidate into JobScout Talent Dossier";
+                    dOnboardBtn.textContent = isFailed ? "Retry Import" : "Import Candidate";
                     dOnboardBtn.dataset.action = "onboard";
                     dOnboardBtn.dataset.appId = app.id;
                 }
@@ -1817,7 +2213,7 @@
             if (!app) return;
 
             if (!app.is_payed) {
-                setStatus("Bewerber kann nicht importiert werden: Zahlung ist noch ausstehend.", true);
+                setStatus("Candidate cannot be imported while payment is pending.", true);
                 return;
             }
 
@@ -1826,9 +2222,10 @@
                 renderView();
                 if (activeApplicant && activeApplicant.id === applicationId) {
                     renderDrawerOnboarding(activeApplicant);
+                    renderDrawerActivity(activeApplicant);
                 }
 
-                setStatus(`Starte Onboarding für "${app.full_name}"...`, false);
+                setStatus(`Starting onboarding for "${app.full_name}"...`, false);
 
                 const response = await fetch("/api/supabase/onboard-candidate", {
                     method: "POST",
@@ -1859,12 +2256,11 @@
                     last_error: null
                 };
 
-                setStatus(`✓ Bewerber "${data.client_id}" erfolgreich importiert!`, false);
-
+                setStatus(`✓ Candidate "${data.client_id}" imported successfully!`, false);
 
             } catch (err) {
                 console.error("Onboarding failed:", err);
-                setStatus(`Import fehlgeschlagen: ${err.message}`, true);
+                setStatus(`Import failed: ${err.message}`, true);
 
                 onboardingRecords[applicationId] = {
                     ...(onboardingRecords[applicationId] || {}),
@@ -1876,6 +2272,7 @@
                 renderView();
                 if (activeApplicant && activeApplicant.id === applicationId) {
                     renderDrawerOnboarding(activeApplicant);
+                    renderDrawerActivity(activeApplicant);
                 }
             }
         }
@@ -1893,7 +2290,6 @@
                     body: JSON.stringify({ client_id: clientId })
                 }).catch(() => {});
 
-
                 closeDetailsDrawer();
 
                 const autofillNavLink = document.querySelector('[data-section-link="autofill"]');
@@ -1910,7 +2306,7 @@
         // --- Core Supabase Actions (Preserved) ---
         async function markAsPayed(applicationId) {
             try {
-                setStatus("Markiere als bezahlt...", false);
+                setStatus("Marking as paid...", false);
                 const client = await getSupabaseClient();
                 const response = await client
                     .from("applications")
@@ -1924,23 +2320,16 @@
 
                 if (activeApplicant && activeApplicant.id === applicationId) {
                     activeApplicant.is_payed = true;
-                    if (dPayToggleBtn) {
-                        dPayToggleBtn.className = "sp-btn-pay-status is-paid";
-                        dPayToggleBtn.textContent = "✓ Als bezahlt markiert";
-                        dPayToggleBtn.disabled = true;
-                    }
-                    if (dStatusPill) {
-                        dStatusPill.className = "sp-status-pill is-paid";
-                        dStatusPill.innerHTML = "&#10003; Bezahlt";
-                    }
+                    syncDrawerPaymentSection(activeApplicant);
                     renderDrawerOnboarding(activeApplicant);
+                    renderDrawerActivity(activeApplicant);
                 }
 
-                setStatus("✓ Als bezahlt markiert.", false);
+                setStatus("✓ Marked as paid.", false);
                 renderView();
             } catch (err) {
                 console.error("Mark as paid failed:", err);
-                setStatus(`Fehler beim Aktualisieren des Zahlungsstatus: ${err.message}`, true);
+                setStatus(`Failed to update payment status: ${err.message}`, true);
             }
         }
 
@@ -1948,8 +2337,8 @@
             const application = allApplications.find(a => a.id === applicationId);
             if (!application) return;
 
-            setStatus("Bereite Next Step vor...");
-            const signedDocuments = await Promise.all(application.documents.map(p => getSignedDocument(p).catch(() => null)));
+            setStatus("Preparing Next Step (Cover Letter)...");
+            const signedDocuments = await Promise.all(application.documents.map(p => getSignedDocument(p, application.document_meta?.[p]).catch(() => null)));
             const validDocs = signedDocuments.filter(Boolean);
 
             const prepared = {
@@ -1970,7 +2359,7 @@
             const application = allApplications.find(a => a.id === applicationId);
             if (!application) return;
 
-            const signedDocuments = await Promise.all(application.documents.map(p => getSignedDocument(p).catch(() => null)));
+            const signedDocuments = await Promise.all(application.documents.map(p => getSignedDocument(p, application.document_meta?.[p]).catch(() => null)));
             const validDocs = signedDocuments.filter(Boolean);
 
             const prepared = {
@@ -1990,7 +2379,7 @@
             const application = allApplications.find(a => a.id === applicationId);
             if (!application) return;
 
-            if (!confirm(`Delete application for "${application.full_name}"? This cannot be undone.`)) {
+            if (!confirm(`Delete application for "${application.full_name}"? This action cannot be undone.`)) {
                 return;
             }
 
@@ -2038,14 +2427,14 @@
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;
-                a.download = `bewerbungen_${timestamp}.json`;
+                a.download = `applications_${timestamp}.json`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                setStatus(`✓ ${exportData.length} Bewerbungen als JSON exportiert.`);
+                setStatus(`✓ Exported ${exportData.length} applications as JSON.`);
             } else {
-                const headers = ["Name", "E-Mail", "WhatsApp", "Bereich", "Sprachniveau", "Paket", "Preis", "Bank", "Status", "Dokumente", "Eingereicht"];
+                const headers = ["Name", "Email", "WhatsApp", "Profession", "Language Level", "Application Package", "Invoice Amount", "Payment Method", "Payment Status", "Documents", "Submitted On"];
                 const rows = exportData.map(a => [
                     `"${a.full_name.replace(/"/g, '""')}"`,
                     `"${a.email}"`,
@@ -2055,7 +2444,7 @@
                     `"${a.pack}"`,
                     `"${a.price}"`,
                     `"${a.bank}"`,
-                    `"${a.is_payed ? 'Bezahlt' : 'Offen'}"`,
+                    `"${a.is_payed ? 'Paid' : 'Open'}"`,
                     a.document_count,
                     `"${a.created_at_display}"`
                 ]);
@@ -2064,12 +2453,12 @@
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
                 a.href = url;
-                a.download = `bewerbungen_${timestamp}.csv`;
+                a.download = `applications_${timestamp}.csv`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
-                setStatus(`✓ ${exportData.length} Bewerbungen als CSV exportiert.`);
+                setStatus(`✓ Exported ${exportData.length} applications as CSV.`);
             }
             if (exportMenu) exportMenu.hidden = true;
         }
@@ -2168,7 +2557,7 @@
             savePreferences();
             syncControlsToPreferences();
             renderView();
-            setStatus("Ansichtseinstellungen zurückgesetzt.");
+            setStatus("View preferences reset to defaults.");
         });
 
         function syncControlsToPreferences() {
@@ -2222,7 +2611,7 @@
             if ((hasLoaded && !force) || isLoading) return;
 
             setLoading(true);
-            setStatus("Lade Bewerbungen aus Supabase...", false);
+            setStatus("Loading applications from Supabase...", false);
             if (emptyState) emptyState.hidden = true;
 
             try {
@@ -2251,7 +2640,7 @@
             } catch (error) {
                 console.error("Supabase load failed.", error);
                 if (emptyState) emptyState.hidden = true;
-                setStatus(error.message || "Supabase-Daten konnten nicht geladen werden.", true);
+                setStatus(error.message || "Could not load Supabase applications.", true);
             } finally {
                 setLoading(false);
             }

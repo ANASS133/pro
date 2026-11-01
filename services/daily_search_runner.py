@@ -6,10 +6,7 @@ Integrates with Profession Intelligence (evaluate_profession_match), existing sc
 and Cover Letter PDF generation.
 """
 
-import hashlib
-import json
 import logging
-import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -271,7 +268,7 @@ class DailySearchRunner:
         try:
             from scraper.ausbildung_de_scraper import AusbildungDeScraper
             scraper = AusbildungDeScraper()
-            raw_jobs = scraper.fetch_jobs(what=profession, where=city, max_jobs=limit) or []
+            raw_jobs = scraper.fetch_jobs(keyword=profession, location=city, max_jobs=limit) or []
             for j in raw_jobs:
                 title = str(j.get("title") or "").strip()
                 company = str(j.get("company") or "").strip()
@@ -292,38 +289,6 @@ class DailySearchRunner:
         except Exception as exc:
             logger.debug("Live scraper fallback skipped: %s", exc)
         return results
-
-    def _generate_synthetic_verified_matches(self, profession: str, city: str, count: int = 3) -> List[Dict[str, Any]]:
-        """Fallback generator using verified German Ausbildung employers if datasets are sparse."""
-        templates = [
-            ("Ausbildung als {prof} (m/w/d)", "{company} Solutions GmbH", "ausbildung@{domain}.de"),
-            ("Auszubildender {prof} (m/w/d)", "{company} Systems AG", "karriere@{domain}.de"),
-            ("Duale Ausbildung: {prof}", "{company} Digital Technologies", "bewerbung@{domain}.de"),
-        ]
-        companies = [
-            ("Alpha", "alpha-tech"),
-            ("Bavaria", "bavaria-digital"),
-            ("Cologne", "cologne-cloud"),
-            ("Metro", "metro-systems"),
-            ("Nordic", "nordic-it"),
-        ]
-        res = []
-        for i in range(min(count, len(companies))):
-            tmpl = templates[i % len(templates)]
-            comp_name, domain = companies[i]
-            title = tmpl[0].format(prof=profession.title())
-            comp = tmpl[1].format(company=comp_name)
-            email = tmpl[2].format(domain=domain)
-            res.append({
-                "job_title": title,
-                "company": comp,
-                "location": city,
-                "email": email,
-                "link": f"https://www.{domain}.de/jobs",
-                "source": "verified_partner_index",
-                "score": 0.90,
-            })
-        return res
 
     def _generate_cover_letter_for_match(
         self,
@@ -372,7 +337,7 @@ class DailySearchRunner:
                 f"{full_name}"
             )
 
-            client_dir = DATA_DIR / "clients" / client_id / "cover_letters"
+            client_dir = client_manager.clients_dir / client_id / "cover_letters"
             client_dir.mkdir(parents=True, exist_ok=True)
             safe_comp = re.sub(r"[^\w]", "_", company.lower()).strip("_")[:40]
             pdf_filename = f"Anschreiben_{safe_comp}_{int(datetime.now().timestamp())}.pdf"
@@ -443,15 +408,11 @@ class DailySearchRunner:
         # 1. Search datasets using Profession Intelligence
         raw_matches = self._find_matches_from_datasets(profession, city, limit=max_jobs * 3)
 
-        # Optional live scraper augmentation if requested or enabled
-        if len(raw_matches) < max_jobs and (use_live_scrapers or self.store.get_setting("use_live_scrapers", "false").lower() == "true"):
-            live_matches = self._find_matches_from_live_scrapers(profession, city, limit=max_jobs)
-            raw_matches.extend(live_matches)
-
-        # Fallback verified index if datasets have fewer than max_jobs new matches
-        if len(raw_matches) < max_jobs:
-            synthetics = self._generate_synthetic_verified_matches(profession, city, count=max_jobs - len(raw_matches))
-            raw_matches.extend(synthetics)
+        # Explicitly enabled live discovery must run even when cached datasets are full.
+        live_enabled = use_live_scrapers or self.store.get_setting("use_live_scrapers", "false").lower() in ("true", "1")
+        if live_enabled:
+            live_matches = self._find_matches_from_live_scrapers(profession, city, limit=max_jobs * 3)
+            raw_matches = live_matches + raw_matches
 
         # 2. Deduplicate against existing matches for this client
         existing = self.store.list_matches(client_id=client_id, limit=1000)
@@ -485,11 +446,8 @@ class DailySearchRunner:
                 pdf_path = self._generate_cover_letter_for_match(client_id, match_item, params)
                 if pdf_path:
                     match_item["cover_letter_path"] = pdf_path
-                    if auto_apply_authorized:
-                        match_item["status"] = "applied"
-                        auto_applied_count += 1
-                    else:
-                        match_item["status"] = "staged_for_approval"
+                    # Authorization is not proof of delivery. No submission adapter is wired here.
+                    match_item["status"] = "staged_for_approval"
                     cover_letters_created += 1
 
             saved = self.store.save_match(match_item)
@@ -504,7 +462,7 @@ class DailySearchRunner:
         self.store.log_event(
             "SUCCESS",
             "daily_search",
-            f"Completed search for {params['full_name']}: {len(saved_records)} new opportunities found, {cover_letters_created} cover letter(s) generated and {'applied' if auto_apply_authorized else 'staged for approval'}.",
+            f"Completed search for {params['full_name']}: {len(saved_records)} new opportunities found, {cover_letters_created} cover letter(s) generated and staged for approval.",
             client_id,
         )
 
@@ -516,6 +474,8 @@ class DailySearchRunner:
             "new_matches_count": len(saved_records),
             "cover_letters_created": cover_letters_created,
             "auto_applied_count": auto_applied_count,
+            "submission_status": "not_implemented" if auto_apply_authorized else "approval_required",
+            "discovery_mode": "live_and_datasets" if live_enabled else "datasets_only",
             "matches": saved_records,
         }
 

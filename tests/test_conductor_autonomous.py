@@ -43,7 +43,7 @@ class TestJobScoutAutonomousFeatures(unittest.TestCase):
         self.mock_wa_service.send_text_message.return_value = {
             "success": True,
             "provider_message_id": "wamid.test.123",
-            "simulated": True,
+            "simulated": False,
             "status": "sent",
         }
 
@@ -99,21 +99,39 @@ class TestJobScoutAutonomousFeatures(unittest.TestCase):
                 },
             },
         }
-        from services.client_manager import client_manager
-        client_manager.save_client(self.test_client_id, self.sample_profile)
+        self.autofill_dir = self.temp_dir / "autofill"
+        self.autofill_dir.mkdir(parents=True, exist_ok=True)
+        self.client_manager = ClientManager(
+            clients_dir=self.clients_dir,
+            autofill_dir=self.autofill_dir,
+        )
+        self._patches = [
+            patch("services.client_manager.client_manager", self.client_manager),
+            patch("services.conductor_engine.client_manager", self.client_manager),
+            patch("services.daily_search_runner.client_manager", self.client_manager),
+            patch("services.email_reply_monitor.client_manager", self.client_manager),
+            patch("services.conductor_whatsapp_liaison.client_manager", self.client_manager),
+            patch("services.conductor_whatsapp_liaison.conductor_whatsapp_liaison", self.liaison),
+            patch("routes.conductor.conductor_store", self.store),
+            patch("routes.conductor.conductor_engine", self.engine),
+            patch("routes.conductor.email_reply_monitor", self.email_monitor),
+            patch("routes.conductor.conductor_whatsapp_liaison", self.liaison),
+        ]
+        for p in self._patches:
+            p.start()
+
+        self.client_manager.save_client(self.test_client_id, self.sample_profile)
 
     def tearDown(self):
+        for p in reversed(getattr(self, "_patches", [])):
+            try:
+                p.stop()
+            except Exception:
+                pass
         try:
             self.engine.stop()
             self.store.close()
             self.wa_store.close()
-        except Exception:
-            pass
-        try:
-            from services.client_manager import client_manager
-            c_dir = client_manager.clients_dir / self.test_client_id
-            if c_dir.exists():
-                shutil.rmtree(c_dir, ignore_errors=True)
         except Exception:
             pass
         shutil.rmtree(self.temp_dir, ignore_errors=True)
@@ -238,13 +256,12 @@ class TestJobScoutAutonomousFeatures(unittest.TestCase):
 
         # Approve one match via ConductorEngine and verify status + client stats update
         approve_res = self.engine.approve_match(matches[0]["id"])
-        self.assertTrue(approve_res["success"])
+        self.assertFalse(approve_res["success"])
         updated_m = self.store.get_match(matches[0]["id"])
-        self.assertEqual(updated_m["status"], "applied")
+        self.assertEqual(updated_m["status"], "staged_for_approval")
 
-        from services.client_manager import client_manager
-        c_data = client_manager.get_client(self.test_client_id)
-        self.assertEqual(c_data["package"]["confirmed_applications"], 1)
+        c_data = self.client_manager.get_client(self.test_client_id)
+        self.assertEqual(c_data["package"]["confirmed_applications"], 0)
 
     # -------------------------------------------------------------------------
     # 3. Automatic Email Reply Monitoring Tests

@@ -643,6 +643,15 @@
             }
         });
 
+        const btnToggleDossier = document.getElementById("wa-btn-toggle-dossier");
+        const dossierPanel = document.getElementById("wa-dossier-panel");
+        if (btnToggleDossier && dossierPanel) {
+            btnToggleDossier.addEventListener("click", () => {
+                dossierPanel.classList.toggle("open");
+                btnToggleDossier.classList.toggle("active");
+            });
+        }
+
         // Sending Manual Message
         composerForm.addEventListener("submit", async (e) => {
             e.preventDefault();
@@ -964,10 +973,10 @@
             if (btnEmergencyPauseHeader) {
                 if (isEmergencyPaused) {
                     btnEmergencyPauseHeader.classList.add("paused");
-                    btnEmergencyPauseHeader.innerHTML = "▶️ Resume AI (Paused)";
+                    btnEmergencyPauseHeader.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><span>Resume AI (Paused)</span>`;
                 } else {
                     btnEmergencyPauseHeader.classList.remove("paused");
-                    btnEmergencyPauseHeader.innerHTML = "⏸️ Emergency AI Pause";
+                    btnEmergencyPauseHeader.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg><span>Emergency AI Pause</span>`;
                 }
             }
         }
@@ -1300,11 +1309,11 @@
 
         function getModeLabel(mode) {
             switch (mode) {
-                case "AI_ACTIVE": return "🤖 AI Active";
-                case "HUMAN_ACTIVE": return "👤 Human";
-                case "ESCALATED": return "⚠️ Escalated";
-                case "AI_PAUSED": return "⏸️ Paused";
-                case "CLOSED": return "🔒 Closed";
+                case "AI_ACTIVE": return "AI Active";
+                case "HUMAN_ACTIVE": return "Human";
+                case "ESCALATED": return "Escalated";
+                case "AI_PAUSED": return "Paused";
+                case "CLOSED": return "Closed";
                 default: return mode || "Unknown";
             }
         }
@@ -1314,9 +1323,9 @@
                 case "client":
                     return `<span class="wa-sender-tag tag-client">Client</span>`;
                 case "ai":
-                    return `<span class="wa-sender-tag tag-ai">🤖 AI Assistant</span>`;
+                    return `<span class="wa-sender-tag tag-ai">AI Assistant</span>`;
                 case "human":
-                    return `<span class="wa-sender-tag tag-human">👤 Agent</span>`;
+                    return `<span class="wa-sender-tag tag-human">Support Agent</span>`;
                 default:
                     return `<span class="wa-sender-tag">${escapeHtml(type)}</span>`;
             }

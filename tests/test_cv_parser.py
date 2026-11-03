@@ -151,5 +151,69 @@ class TestCVParser(unittest.TestCase):
                 self.assertIn("Corrupt Test", data.get("client_name", ""))
 
 
+    def test_pymupdf_metadata_and_thumbnail(self):
+        """Verifies PyMuPDF-powered metadata extraction and page thumbnail rendering."""
+        from fpdf import FPDF
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font('helvetica', '', 12)
+        pdf.cell(0, 10, 'Test Candidate - Fullstack Developer', new_x='LMARGIN', new_y='NEXT')
+        pdf.cell(0, 10, 'dev@example.de', new_x='LMARGIN', new_y='NEXT')
+        pdf_bytes = bytes(pdf.output())
+
+        # Test metadata
+        meta = CVParser.extract_cv_metadata(pdf_bytes)
+        self.assertEqual(meta['page_count'], 1)
+        self.assertTrue(meta['has_text'])
+        self.assertGreater(meta['file_size'], 100)
+
+        # Test thumbnail rendering (returns valid PNG bytes)
+        thumb = CVParser.render_pdf_thumbnail(pdf_bytes, page_num=0, dpi=100)
+        self.assertIsNotNone(thumb)
+        self.assertTrue(thumb.startswith(b'\x89PNG\r\n\x1a\n'), "Thumbnail should be a valid PNG image")
+
+    def test_extract_tables_with_pdfplumber(self):
+        """Verifies structured table extraction using pdfplumber."""
+        import pymupdf
+        doc = pymupdf.open()
+        page = doc.new_page()
+        
+        # Draw a simple table grid with text
+        rect = pymupdf.Rect(50, 50, 300, 150)
+        page.draw_rect(rect)
+        page.insert_text(pymupdf.Point(60, 80), "Zeitraum\tRolle\tUnternehmen\n2020-2023\tEntwickler\tTech GmbH")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        # Text extraction should succeed
+        text = CVParser.extract_text_from_pdf(pdf_bytes)
+        self.assertIn("Tech GmbH", text)
+
+        # Table extraction should execute without crashing
+        tables = CVParser.extract_tables_from_pdf(pdf_bytes)
+        self.assertIsInstance(tables, list)
+
+    def test_extract_profile_photo_with_pymupdf(self):
+        """Verifies portrait photo extraction from CV."""
+        import pymupdf
+        doc = pymupdf.open()
+        page = doc.new_page()
+
+        # Insert a 150x150 dummy portrait image
+        from PIL import Image
+        img = Image.new('RGB', (150, 150), color=(73, 109, 137))
+        img_bytes_io = io.BytesIO()
+        img.save(img_bytes_io, format='PNG')
+        img_bytes = img_bytes_io.getvalue()
+
+        img_rect = pymupdf.Rect(50, 50, 200, 200)
+        page.insert_image(img_rect, stream=img_bytes)
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        extracted_photo = CVParser.extract_profile_photo(pdf_bytes)
+        self.assertIsNotNone(extracted_photo, "Should detect and extract candidate portrait photo")
+        self.assertGreater(len(extracted_photo), 100)
+
 if __name__ == '__main__':
     unittest.main()

@@ -746,6 +746,32 @@ def upload_and_parse_cv():
             return jsonify({"success": False, "error": "Could not extract text from PDF"}), 400
 
         parsed_data = CVParser.parse_cv_text(extracted_text)
+
+        # Extract metadata and candidate portrait photo if present
+        metadata = CVParser.extract_cv_metadata(pdf_bytes)
+        avatar_url = None
+        photo_bytes = CVParser.extract_profile_photo(pdf_bytes)
+        if photo_bytes:
+            avatar_dir = Path("static/uploads/avatars")
+            avatar_dir.mkdir(parents=True, exist_ok=True)
+            avatar_file = avatar_dir / f"{clean_id}_avatar.png"
+            with open(avatar_file, "wb") as f:
+                f.write(photo_bytes)
+            avatar_url = f"/static/uploads/avatars/{clean_id}_avatar.png"
+            parsed_data.setdefault("personal", {})["avatar_url"] = avatar_url
+
+        # Render first-page thumbnail preview
+        thumb_url = None
+        thumb_bytes = CVParser.render_pdf_thumbnail(pdf_bytes, page_num=0)
+        if thumb_bytes:
+            thumb_dir = Path("static/uploads/previews")
+            thumb_dir.mkdir(parents=True, exist_ok=True)
+            thumb_file = thumb_dir / f"{clean_id}_cv_thumb.png"
+            with open(thumb_file, "wb") as f:
+                f.write(thumb_bytes)
+            thumb_url = f"/static/uploads/previews/{clean_id}_cv_thumb.png"
+
+        tables = CVParser.extract_tables_from_pdf(pdf_bytes)
         CVParser.update_profile_from_cv(profile_path, parsed_data)
 
         return jsonify({
@@ -753,6 +779,10 @@ def upload_and_parse_cv():
             "profile_id": clean_id,
             "parsed_data": parsed_data,
             "skills_count": len(parsed_data["skills"]["technologies_from_cv"]),
+            "avatar_url": avatar_url,
+            "thumbnail_url": thumb_url,
+            "page_count": metadata.get("page_count", 1),
+            "tables_found": len(tables),
             "message": f"Successfully parsed and updated profile for {clean_id}"
         }), 200
     except Exception as exc:

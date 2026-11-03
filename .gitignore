@@ -33,6 +33,7 @@ debug_*.png
 debug_*.html
 captcha_attempt_*.png
 static/captcha_latest.png
+static/uploads/
 data/
 search_cache.json
 email_campaigns.json

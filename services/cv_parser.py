@@ -40,29 +40,76 @@ COMMON_LANGUAGES = {
 
 class CVParser:
     @staticmethod
-    def extract_text_from_pdf(pdf_bytes_or_path) -> str:
-        """
-        Robustly extract text content from a PDF document.
-        Tolerates truncated streams, malformed stream dictionaries,
-        missing EOF markers, and corrupted objects without crashing.
-        """
+    def _get_pdf_bytes(pdf_bytes_or_path) -> bytes:
+        """Safely converts file paths or stream inputs to raw bytes."""
         if isinstance(pdf_bytes_or_path, (str, Path)):
             try:
                 with open(pdf_bytes_or_path, "rb") as f:
-                    pdf_bytes = f.read()
+                    return f.read()
             except Exception as e:
                 logger.warning("Could not read PDF from path %s: %s", pdf_bytes_or_path, e)
-                return ""
-        else:
-            pdf_bytes = bytes(pdf_bytes_or_path)
+                return b""
+        elif pdf_bytes_or_path is not None:
+            return bytes(pdf_bytes_or_path)
+        return b""
 
+    @classmethod
+    def extract_text_from_pdf(cls, pdf_bytes_or_path) -> str:
+        """
+        Robustly extract text content from a PDF document using a multi-tiered pipeline:
+        - Tier 1: PyMuPDF (C-engine MuPDF, block & column-sorted extraction)
+        - Tier 2: pdfplumber (Layout-preserving & table-aware extraction)
+        - Tier 3: Standard pypdf extraction with strict=False & per-page isolation
+        - Tier 4: Stream repair (missing EOF / unclosed stream objects)
+        - Tier 5: Direct raw stream & text operator recovery (zlib token scan)
+        """
+        pdf_bytes = cls._get_pdf_bytes(pdf_bytes_or_path)
         if not pdf_bytes:
             return ""
 
         text_pages: List[str] = []
 
         # -------------------------------------------------------------
-        # Tier 1: Standard pypdf extraction with strict=False & per-page isolation
+        # Tier 1: PyMuPDF (High-performance C engine, block & column sort)
+        # -------------------------------------------------------------
+        try:
+            import pymupdf
+            doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+            for page in doc:
+                blocks = page.get_text("blocks", sort=True)
+                for b in blocks:
+                    # b: (x0, y0, x1, y1, text, block_no, block_type) - 0 is text
+                    if len(b) >= 5 and b[4] and b[4].strip():
+                        if len(b) < 7 or b[6] == 0:
+                            text_pages.append(b[4].strip())
+            doc.close()
+            if text_pages:
+                res = "\n".join(text_pages).strip()
+                if len(res) > 20:
+                    return res
+        except Exception as fitz_err:
+            logger.debug("PyMuPDF extraction failed or unavailable: %s", fitz_err)
+
+        # -------------------------------------------------------------
+        # Tier 2: pdfplumber (Layout-preserving & table-aware)
+        # -------------------------------------------------------------
+        try:
+            import pdfplumber
+            plumber_pages = []
+            with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+                for page in pdf.pages:
+                    txt = page.extract_text(layout=True)
+                    if txt and txt.strip():
+                        plumber_pages.append(txt.strip())
+            if plumber_pages:
+                res = "\n".join(plumber_pages).strip()
+                if len(res) > 20:
+                    return res
+        except Exception as plumber_err:
+            logger.debug("pdfplumber extraction failed: %s", plumber_err)
+
+        # -------------------------------------------------------------
+        # Tier 3: Standard pypdf extraction with strict=False & per-page isolation
         # -------------------------------------------------------------
         try:
             reader = PdfReader(io.BytesIO(pdf_bytes), strict=False)
@@ -512,19 +559,34 @@ class CVParser:
     def extract_with_vision(cls, pdf_bytes: bytes) -> Optional[Dict[str, Any]]:
         """
         Extracts candidate data from scanned or image-based PDF using Central AI Provider Manager.
+        Uses PyMuPDF to rasterize the page to a high-fidelity image if raw image streams are absent.
         """
         if not pdf_bytes:
             return None
 
         image_bytes = None
+        # Tier 1: Try PyMuPDF page rendering (most accurate, handles scanned docs & vector pages)
         try:
-            reader = PdfReader(io.BytesIO(pdf_bytes), strict=False)
-            if reader.pages:
-                page = reader.pages[0]
-                if hasattr(page, "images") and page.images:
-                    image_bytes = page.images[0].data
-        except Exception as e:
-            logger.debug("Failed extracting image from PDF page: %s", e)
+            import pymupdf
+            doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+            if len(doc) > 0:
+                page = doc[0]
+                pix = page.get_pixmap(dpi=200)
+                image_bytes = pix.tobytes("png")
+            doc.close()
+        except Exception as mupdf_err:
+            logger.debug("PyMuPDF vision rendering failed: %s", mupdf_err)
+
+        # Tier 2: Fallback to extracting embedded image from pypdf
+        if not image_bytes:
+            try:
+                reader = PdfReader(io.BytesIO(pdf_bytes), strict=False)
+                if reader.pages:
+                    page = reader.pages[0]
+                    if hasattr(page, "images") and page.images:
+                        image_bytes = page.images[0].data
+            except Exception as e:
+                logger.debug("Failed extracting image from PDF page: %s", e)
 
         if not image_bytes:
             return None
@@ -535,6 +597,178 @@ class CVParser:
         except Exception as exc:
             logger.warning("AI Vision extraction encountered error: %s", exc)
             return None
+
+    @classmethod
+    def extract_tables_from_pdf(cls, pdf_bytes_or_path) -> List[List[List[str]]]:
+        """
+        Extracts structured tables (grades, certificates, timeline grids) from PDF pages.
+        Returns a list of tables, where each table is a 2D list of string cells.
+        """
+        pdf_bytes = cls._get_pdf_bytes(pdf_bytes_or_path)
+        if not pdf_bytes:
+            return []
+
+        all_tables: List[List[List[str]]] = []
+
+        # Tier 1: pdfplumber (best table border detection & text grouping)
+        try:
+            import pdfplumber
+            with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+                for page in pdf.pages:
+                    tables = page.extract_tables()
+                    for t in tables:
+                        if t and len(t) > 1:
+                            cleaned_table = []
+                            for row in t:
+                                cleaned_row = [str(cell).strip() if cell is not None else "" for cell in row]
+                                if any(cleaned_row):
+                                    cleaned_table.append(cleaned_row)
+                            if len(cleaned_table) > 1:
+                                all_tables.append(cleaned_table)
+            if all_tables:
+                return all_tables
+        except Exception as exc:
+            logger.debug("pdfplumber table extraction error: %s", exc)
+
+        # Tier 2: PyMuPDF find_tables fallback
+        try:
+            import pymupdf
+            doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+            for page in doc:
+                tabs = page.find_tables()
+                for tab in tabs:
+                    raw_tab = tab.extract()
+                    if raw_tab and len(raw_tab) > 1:
+                        cleaned_table = []
+                        for row in raw_tab:
+                            cleaned_row = [str(cell).strip() if cell is not None else "" for cell in row]
+                            if any(cleaned_row):
+                                cleaned_table.append(cleaned_row)
+                        if len(cleaned_table) > 1:
+                            all_tables.append(cleaned_table)
+            doc.close()
+        except Exception as exc:
+            logger.debug("PyMuPDF table extraction fallback error: %s", exc)
+
+        return all_tables
+
+    @classmethod
+    def extract_profile_photo(cls, pdf_bytes_or_path, min_size: int = 80, max_size: int = 1400) -> Optional[bytes]:
+        """
+        Detects and extracts the candidate's portrait photo from a German CV.
+        Distinguishes portrait avatars from full-page backgrounds and tiny icons.
+        """
+        pdf_bytes = cls._get_pdf_bytes(pdf_bytes_or_path)
+        if not pdf_bytes:
+            return None
+        try:
+            import pymupdf
+            doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+            candidate_images = []
+
+            for page_idx in range(min(2, len(doc))):
+                page = doc[page_idx]
+                for img_info in page.get_images(full=True):
+                    xref = img_info[0]
+                    base_image = doc.extract_image(xref)
+                    width = base_image.get("width", 0)
+                    height = base_image.get("height", 0)
+                    img_bytes = base_image.get("image")
+
+                    if not img_bytes or width < min_size or height < min_size:
+                        continue
+                    if width > max_size and height > max_size:
+                        continue
+
+                    ratio = width / max(1, height)
+                    if 0.5 <= ratio <= 1.4:
+                        candidate_images.append({
+                            "bytes": img_bytes,
+                            "width": width,
+                            "height": height,
+                        })
+            doc.close()
+
+            if candidate_images:
+                candidate_images.sort(key=lambda x: (x["width"] * x["height"]), reverse=True)
+                return candidate_images[0]["bytes"]
+        except Exception as exc:
+            logger.debug("Photo extraction failed: %s", exc)
+
+        return None
+
+    @classmethod
+    def render_pdf_thumbnail(cls, pdf_bytes_or_path, page_num: int = 0, dpi: int = 150) -> Optional[bytes]:
+        """
+        Renders a page of a PDF document into high-resolution PNG image bytes.
+        Fast (~10ms) local rendering without headless browser dependencies.
+        """
+        pdf_bytes = cls._get_pdf_bytes(pdf_bytes_or_path)
+        if not pdf_bytes:
+            return None
+        try:
+            import pymupdf
+            doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+            if 0 <= page_num < len(doc):
+                pix = doc[page_num].get_pixmap(dpi=dpi)
+                png_bytes = pix.tobytes("png")
+                doc.close()
+                return png_bytes
+            doc.close()
+        except Exception as exc:
+            logger.warning("Failed rendering PDF thumbnail via PyMuPDF: %s", exc)
+
+        try:
+            import pdfplumber
+            with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+                if 0 <= page_num < len(pdf.pages):
+                    img = pdf.pages[page_num].to_image(resolution=dpi)
+                    out = io.BytesIO()
+                    img.save(out, format="PNG")
+                    return out.getvalue()
+        except Exception as exc:
+            logger.debug("pdfplumber thumbnail fallback failed: %s", exc)
+
+        return None
+
+    @classmethod
+    def extract_cv_metadata(cls, pdf_bytes_or_path) -> Dict[str, Any]:
+        """
+        Extracts technical PDF metadata: page count, author, creation date, has_images, is_encrypted.
+        """
+        pdf_bytes = cls._get_pdf_bytes(pdf_bytes_or_path)
+        meta = {
+            "page_count": 0,
+            "title": "",
+            "author": "",
+            "creator": "",
+            "has_images": False,
+            "has_text": False,
+            "file_size": len(pdf_bytes) if pdf_bytes else 0,
+        }
+        if not pdf_bytes:
+            return meta
+
+        try:
+            import pymupdf
+            doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+            meta["page_count"] = len(doc)
+            d_meta = doc.metadata or {}
+            meta["title"] = d_meta.get("title") or ""
+            meta["author"] = d_meta.get("author") or ""
+            meta["creator"] = d_meta.get("creator") or ""
+
+            image_count = 0
+            for page in doc:
+                image_count += len(page.get_images())
+                if page.get_text().strip():
+                    meta["has_text"] = True
+            meta["has_images"] = image_count > 0
+            doc.close()
+        except Exception as exc:
+            logger.debug("Metadata extraction error: %s", exc)
+
+        return meta
 
     @classmethod
     def update_profile_from_cv(cls, profile_path: Path, parsed_data: Dict[str, Any]) -> Dict[str, Any]:

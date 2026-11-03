@@ -1,6 +1,6 @@
 /**
  * JobScout Conductor — Central Autonomous Orchestration Dashboard
- * Redesigned Modern SaaS Control Center (Dark Theme)
+ * Redesigned Modern SaaS Control Center (Polished Linear / Stripe Style)
  * Manages client automation toggles, daily search cycles, staged application approvals,
  * recruitment email inbox monitoring, WhatsApp candidate updates, and emergency stop.
  */
@@ -124,126 +124,103 @@
 
             return `
                 <div class="cond-dashboard-container">
-                    <!-- Compact Top Header -->
+                    <!-- Clean Header matching JobScout SaaS standard -->
                     <header class="cond-header">
-                        <div class="cond-header-main">
+                        <div class="cond-header-top">
                             <div class="cond-title-area">
-                                <div class="cond-title-row">
-                                    <span class="cond-worker-badge ${badgeClass}">
-                                        <span class="cond-pulse-dot"></span>
-                                        <span>${badgeLabel}</span>
-                                    </span>
-                                    <h1 class="cond-title">Conductor Autopilot</h1>
-                                </div>
+                                <span class="cond-breadcrumb">Management • Autonomous Orchestration</span>
+                                <h1 class="cond-title">Conductor Autopilot</h1>
                                 <p class="cond-subtitle">Central autonomous engine orchestrating client discovery, cover letters, IMAP reply classification, and WhatsApp updates.</p>
                             </div>
-                            <div class="cond-header-actions">
-                                <div class="cond-action-group">
-                                    <button type="button" class="cond-btn cond-btn-secondary" data-cond-action="refresh" title="Refresh all live status and metrics">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-                                        <span>Refresh</span>
-                                    </button>
-                                    <button type="button" class="cond-btn cond-btn-secondary" data-cond-action="sync-applications" title="Synchronize paid applications from Supabase into Conductor">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
-                                        <span>Sync Applications</span>
-                                    </button>
-                                    <button type="button" class="cond-btn cond-btn-secondary" data-cond-action="toggle-engine" title="Start or pause background scheduler daemon">
-                                        ${isRunning
-                    ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg><span>Pause Daemon</span>`
-                    : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><span>Start Daemon</span>`
-                }
-                                    </button>
-                                    <button type="button" class="cond-btn cond-btn-secondary" data-cond-action="check-inbox" ${emergencyStop ? "disabled" : ""} title="Check IMAP email inbox for recruiter replies">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-                                        <span>Check Inbox</span>
-                                    </button>
-                                    <button type="button" class="cond-btn cond-btn-primary" data-cond-action="run-global-cycle" ${emergencyStop ? "disabled" : ""} title="Run autonomous daily discovery & cover letter generation across all clients">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-                                        <span>Run Global Cycle</span>
-                                    </button>
-                                </div>
-                                <div class="cond-action-sep"></div>
-                                <div class="cond-action-emergency">
-                                    <button
-                                        type="button"
-                                        class="cond-btn ${emergencyStop ? "cond-btn-resume" : "cond-btn-danger"}"
-                                        data-cond-action="emergency-stop"
-                                        data-enabled="${emergencyStop ? "false" : "true"}"
-                                        title="${emergencyStop ? "Resume all paused automated tasks and operations" : "Immediately halt all automated tasks, scraping, and applications"}"
-                                    >
-                                        ${emergencyStop
-                    ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg><span>Resume Operations</span>`
-                    : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg><span>Emergency Stop</span>`
-                }
-                                    </button>
-                                </div>
+                            <div class="cond-header-status-area">
+                                <span class="cond-worker-badge ${badgeClass}">
+                                    <span class="cond-pulse-dot"></span>
+                                    <span>${badgeLabel}</span>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="cond-header-actions-bar">
+                            <div class="cond-action-group">
+                                <button type="button" class="cond-btn cond-btn-secondary" data-cond-action="refresh" title="Refresh all live status and metrics">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                                    <span>Refresh</span>
+                                </button>
+                                <button type="button" class="cond-btn cond-btn-secondary" data-cond-action="sync-applications" title="Synchronize paid applications from Supabase into Conductor">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                                    <span>Sync Applications</span>
+                                </button>
+                                <button type="button" class="cond-btn cond-btn-secondary" data-cond-action="toggle-engine" title="Start or pause background scheduler daemon">
+                                    ${isRunning
+                                        ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg><span>Pause Daemon</span>`
+                                        : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><span>Start Daemon</span>`
+                                    }
+                                </button>
+                                <button type="button" class="cond-btn cond-btn-secondary" data-cond-action="check-inbox" ${emergencyStop ? "disabled" : ""} title="Check IMAP email inbox for recruiter replies">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                                    <span>Check Inbox</span>
+                                </button>
+                            </div>
+                            <div class="cond-action-group-right">
+                                <button type="button" class="cond-btn cond-btn-primary" data-cond-action="run-global-cycle" ${emergencyStop ? "disabled" : ""} title="Run autonomous daily discovery & cover letter generation across all clients">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                                    <span>Run Global Cycle</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    class="cond-btn ${emergencyStop ? "cond-btn-resume" : "cond-btn-danger"}"
+                                    data-cond-action="emergency-stop"
+                                    data-enabled="${emergencyStop ? "false" : "true"}"
+                                    title="${emergencyStop ? "Resume all paused automated tasks and operations" : "Immediately halt all automated tasks, scraping, and applications"}"
+                                >
+                                    ${emergencyStop
+                                        ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg><span>Resume Operations</span>`
+                                        : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg><span>Emergency Stop</span>`
+                                    }
+                                </button>
                             </div>
                         </div>
                     </header>
 
                     <div id="conductor-toast-banner" class="cond-toast" hidden></div>
 
-                    <!-- Modern KPI Overview Cards -->
+                    <!-- Clean Metric Cards Grid (Matching Datasets Style) -->
                     <div class="cond-kpi-grid">
                         <div class="cond-kpi-card">
-                            <div class="cond-kpi-icon cond-kpi-icon-blue">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                            </div>
-                            <div class="cond-kpi-body">
-                                <span class="cond-kpi-lbl">Managed Clients</span>
-                                <div class="cond-kpi-val">${metrics.total_managed_clients || 0}</div>
-                                <span class="cond-kpi-sub">Linked candidate dossiers</span>
-                            </div>
+                            <span class="cond-kpi-lbl">MANAGED CLIENTS</span>
+                            <div class="cond-kpi-val">${metrics.total_managed_clients || 0}</div>
+                            <span class="cond-kpi-sub">Linked candidate dossiers</span>
                         </div>
                         <div class="cond-kpi-card">
-                            <div class="cond-kpi-icon cond-kpi-icon-indigo">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
-                            </div>
-                            <div class="cond-kpi-body">
-                                <span class="cond-kpi-lbl">Staged for Approval</span>
-                                <div class="cond-kpi-val">${metrics.staged_for_approval || 0}</div>
-                                <span class="cond-kpi-sub">Cover letters ready</span>
-                            </div>
+                            <span class="cond-kpi-lbl">STAGED FOR APPROVAL</span>
+                            <div class="cond-kpi-val">${metrics.staged_for_approval || 0}</div>
+                            <span class="cond-kpi-sub">Cover letters ready</span>
                         </div>
                         <div class="cond-kpi-card">
-                            <div class="cond-kpi-icon cond-kpi-icon-green">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
-                            </div>
-                            <div class="cond-kpi-body">
-                                <span class="cond-kpi-lbl">Authorized &amp; Applied</span>
-                                <div class="cond-kpi-val">${metrics.applied_total || 0}</div>
-                                <span class="cond-kpi-sub">Submitted applications</span>
-                            </div>
+                            <span class="cond-kpi-lbl">AUTHORIZED &amp; APPLIED</span>
+                            <div class="cond-kpi-val">${metrics.applied_total || 0}</div>
+                            <span class="cond-kpi-sub">Submitted applications</span>
                         </div>
                         <div class="cond-kpi-card">
-                            <div class="cond-kpi-icon cond-kpi-icon-amber">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
-                            </div>
-                            <div class="cond-kpi-body">
-                                <span class="cond-kpi-lbl">Interviews Detected</span>
-                                <div class="cond-kpi-val">${metrics.interviews_total || 0}</div>
-                                <span class="cond-kpi-sub">Via AI Email Monitor</span>
-                            </div>
+                            <span class="cond-kpi-lbl">INTERVIEWS DETECTED</span>
+                            <div class="cond-kpi-val">${metrics.interviews_total || 0}</div>
+                            <span class="cond-kpi-sub">Via AI Email Monitor</span>
                         </div>
                     </div>
 
-                    <!-- Navigation Tabs -->
+                    <!-- Navigation Filter Pills (Matching Image 2 Style) -->
                     <div class="cond-tabs-nav" role="tablist">
-                        <button type="button" class="cond-tab-btn ${activeTab === "clients" ? "is-active" : ""}" data-cond-tab="clients">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
-                            <span>Client Automation (${clients.length})</span>
+                        <button type="button" class="cond-tab-pill ${activeTab === "clients" ? "is-active" : ""}" data-cond-tab="clients">
+                            Client Automation (${clients.length})
                         </button>
-                        <button type="button" class="cond-tab-btn ${activeTab === "matches" ? "is-active" : ""}" data-cond-tab="matches">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-                            <span>Pipeline &amp; Approvals (${state.matches.length})</span>
+                        <button type="button" class="cond-tab-pill ${activeTab === "matches" ? "is-active" : ""}" data-cond-tab="matches">
+                            Pipeline &amp; Approvals (${state.matches.length})
                         </button>
-                        <button type="button" class="cond-tab-btn ${activeTab === "inbox" ? "is-active" : ""}" data-cond-tab="inbox">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
-                            <span>Email Reply Monitor (${inboxLogs.length})</span>
+                        <button type="button" class="cond-tab-pill ${activeTab === "inbox" ? "is-active" : ""}" data-cond-tab="inbox">
+                            Email Reply Monitor (${inboxLogs.length})
                         </button>
-                        <button type="button" class="cond-tab-btn ${activeTab === "logs" ? "is-active" : ""}" data-cond-tab="logs">
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                            <span>Queue &amp; Settings</span>
+                        <button type="button" class="cond-tab-pill ${activeTab === "logs" ? "is-active" : ""}" data-cond-tab="logs">
+                            Queue &amp; Settings
                         </button>
                     </div>
 
@@ -322,7 +299,7 @@
                 const appliedCount = stats.applied || 0;
                 const interviewCount = stats.interview || 0;
                 const oppType = c.opportunity_type || "Ausbildung";
-                const oppTypeClass = oppType.toLowerCase().replace(/[^a-z0-9]/g, "-");
+                const isAusbildung = oppType.toLowerCase() === "ausbildung";
 
                 return `
                     <tr class="cond-client-row">
@@ -335,7 +312,7 @@
                                 <div class="cond-cand-meta">
                                     <div class="cond-cand-name-row">
                                         <span class="cond-cand-name">${escapeHtml(c.name || c.id)}</span>
-                                        <span class="cond-type-pill cond-type-${oppTypeClass}">${escapeHtml(oppType)}</span>
+                                        <span class="cond-badge-opp ${isAusbildung ? "is-ausbildung" : "is-job"}">${escapeHtml(oppType)}</span>
                                     </div>
                                     <div class="cond-cand-role">
                                         <span>${escapeHtml(c.target_profession || c.title || "Fachinformatiker")}</span>
@@ -373,7 +350,7 @@
                                     <span class="cond-quota-rem">(${quota.remaining || 0} left)</span>
                                 </div>
                                 <div class="cond-quota-bar-track">
-                                    <div class="cond-quota-bar-fill" style="width:${quota.percent_used || 0}%;"></div>
+                                    <div class="cond-quota-bar-fill" style="width:${Math.min(100, quota.percent_used || 0)}%;"></div>
                                 </div>
                             </div>
                         </td>
@@ -401,29 +378,25 @@
                             <div class="cond-switches-grid">
                                 <label class="cond-switch-wrap" title="Auto-Search: Automatically discover daily matching positions">
                                     <input type="checkbox" class="cond-switch-input" data-client-toggle="auto_search" data-client-id="${cid}" ${auto.auto_search ? "checked" : ""}>
-                                    <span class="cond-switch-track"></span>
                                     <span class="cond-switch-lbl">Search</span>
                                 </label>
                                 <label class="cond-switch-wrap" title="Cover Letter: Automatically generate tailored cover letters">
                                     <input type="checkbox" class="cond-switch-input" data-client-toggle="auto_cover_letter" data-client-id="${cid}" ${auto.auto_cover_letter ? "checked" : ""}>
-                                    <span class="cond-switch-track"></span>
                                     <span class="cond-switch-lbl">Cover Letter</span>
                                 </label>
                                 <label class="cond-switch-wrap" title="Auto-Apply Auth: Automatically submit without requiring manual staging">
                                     <input type="checkbox" class="cond-switch-input" data-client-toggle="auto_apply" data-client-id="${cid}" ${auto.auto_apply ? "checked" : ""}>
-                                    <span class="cond-switch-track"></span>
                                     <span class="cond-switch-lbl">Auto-Apply</span>
                                 </label>
                                 <label class="cond-switch-wrap" title="WhatsApp Alerts: Send automated candidate updates via WhatsApp">
                                     <input type="checkbox" class="cond-switch-input" data-client-toggle="auto_notify_whatsapp" data-client-id="${cid}" ${auto.auto_notify_whatsapp ? "checked" : ""}>
-                                    <span class="cond-switch-track"></span>
                                     <span class="cond-switch-lbl">WhatsApp</span>
                                 </label>
                             </div>
                         </td>
 
                         <!-- 6. Daily Limit -->
-                        <td class="cond-td-limit" style="text-align:center;">
+                        <td class="cond-td-limit">
                             <input
                                 type="number"
                                 class="cond-limit-input"
@@ -436,7 +409,7 @@
                         </td>
 
                         <!-- 7. Actions -->
-                        <td class="cond-td-actions" style="text-align:right;">
+                        <td class="cond-td-actions">
                             <div class="cond-actions-wrap">
                                 <button
                                     type="button"
@@ -530,11 +503,11 @@
                                     <div class="cond-drawer-card">
                                         <div class="cond-drawer-card-title">
                                             <span>🎯 Opportunity &amp; Target</span>
-                                            <span class="cond-type-pill cond-type-${oppTypeClass}">${escapeHtml(oppType)}</span>
+                                            <span class="cond-badge-opp ${isAusbildung ? "is-ausbildung" : "is-job"}">${escapeHtml(oppType)}</span>
                                         </div>
                                         <div class="cond-info-row">
                                             <span class="cond-info-label">Target Role:</span>
-                                            <span class="cond-info-value" style="color:var(--accent-secondary);">${escapeHtml(c.target_profession || c.title || "—")}</span>
+                                            <span class="cond-info-value" style="color:#4f46e5; font-weight:600;">${escapeHtml(c.target_profession || c.title || "—")}</span>
                                         </div>
                                         <div class="cond-info-row">
                                             <span class="cond-info-label">Target Cities:</span>
@@ -572,7 +545,7 @@
                                         </div>
                                         <div class="cond-quota-progress-wrap">
                                             <div class="cond-quota-bar-track">
-                                                <div class="cond-quota-bar-fill" style="width:${quota.percent_used || 0}%;"></div>
+                                                <div class="cond-quota-bar-fill" style="width:${Math.min(100, quota.percent_used || 0)}%;"></div>
                                             </div>
                                         </div>
                                         <div class="cond-info-row" style="margin-top:6px;">
@@ -581,7 +554,7 @@
                                         </div>
                                         <div class="cond-info-row">
                                             <span class="cond-info-label">Autopilot Ready:</span>
-                                            <span class="cond-info-value" style="color:${readiness.is_ready_for_automation ? 'var(--status-success)' : 'var(--status-warning)'};">
+                                            <span class="cond-info-value" style="color:${readiness.is_ready_for_automation ? '#059669' : '#d97706'}; font-weight:600;">
                                                 ${readiness.is_ready_for_automation ? "✓ Ready for cycle execution" : `⚠ Blocked: ${(readiness.blocking_reasons || []).join(", ")}`}
                                             </span>
                                         </div>
@@ -610,7 +583,7 @@
                                         <div class="cond-drawer-sub-row">
                                             <div class="cond-info-row">
                                                 <span class="cond-info-label">Dataset Leads:</span>
-                                                <span class="cond-info-value" style="color:${dataset.status === 'available' ? 'var(--status-success)' : 'var(--status-warning)'};">
+                                                <span class="cond-info-value" style="color:${dataset.status === 'available' ? '#059669' : '#d97706'}; font-weight:600;">
                                                     ${dataset.status === 'available' ? `✓ ${dataset.available_listings} leads (${dataset.matched_files_count} dataset file(s))` : '⚠ No matching dataset (Scrape required)'}
                                                 </span>
                                             </div>
@@ -628,13 +601,13 @@
                     <!-- Client Table Toolbar -->
                     <div class="cond-card-header">
                         <div class="cond-card-heading">
-                            <h3>Managed Clients &amp; Orchestration Controls</h3>
+                            <h3 class="cond-card-title">Managed Clients &amp; Orchestration Controls</h3>
                             <p class="cond-card-sub">Control daily discovery, automated cover letter generation, submission authorization, and WhatsApp liaisons per client.</p>
                         </div>
                         <!-- Search and Filter Bar -->
                         <div class="cond-filter-toolbar">
                             <div class="cond-search-wrap">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                                 <input
                                     type="text"
                                     id="cond-client-search"
@@ -659,13 +632,13 @@
                         <table class="cond-table">
                             <thead>
                                 <tr>
-                                    <th style="min-width:210px;">Candidate &amp; Target Opportunity</th>
+                                    <th style="min-width:220px;">Candidate &amp; Target Opportunity</th>
                                     <th style="min-width:110px;">Worker Status</th>
-                                    <th style="min-width:155px;">Package &amp; Quota</th>
-                                    <th style="min-width:115px;">Pipeline</th>
-                                    <th style="min-width:185px;">Automation Switches</th>
-                                    <th style="min-width:75px; text-align:center;">Daily Limit</th>
-                                    <th style="min-width:210px; text-align:right;">Actions</th>
+                                    <th style="min-width:160px;">Package &amp; Quota</th>
+                                    <th style="min-width:120px;">Pipeline</th>
+                                    <th style="min-width:180px;">Automation Switches</th>
+                                    <th style="min-width:80px; text-align:center;">Daily Limit</th>
+                                    <th style="min-width:220px; text-align:right;">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -703,20 +676,20 @@
                           <tr>
                               <td><code class="cond-code">${escapeHtml(m.client_id)}</code></td>
                               <td>
-                                  <div style="font-weight:600; color:var(--text-primary);">${escapeHtml(m.job_title)}</div>
-                                  <div style="font-size:11.5px; color:var(--text-secondary);">Source: ${escapeHtml(m.source || "dataset")}</div>
+                                  <div style="font-weight:600; color:#0f172a;">${escapeHtml(m.job_title)}</div>
+                                  <div style="font-size:11.5px; color:#64748b;">Source: ${escapeHtml(m.source || "dataset")}</div>
                               </td>
                               <td>
-                                  <div style="color:var(--text-primary); font-weight:500;">${escapeHtml(m.company)}</div>
-                                  <div style="font-size:11.5px; color:var(--text-secondary);">${escapeHtml(m.location || "")} ${m.email ? "• " + escapeHtml(m.email) : ""}</div>
+                                  <div style="color:#0f172a; font-weight:500;">${escapeHtml(m.company)}</div>
+                                  <div style="font-size:11.5px; color:#64748b;">${escapeHtml(m.location || "")} ${m.email ? "• " + escapeHtml(m.email) : ""}</div>
                               </td>
-                              <td><strong style="color:var(--accent-secondary);">${Math.round(Number(m.score || 0.85) * 100)}%</strong></td>
-                              <td>${hasPdf ? `<span style="color:var(--status-success); font-size:12px; font-weight:600;">✓ PDF Ready</span>` : `<span style="color:var(--text-muted); font-size:12px;">—</span>`}</td>
+                              <td><strong style="color:#4f46e5;">${Math.round(Number(m.score || 0.85) * 100)}%</strong></td>
+                              <td>${hasPdf ? `<span style="color:#059669; font-size:12px; font-weight:600;">✓ PDF Ready</span>` : `<span style="color:#94a3b8; font-size:12px;">—</span>`}</td>
                               <td>${statusBadge}</td>
                               <td style="text-align:right;">
                                   ${status === "staged_for_approval" || status === "discovered"
                             ? `<button type="button" class="cond-btn cond-btn-sm cond-btn-primary" data-cond-action="approve-match" data-match-id="${mid}">✓ Authorize &amp; Apply</button>`
-                            : `<span style="font-size:11.5px; color:var(--text-muted);">Updated ${formatIsoTime(m.updated_at)}</span>`
+                            : `<span style="font-size:11.5px; color:#94a3b8;">Updated ${formatIsoTime(m.updated_at)}</span>`
                         }
                               </td>
                           </tr>
@@ -728,7 +701,7 @@
                 <div class="cond-card">
                     <div class="cond-card-header">
                         <div class="cond-card-heading">
-                            <h3>Discovered Opportunities &amp; Authorization Queue</h3>
+                            <h3 class="cond-card-title">Discovered Opportunities &amp; Authorization Queue</h3>
                             <p class="cond-card-sub">Review generated cover letters and authorize staged applications per client.</p>
                         </div>
                         <div class="cond-filter-toolbar">
@@ -781,10 +754,10 @@
 
                     return `
                           <tr>
-                              <td style="font-size:12px; color:var(--text-secondary);">${formatIsoTime(item.received_at)}</td>
+                              <td style="font-size:12px; color:#64748b;">${formatIsoTime(item.received_at)}</td>
                               <td>
-                                  <div style="font-weight:600; color:var(--text-primary);">${escapeHtml(item.matched_company || item.sender)}</div>
-                                  <div style="font-size:11.5px; color:var(--text-secondary);">${escapeHtml(item.sender)}</div>
+                                  <div style="font-weight:600; color:#0f172a;">${escapeHtml(item.matched_company || item.sender)}</div>
+                                  <div style="font-size:11.5px; color:#64748b;">${escapeHtml(item.sender)}</div>
                               </td>
                               <td>
                                   <span class="cond-pill-status ${intentClass}">
@@ -793,14 +766,14 @@
                               </td>
                               <td><code class="cond-code">${escapeHtml(item.matched_client_id || "—")}</code></td>
                               <td>
-                                  <div style="font-weight:600; font-size:12.5px; color:var(--text-primary);">${escapeHtml(item.subject)}</div>
-                                  <div style="font-size:12px; color:var(--text-secondary); margin-top:2px;">${escapeHtml(item.summary)}</div>
+                                  <div style="font-weight:600; font-size:12.5px; color:#0f172a;">${escapeHtml(item.subject)}</div>
+                                  <div style="font-size:12px; color:#64748b; margin-top:2px;">${escapeHtml(item.summary)}</div>
                                   ${item.suggested_reply
                             ? `<div class="cond-draft-box"><strong>Draft Reply:</strong> ${escapeHtml(item.suggested_reply)}</div>`
                             : ""
                         }
                               </td>
-                              <td style="font-size:12px; color:var(--text-secondary);">${escapeHtml(item.action_taken)}</td>
+                              <td style="font-size:12px; color:#64748b;">${escapeHtml(item.action_taken)}</td>
                           </tr>
                       `;
                 }).join("")
@@ -812,47 +785,49 @@
                     <div class="cond-card">
                         <div class="cond-card-header">
                             <div class="cond-card-heading">
-                                <h3>Recruiter Email Reply Simulator</h3>
+                                <h3 class="cond-card-title">Recruiter Email Reply Simulator</h3>
                                 <p class="cond-card-sub">Test AI intent classification, pipeline status synchronization, and candidate WhatsApp notifications.</p>
                             </div>
                         </div>
-                        <div class="cond-form-grid">
-                            <div class="cond-field">
-                                <label class="cond-label">Target Client (Optional):</label>
-                                <select id="cond-sim-client" class="cond-select">
-                                    <option value="">Auto-Correlate by Company/Domain</option>
-                                    ${clientOptions}
-                                </select>
+                        <div class="cond-card-body">
+                            <div class="cond-form-grid">
+                                <div class="cond-field">
+                                    <label class="cond-label">Target Client (Optional):</label>
+                                    <select id="cond-sim-client" class="cond-select">
+                                        <option value="">Auto-Correlate by Company/Domain</option>
+                                        ${clientOptions}
+                                    </select>
+                                </div>
+                                <div class="cond-field">
+                                    <label class="cond-label">Recruiter Sender Email:</label>
+                                    <input type="text" id="cond-sim-sender" class="cond-input" value="karriere@alpha-tech.de">
+                                </div>
+                                <div class="cond-field">
+                                    <label class="cond-label">Subject Line:</label>
+                                    <input type="text" id="cond-sim-subject" class="cond-input" value="Einladung zum Vorstellungsgespräch - Alpha Solutions GmbH">
+                                </div>
                             </div>
-                            <div class="cond-field">
-                                <label class="cond-label">Recruiter Sender Email:</label>
-                                <input type="text" id="cond-sim-sender" class="cond-input" value="karriere@alpha-tech.de">
+                            <div class="cond-field" style="margin-top:12px;">
+                                <label class="cond-label">Email Body Content:</label>
+                                <textarea id="cond-sim-body" class="cond-textarea" rows="2">Sehr geehrte(r) Bewerber(in), vielen Dank für Ihre Bewerbung! Wir möchten Sie herzlich zu einem Vorstellungsgespräch am kommenden Dienstag um 10:00 Uhr einladen.</textarea>
                             </div>
-                            <div class="cond-field">
-                                <label class="cond-label">Subject Line:</label>
-                                <input type="text" id="cond-sim-subject" class="cond-input" value="Einladung zum Vorstellungsgespräch - Alpha Solutions GmbH">
+                            <div class="cond-preset-bar">
+                                <button type="button" class="cond-btn cond-btn-primary" data-cond-action="simulate-email">
+                                    🧪 Classify &amp; Process Email
+                                </button>
+                                <button type="button" class="cond-btn cond-btn-secondary" data-cond-preset="interview">
+                                    Preset: Interview Invitation
+                                </button>
+                                <button type="button" class="cond-btn cond-btn-secondary" data-cond-preset="info_request">
+                                    Preset: Missing Document Request
+                                </button>
+                                <button type="button" class="cond-btn cond-btn-secondary" data-cond-preset="confirmation">
+                                    Preset: Receipt Confirmation
+                                </button>
+                                <button type="button" class="cond-btn cond-btn-secondary" data-cond-preset="rejection">
+                                    Preset: Rejection
+                                </button>
                             </div>
-                        </div>
-                        <div class="cond-field" style="margin-top:12px;">
-                            <label class="cond-label">Email Body Content:</label>
-                            <textarea id="cond-sim-body" class="cond-textarea" rows="2">Sehr geehrte(r) Bewerber(in), vielen Dank für Ihre Bewerbung! Wir möchten Sie herzlich zu einem Vorstellungsgespräch am kommenden Dienstag um 10:00 Uhr einladen.</textarea>
-                        </div>
-                        <div class="cond-preset-bar">
-                            <button type="button" class="cond-btn cond-btn-primary" data-cond-action="simulate-email">
-                                🧪 Classify &amp; Process Email
-                            </button>
-                            <button type="button" class="cond-btn cond-btn-secondary" data-cond-preset="interview">
-                                Preset: Interview Invitation
-                            </button>
-                            <button type="button" class="cond-btn cond-btn-secondary" data-cond-preset="info_request">
-                                Preset: Missing Document Request
-                            </button>
-                            <button type="button" class="cond-btn cond-btn-secondary" data-cond-preset="confirmation">
-                                Preset: Receipt Confirmation
-                            </button>
-                            <button type="button" class="cond-btn cond-btn-secondary" data-cond-preset="rejection">
-                                Preset: Rejection
-                            </button>
                         </div>
                     </div>
 
@@ -860,7 +835,7 @@
                     <div class="cond-card">
                         <div class="cond-card-header">
                             <div class="cond-card-heading">
-                                <h3>Processed Recruiter Replies &amp; AI Follow-Up Drafts</h3>
+                                <h3 class="cond-card-title">Processed Recruiter Replies &amp; AI Follow-Up Drafts</h3>
                                 <p class="cond-card-sub">Inbound email events analyzed by Luna AI email monitoring engine.</p>
                             </div>
                         </div>
@@ -891,15 +866,15 @@
                 ? tasks.map((t) => `
                     <tr>
                         <td><code class="cond-code">${escapeHtml(t.id)}</code></td>
-                        <td><strong style="color:var(--text-primary);">${escapeHtml(t.task_type)}</strong></td>
+                        <td><strong style="color:#0f172a;">${escapeHtml(t.task_type)}</strong></td>
                         <td><code class="cond-code">${escapeHtml(t.client_id)}</code></td>
                         <td>
                             <span class="cond-pill-status ${t.status === "completed" ? "is-applied" : t.status === "failed" ? "is-rejected" : "is-info"}">
                                 ${escapeHtml(t.status)} ${t.retry_count ? `(Retries: ${t.retry_count})` : ""}
                             </span>
                         </td>
-                        <td style="font-size:12px; color:var(--text-secondary);">${escapeHtml(t.result_summary || t.error_message || "—")}</td>
-                        <td style="font-size:11.5px; color:var(--text-muted);">${formatIsoTime(t.created_at)}</td>
+                        <td style="font-size:12px; color:#475467;">${escapeHtml(t.result_summary || t.error_message || "—")}</td>
+                        <td style="font-size:11.5px; color:#94a3b8;">${formatIsoTime(t.created_at)}</td>
                         <td style="text-align:right;">
                             ${t.status === "failed"
                         ? `<button type="button" class="cond-btn cond-btn-sm cond-btn-secondary" data-cond-action="retry-task" data-task-id="${escapeHtml(t.id)}">↻ Retry</button>`
@@ -913,11 +888,11 @@
             const logRows = logs.length
                 ? logs.map((l) => `
                     <tr>
-                        <td style="font-size:11.5px; color:var(--text-muted); white-space:nowrap;">${formatIsoTime(l.created_at)}</td>
+                        <td style="font-size:11.5px; color:#94a3b8; white-space:nowrap;">${formatIsoTime(l.created_at)}</td>
                         <td><span class="cond-pill-status">${escapeHtml(l.level)}</span></td>
                         <td><code class="cond-code">${escapeHtml(l.module)}</code></td>
                         <td><code class="cond-code">${escapeHtml(l.client_id || "system")}</code></td>
-                        <td style="font-size:12.5px; color:var(--text-primary);">${escapeHtml(l.message)}</td>
+                        <td style="font-size:12.5px; color:#0f172a;">${escapeHtml(l.message)}</td>
                     </tr>
                 `).join("")
                 : `<tr><td colspan="5" class="cond-td-empty">No activity logs recorded yet.</td></tr>`;
@@ -928,53 +903,54 @@
                     <div class="cond-card">
                         <div class="cond-card-header">
                             <div class="cond-card-heading">
-                                <h3>Global Conductor Schedule &amp; Circuit Breaker</h3>
+                                <h3 class="cond-card-title">Global Conductor Schedule &amp; Circuit Breaker</h3>
                                 <p class="cond-card-sub">Tune autonomous background intervals, automated email checking, and circuit breaker limits.</p>
                             </div>
                         </div>
-                        <div class="cond-config-grid">
-                            <label class="cond-switch-wrap" style="align-items:center;">
-                                <input type="checkbox" class="cond-switch-input" id="cond-set-auto-search" ${String(settings.auto_daily_search || "true") === "true" ? "checked" : ""}>
-                                <span class="cond-switch-track"></span>
-                                <span class="cond-switch-lbl" style="font-size:12.5px; color:var(--text-primary);">Enable Scheduled Daily Searches</span>
-                            </label>
-                            <label class="cond-switch-wrap" style="align-items:center;">
-                                <input type="checkbox" class="cond-switch-input" id="cond-set-auto-email" ${String(settings.auto_email_monitoring || "true") === "true" ? "checked" : ""}>
-                                <span class="cond-switch-track"></span>
-                                <span class="cond-switch-lbl" style="font-size:12.5px; color:var(--text-primary);">Enable Scheduled IMAP Email Monitoring</span>
-                            </label>
-                            <label class="cond-switch-wrap" style="align-items:center;">
-                                <input type="checkbox" class="cond-switch-input" id="cond-set-auto-wa" ${String(settings.auto_whatsapp_updates || "true") === "true" ? "checked" : ""}>
-                                <span class="cond-switch-track"></span>
-                                <span class="cond-switch-lbl" style="font-size:12.5px; color:var(--text-primary);">Enable Proactive WhatsApp Updates</span>
-                            </label>
+                        <div class="cond-card-body">
+                            <div class="cond-config-grid">
+                                <label class="cond-switch-wrap" style="align-items:center;">
+                                    <input type="checkbox" class="cond-switch-input" id="cond-set-auto-search" ${String(settings.auto_daily_search || "true") === "true" ? "checked" : ""}>
+                                    <span class="cond-switch-lbl" style="font-size:13px; font-weight:500; color:#0f172a;">Enable Scheduled Daily Searches</span>
+                                </label>
+                                <label class="cond-switch-wrap" style="align-items:center;">
+                                    <input type="checkbox" class="cond-switch-input" id="cond-set-auto-email" ${String(settings.auto_email_monitoring || "true") === "true" ? "checked" : ""}>
+                                    <span class="cond-switch-lbl" style="font-size:13px; font-weight:500; color:#0f172a;">Enable Scheduled IMAP Email Monitoring</span>
+                                </label>
+                                <label class="cond-switch-wrap" style="align-items:center;">
+                                    <input type="checkbox" class="cond-switch-input" id="cond-set-auto-wa" ${String(settings.auto_whatsapp_updates || "true") === "true" ? "checked" : ""}>
+                                    <span class="cond-switch-lbl" style="font-size:13px; font-weight:500; color:#0f172a;">Enable Proactive WhatsApp Updates</span>
+                                </label>
+                            </div>
 
-                            <div class="cond-field">
-                                <label class="cond-label">Daily Search Interval (Hours):</label>
-                                <input type="number" id="cond-set-search-hours" class="cond-input" min="1" max="168" value="${escapeHtml(settings.daily_search_interval_hours || "24")}">
+                            <div class="cond-form-grid" style="margin-top:16px;">
+                                <div class="cond-field">
+                                    <label class="cond-label">Daily Search Interval (Hours):</label>
+                                    <input type="number" id="cond-set-search-hours" class="cond-input" value="${Number(settings.daily_search_interval_hours || 24)}" min="1" max="168">
+                                </div>
+                                <div class="cond-field">
+                                    <label class="cond-label">Email Check Interval (Minutes):</label>
+                                    <input type="number" id="cond-set-email-mins" class="cond-input" value="${Number(settings.email_monitor_interval_minutes || 15)}" min="5" max="360">
+                                </div>
+                                <div class="cond-field">
+                                    <label class="cond-label">Max Consecutive Errors Circuit Breaker:</label>
+                                    <input type="number" id="cond-set-max-errors" class="cond-input" value="${Number(settings.max_consecutive_errors || 5)}" min="1" max="50">
+                                </div>
                             </div>
-                            <div class="cond-field">
-                                <label class="cond-label">Email Check Interval (Minutes):</label>
-                                <input type="number" id="cond-set-email-mins" class="cond-input" min="1" max="1440" value="${escapeHtml(settings.email_monitor_interval_minutes || "15")}">
+                            <div style="margin-top:16px;">
+                                <button type="button" class="cond-btn cond-btn-primary" data-cond-action="save-settings">
+                                    💾 Save Scheduler Settings
+                                </button>
                             </div>
-                            <div class="cond-field">
-                                <label class="cond-label">Max Consecutive Errors (Circuit Breaker):</label>
-                                <input type="number" id="cond-set-max-errors" class="cond-input" min="1" max="50" value="${escapeHtml(settings.max_consecutive_errors || "5")}">
-                            </div>
-                        </div>
-                        <div style="margin-top:16px; display:flex; justify-content:flex-end;">
-                            <button type="button" class="cond-btn cond-btn-primary" data-cond-action="save-settings">
-                                Save Global Settings
-                            </button>
                         </div>
                     </div>
 
-                    <!-- Task Execution Queue -->
+                    <!-- Task Execution History -->
                     <div class="cond-card">
                         <div class="cond-card-header">
                             <div class="cond-card-heading">
-                                <h3>Task Queue &amp; Autonomous Worker History</h3>
-                                <p class="cond-card-sub">Recent automated job queue executions and error recovery states.</p>
+                                <h3 class="cond-card-title">Task Execution History &amp; Retries</h3>
+                                <p class="cond-card-sub">Recent automated worker jobs, execution status, and retry controls.</p>
                             </div>
                         </div>
                         <div class="cond-table-responsive">
@@ -985,9 +961,9 @@
                                         <th>Type</th>
                                         <th>Client</th>
                                         <th>Status</th>
-                                        <th>Summary / Error</th>
+                                        <th>Result / Error</th>
                                         <th>Created</th>
-                                        <th style="text-align:right;">Action</th>
+                                        <th style="text-align:right;">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -997,12 +973,12 @@
                         </div>
                     </div>
 
-                    <!-- Real-Time Activity Log -->
+                    <!-- System Activity Logs -->
                     <div class="cond-card">
                         <div class="cond-card-header">
                             <div class="cond-card-heading">
-                                <h3>Real-Time Activity &amp; Audit Logs</h3>
-                                <p class="cond-card-sub">Live audit trail of autonomous engine events and system decisions.</p>
+                                <h3 class="cond-card-title">Conductor Activity Logs</h3>
+                                <p class="cond-card-sub">Real-time structured logs from discovery, cover letter generation, and messaging.</p>
                             </div>
                         </div>
                         <div class="cond-table-responsive">
@@ -1012,8 +988,8 @@
                                         <th>Timestamp</th>
                                         <th>Level</th>
                                         <th>Module</th>
-                                        <th>Client ID</th>
-                                        <th>Event Message</th>
+                                        <th>Client</th>
+                                        <th>Message</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1033,69 +1009,63 @@
         }
 
         async function handleActionClick(e) {
+            const actionBtn = e.target.closest("[data-cond-action]");
             const tabBtn = e.target.closest("[data-cond-tab]");
+            const presetBtn = e.target.closest("[data-cond-preset]");
+
             if (tabBtn) {
-                activeTab = tabBtn.getAttribute("data-cond-tab") || "clients";
+                activeTab = tabBtn.getAttribute("data-cond-tab");
                 render();
                 return;
             }
 
-            const presetBtn = e.target.closest("[data-cond-preset]");
             if (presetBtn) {
                 const preset = presetBtn.getAttribute("data-cond-preset");
-                const subjEl = document.getElementById("cond-sim-subject");
                 const bodyEl = document.getElementById("cond-sim-body");
+                const subEl = document.getElementById("cond-sim-subject");
                 if (preset === "interview") {
-                    if (subjEl) subjEl.value = "Einladung zum Vorstellungsgespräch - Alpha Solutions GmbH";
-                    if (bodyEl) bodyEl.value = "Sehr geehrte(r) Bewerber(in), wir laden Sie herzlich zu einem Vorstellungsgespräch für die Ausbildung am Dienstag um 10:00 Uhr ein.";
+                    if (subEl) subEl.value = "Einladung zum Vorstellungsgespräch - Software Engineer";
+                    if (bodyEl) bodyEl.value = "Wir freuen uns über Ihre Bewerbung und möchten Sie gerne nächsten Mittwoch um 14:00 Uhr zu einem persönlichen Kennenlernen einladen.";
                 } else if (preset === "info_request") {
-                    if (subjEl) subjEl.value = "Rückfrage zu Ihrer Bewerbung - Fehlende Unterlagen";
-                    if (bodyEl) bodyEl.value = "Sehr geehrte Damen und Herren, bitte senden Sie uns noch Ihr aktuelles B2-Sprachzertifikat sowie Ihr Abschlusszeugnis zu.";
+                    if (subEl) subEl.value = "Rückfrage zu Ihrer Bewerbung";
+                    if (bodyEl) bodyEl.value = "Vielen Dank für Ihre Unterlagen. Könnten Sie uns bitte noch Ihr aktuelles Bachelor-Zeugnis und Zertifikate nachreichen?";
                 } else if (preset === "confirmation") {
-                    if (subjEl) subjEl.value = "Eingangsbestätigung Ihrer Bewerbung";
-                    if (bodyEl) bodyEl.value = "Vielen Dank für Ihre Bewerbung! Wir haben Ihre Unterlagen erhalten und prüfen diese derzeit.";
+                    if (subEl) subEl.value = "Eingangsbestätigung Ihrer Bewerbung";
+                    if (bodyEl) bodyEl.value = "Ihre Bewerbung ist bei uns eingegangen. Wir prüfen Ihre Unterlagen sorgfältig und melden uns zeitnah wieder.";
                 } else if (preset === "rejection") {
-                    if (subjEl) subjEl.value = "Ihre Bewerbung bei Bavaria Systems AG";
-                    if (bodyEl) bodyEl.value = "Leider müssen wir Ihnen mitteilen, dass wir uns für das kommende Ausbildungsjahr anderweitig entschieden haben.";
+                    if (subEl) subEl.value = "Ihre Bewerbung bei uns";
+                    if (bodyEl) bodyEl.value = "Leider müssen wir Ihnen mitteilen, dass wir uns für einen anderen Kandidaten entschieden haben. Für Ihren weiteren Weg alles Gute.";
                 }
                 return;
             }
 
-            const actionBtn = e.target.closest("[data-cond-action]");
             if (!actionBtn) return;
-
             const action = actionBtn.getAttribute("data-cond-action");
             const clientId = actionBtn.getAttribute("data-client-id");
 
             try {
                 if (action === "refresh") {
+                    showToast("Refreshing Conductor status...", "info");
                     await fetchAllData();
-                    render();
+                    showToast("Live status refreshed.", "success");
                 } else if (action === "sync-applications") {
-                    showToast("Synchronizing with Supabase applications and candidate dossiers...", "info");
-                    actionBtn.disabled = true;
-                    try {
-                        const res = await fetch("/api/conductor/sync-applications", { method: "POST" });
-                        const data = await res.json();
-                        if (data.success) {
-                            showToast(data.summary || `Sync complete: ${data.newly_imported} new, ${data.synced_existing} up to date.`, "success");
-                        } else {
-                            showToast(data.error || "Sync failed.", "warn");
-                        }
-                    } catch (err) {
-                        showToast(`Sync error: ${err.message}`, "warn");
-                    } finally {
-                        actionBtn.disabled = false;
-                        await fetchAllData();
+                    showToast("Synchronizing paid applications from Supabase...", "info");
+                    const res = await fetch("/api/conductor/sync-applications", { method: "POST" });
+                    const data = await res.json();
+                    if (data.success) {
+                        showToast(`Applications synchronized: ${data.synchronized_count} clients imported/updated.`, "success");
+                    } else {
+                        showToast(data.error || "Application sync failed.", "warn");
                     }
+                    await fetchAllData();
                 } else if (action === "toggle-details" && clientId) {
+                    const drawer = document.getElementById(`cond-drawer-${clientId}`);
+                    const arrow = actionBtn.querySelector(".cond-drawer-arrow");
                     if (state.expandedClients.has(clientId)) {
                         state.expandedClients.delete(clientId);
                     } else {
                         state.expandedClients.add(clientId);
                     }
-                    const drawer = document.getElementById(`cond-drawer-${clientId}`);
-                    const arrow = actionBtn.querySelector(".cond-drawer-arrow");
                     if (drawer) {
                         const isHidden = drawer.style.display === "none";
                         drawer.style.display = isHidden ? "" : "none";

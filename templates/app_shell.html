@@ -10,7 +10,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='spa/app.css') }}?v=15.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='spa/app.css') }}?v=22.0">
 </head>
 
 <body>
@@ -173,6 +173,14 @@
                     {% if initial_section != "search" %}hidden{% endif %}
                 >
                                         <div id="search-jobs-workspace" class="unified-search-wrapper">
+                        <!-- Modern SaaS Discovery Header -->
+                        <div class="section-hero search-hero">
+                            <div>
+                                <span class="section-kicker search-kicker">Discovery &amp; Leads</span>
+                                <h2>Find Emails &amp; Job Listings</h2>
+                                <p>Search German job portals and discover verified company contacts, apprenticeships, and direct opportunities.</p>
+                            </div>
+                        </div>
                         <div class="search-card unified-search-card">
                             <form id="search_form_1" action="{{ url_for('search') }}" method="POST" class="unified-search-form">
                                 <!-- Row 1: Search Mode Segmented Control -->
@@ -242,21 +250,29 @@
                                     <div class="field-hint">Choose between live job portals, proactive employer discovery via Google Maps, or both.</div>
                                 </div>
 
-                                <!-- Small, Elegant Section: AI Employer Detection -->
+                                <!-- Clean SaaS Section: AI Employer Detection -->
                                 <div id="ai_employer_detection_section" class="ai-detection-widget">
                                     <div class="ai-detection-header">
                                         <div class="ai-detection-info">
                                             <div class="ai-detection-title-row">
-                                                <span class="ai-detection-sparkle">✨</span>
+                                                <svg class="ai-detection-sparkle-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg>
                                                 <span class="ai-detection-title">AI Employer Detection</span>
                                                 <span class="ai-status-pill-badge" id="prof_summary_badge">Automatic</span>
                                             </div>
                                             <p class="ai-detection-desc">Automatically identifies relevant employer categories based on your profession.</p>
                                         </div>
                                         <button type="button" id="toggle_custom_categories_btn" class="ai-customize-link" aria-expanded="false" aria-controls="custom_categories_drawer">
-                                            <span class="ai-customize-btn-text">Customize Categories</span>
-                                            <svg class="ai-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                            <svg class="ai-customize-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+                                            <span class="ai-customize-btn-text">Customize</span>
+                                            <svg class="ai-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                                         </button>
+                                    </div>
+
+                                    <!-- Selectable Category Chips Container -->
+                                    <div id="employer_categories_chips" class="ai-chips-container">
+                                        <div class="ai-chips-empty">
+                                            <span>Type a profession above to automatically discover target employer industries</span>
+                                        </div>
                                     </div>
 
                                     <!-- Collapsible Drawer for Customizing Categories -->
@@ -265,17 +281,19 @@
                                             <div class="custom-category-input-group">
                                                 <input type="text" id="new_custom_category_input" class="custom-cat-input" placeholder="Add custom industry or category (e.g. IT Consulting)...">
                                                 <button type="button" id="add_custom_category_btn" class="custom-cat-add-btn">
-                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                                                    Add
+                                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                                    <span>Add Category</span>
                                                 </button>
                                             </div>
                                             <button type="button" id="restore_default_categories_btn" class="custom-cat-reset-btn" title="Restore AI detected categories">
                                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
-                                                Restore Defaults
+                                                <span>Restore Defaults</span>
                                             </button>
                                         </div>
+                                        <div class="custom-cat-hint">Click any chip to toggle it on/off in search. Click &times; to remove it.</div>
+                                    </div>
 
-                                        <input type="hidden" id="custom_categories" name="custom_categories" value="">
+                                    <input type="hidden" id="custom_categories" name="custom_categories" value="">
 
                                         <!-- Removable Chips Container -->
                                         <div id="employer_categories_chips" class="ai-chips-container">
@@ -350,68 +368,103 @@
                                 </button>
                             </form>
 
-                            <div class="search-progress-card" id="search_progress_card_1" style="display:none;">
-                                <div class="search-progress-header">
-                                    <div class="search-progress-title-wrap">
-                                        <div class="search-progress-spinner"></div>
-                                        <h4 class="search-progress-title" id="search_progress_title_1">Job search in progress...</h4>
+                            <div class="search-progress-card mon-dashboard-card" id="search_progress_card_1" style="display:none;">
+                                <!-- Dashboard Header -->
+                                <div class="mon-header">
+                                    <div class="mon-header-left">
+                                        <div class="mon-pulse-badge">
+                                            <span class="mon-pulse-dot"></span>
+                                            <span class="mon-pulse-text">LIVE SCRAPER MONITOR</span>
+                                        </div>
+                                        <h4 class="mon-title" id="search_progress_title_1">Job search in progress...</h4>
                                     </div>
-                                    <span class="search-progress-counter" id="search_progress_counter_1">0 positions found</span>
-                                </div>
-
-                                <!-- Live Current Target Banner -->
-                                <div class="scraper-target-banner" id="scraper_target_banner_1">
-                                    <div class="scraper-target-left">
-                                        <span class="scraper-pulse-indicator">
-                                            <span class="scraper-pulse-dot"></span>
-                                            <span class="scraper-pulse-label">LIVE SCRAPER</span>
-                                        </span>
-                                        <span class="scraper-target-text" id="scraper_target_text_1">Initializing multi-portal search pipeline...</span>
-                                    </div>
-                                    <span class="scraper-pct-badge" id="search_progress_pct_1">0%</span>
-                                </div>
-
-                                <div class="search-progress-track">
-                                    <div class="search-progress-fill" id="search_progress_fill_1" style="width: 0%;"></div>
-                                </div>
-
-                                <!-- Live Metrics Strip -->
-                                <div class="scraper-live-metrics" id="scraper_live_metrics_1">
-                                    <div class="scraper-live-metric-item">
-                                        <div class="metric-icon-wrap metric-icon-blue">
-                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                                        </div>
-                                        <div class="metric-data">
-                                            <span class="metric-lbl">Raw Scanned</span>
-                                            <strong class="metric-val" id="metric_raw_scanned_1">0</strong>
-                                        </div>
-                                    </div>
-                                    <div class="scraper-live-metric-item">
-                                        <div class="metric-icon-wrap metric-icon-emerald">
-                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                                        </div>
-                                        <div class="metric-data">
-                                            <span class="metric-lbl">Verified Matches</span>
-                                            <strong class="metric-val" id="metric_matched_leads_1">0</strong>
-                                        </div>
-                                    </div>
-                                    <div class="scraper-live-metric-item">
-                                        <div class="metric-icon-wrap metric-icon-indigo">
-                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
-                                        </div>
-                                        <div class="metric-data">
-                                            <span class="metric-lbl">Active Portal</span>
-                                            <strong class="metric-val" id="metric_active_source_1">Ready</strong>
-                                        </div>
+                                    <div class="mon-header-right">
+                                        <span class="mon-timer-badge" id="mon_exec_timer" title="Elapsed execution time">⏱ 00:00.0</span>
+                                        <span class="search-progress-counter mon-counter-badge" id="search_progress_counter_1">0 positions found</span>
+                                        <span class="scraper-pct-badge mon-pct-badge" id="search_progress_pct_1">0%</span>
+                                        <button type="button" class="mon-toggle-btn" id="mon_dashboard_toggle" title="Minimize / Expand Dashboard">▲</button>
                                     </div>
                                 </div>
 
-                                <div class="search-progress-status" id="search_progress_status_1" style="display:none !important;">Connecting to job portals...</div>
+                                <!-- Active Stage & Worker Banner -->
+                                <div class="mon-active-bar" id="scraper_target_banner_1">
+                                    <div class="mon-active-left">
+                                        <svg class="mon-spin-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
+                                        <span class="mon-target-text" id="scraper_target_text_1">Initializing multi-portal search pipeline...</span>
+                                    </div>
+                                    <div class="mon-active-right">
+                                        <span class="mon-worker-tag" id="mon_worker_active">Worker: Idle</span>
+                                    </div>
+                                </div>
 
-                                <!-- Portal Stages Bar -->
-                                <div class="scraper-stages-wrap">
-                                    <span class="scraper-stages-label">Search Stages</span>
-                                    <div class="search-progress-stages" id="search_progress_stages_1">
+                                <!-- Main Progress Track -->
+                                <div class="search-progress-track mon-track">
+                                    <div class="search-progress-fill mon-fill" id="search_progress_fill_1" style="width: 0%;"></div>
+                                </div>
+
+                                <!-- Collapsible Dashboard Body -->
+                                <div class="mon-body" id="mon_dashboard_body">
+                                    <!-- 1. Global Live Metrics KPI Strip -->
+                                    <div class="mon-kpi-grid">
+                                        <div class="mon-kpi-card">
+                                            <div class="mon-kpi-icon mon-icon-blue">
+                                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                            </div>
+                                            <div class="mon-kpi-data">
+                                                <span class="mon-kpi-lbl">Raw Scanned</span>
+                                                <strong class="mon-kpi-val" id="metric_raw_scanned_1">0</strong>
+                                            </div>
+                                        </div>
+                                        <div class="mon-kpi-card">
+                                            <div class="mon-kpi-icon mon-icon-emerald">
+                                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                            </div>
+                                            <div class="mon-kpi-data">
+                                                <span class="mon-kpi-lbl">Accepted</span>
+                                                <strong class="mon-kpi-val mon-text-success" id="metric_matched_leads_1">0</strong>
+                                            </div>
+                                        </div>
+                                        <div class="mon-kpi-card">
+                                            <div class="mon-kpi-icon mon-icon-rose">
+                                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                                            </div>
+                                            <div class="mon-kpi-data">
+                                                <span class="mon-kpi-lbl">Rejected</span>
+                                                <strong class="mon-kpi-val mon-text-error" id="mon_kpi_rejected">0</strong>
+                                            </div>
+                                        </div>
+                                        <div class="mon-kpi-card">
+                                            <div class="mon-kpi-icon mon-icon-purple">
+                                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+                                            </div>
+                                            <div class="mon-kpi-data">
+                                                <span class="mon-kpi-lbl">Duplicates</span>
+                                                <strong class="mon-kpi-val" id="mon_kpi_duplicates">0</strong>
+                                            </div>
+                                        </div>
+                                        <div class="mon-kpi-card">
+                                            <div class="mon-kpi-icon mon-icon-amber">
+                                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                                            </div>
+                                            <div class="mon-kpi-data">
+                                                <span class="mon-kpi-lbl">Errors</span>
+                                                <strong class="mon-kpi-val" id="mon_kpi_errors">0</strong>
+                                            </div>
+                                        </div>
+                                        <div class="mon-kpi-card">
+                                            <div class="mon-kpi-icon mon-icon-indigo">
+                                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                                            </div>
+                                            <div class="mon-kpi-data">
+                                                <span class="mon-kpi-lbl">Active Portal</span>
+                                                <strong class="mon-kpi-val" id="metric_active_source_1">Ready</strong>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Hidden backward compatibility elements -->
+                                    <div class="search-progress-status" id="search_progress_status_1" style="display:none !important;">Connecting to job portals...</div>
+                                    <div class="search-progress-stages" id="search_progress_stages_1" style="display:none !important;">
                                         <span class="stage-pill" data-portal="arbeitsagentur">Arbeitsagentur</span>
                                         <span class="stage-pill" data-portal="ausbildung_de">Ausbildung.de</span>
                                         <span class="stage-pill" data-portal="azubiyo">Azubiyo</span>
@@ -419,27 +472,267 @@
                                         <span class="stage-pill" data-portal="ihk">IHK</span>
                                         <span class="stage-pill" data-portal="google_maps">Google Maps</span>
                                     </div>
-                                </div>
 
-                                <!-- Live Scraper Terminal Feed -->
-                                <div class="scraper-console-wrap">
-                                    <div class="scraper-console-header">
-                                        <div class="scraper-console-title">
-                                            <span class="terminal-dots">
-                                                <span class="dot dot-red"></span>
-                                                <span class="dot dot-yellow"></span>
-                                                <span class="dot dot-green"></span>
-                                            </span>
-                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
-                                            <span>Live Scraper Activity Stream</span>
+                                    <!-- 2. Expandable Portal Monitor Grid -->
+                                    <div class="mon-portals-section">
+                                        <div class="mon-section-header">
+                                            <div class="mon-section-title-wrap">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                                                <span class="mon-section-title">Portals &amp; Live Scraper Pipeline</span>
+                                            </div>
+                                            <span class="mon-pipeline-summary" id="mon_pipeline_summary">6 Tasks • 0 Completed</span>
                                         </div>
-                                        <div class="scraper-console-actions">
-                                            <button type="button" class="scraper-console-clear-btn" id="scraper_console_clear_1" title="Clear console">Clear</button>
-                                            <button type="button" class="scraper-console-toggle-btn" id="scraper_console_toggle_1" title="Toggle console view">Minimize ▲</button>
+                                        <div class="mon-portals-grid" id="mon_portals_grid">
+                                            <!-- Arbeitsagentur -->
+                                            <div class="mon-portal-card" data-portal-card="arbeitsagentur">
+                                                <div class="mon-portal-header">
+                                                    <div class="mon-portal-title-wrap">
+                                                        <span class="mon-portal-icon">🏛️</span>
+                                                        <span class="mon-portal-name">Arbeitsagentur</span>
+                                                        <span class="mon-portal-state state-pending" data-portal-state="arbeitsagentur">Pending</span>
+                                                    </div>
+                                                    <div class="mon-portal-right">
+                                                        <span class="mon-portal-counts" data-portal-counts="arbeitsagentur">0 scanned • 0 accepted</span>
+                                                        <button type="button" class="mon-portal-toggle" data-portal-toggle="arbeitsagentur">Details ▼</button>
+                                                    </div>
+                                                </div>
+                                                <div class="mon-portal-drawer" data-portal-drawer="arbeitsagentur" hidden>
+                                                    <div class="mon-portal-meta">
+                                                        <span class="mon-portal-endpoint">API: https://rest.arbeitsagentur.de/opensearch/anti-robot/jobs</span>
+                                                        <span class="mon-portal-duration" data-portal-duration="arbeitsagentur">Duration: -</span>
+                                                    </div>
+                                                    <div class="mon-portal-breakdown" data-portal-breakdown="arbeitsagentur">
+                                                        <span class="mon-chip-sm">Accepted: 0</span>
+                                                        <span class="mon-chip-sm">Rejected: 0</span>
+                                                        <span class="mon-chip-sm">Duplicates: 0</span>
+                                                    </div>
+                                                    <div class="mon-portal-items-list" data-portal-items="arbeitsagentur"></div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Ausbildung.de -->
+                                            <div class="mon-portal-card" data-portal-card="ausbildung_de">
+                                                <div class="mon-portal-header">
+                                                    <div class="mon-portal-title-wrap">
+                                                        <span class="mon-portal-icon">🎓</span>
+                                                        <span class="mon-portal-name">Ausbildung.de</span>
+                                                        <span class="mon-portal-state state-pending" data-portal-state="ausbildung_de">Pending</span>
+                                                    </div>
+                                                    <div class="mon-portal-right">
+                                                        <span class="mon-portal-counts" data-portal-counts="ausbildung_de">0 scanned • 0 accepted</span>
+                                                        <button type="button" class="mon-portal-toggle" data-portal-toggle="ausbildung_de">Details ▼</button>
+                                                    </div>
+                                                </div>
+                                                <div class="mon-portal-drawer" data-portal-drawer="ausbildung_de" hidden>
+                                                    <div class="mon-portal-meta">
+                                                        <span class="mon-portal-endpoint">URL: https://www.ausbildung.de/suche/</span>
+                                                        <span class="mon-portal-duration" data-portal-duration="ausbildung_de">Duration: -</span>
+                                                    </div>
+                                                    <div class="mon-portal-breakdown" data-portal-breakdown="ausbildung_de">
+                                                        <span class="mon-chip-sm">Accepted: 0</span>
+                                                        <span class="mon-chip-sm">Rejected: 0</span>
+                                                        <span class="mon-chip-sm">Duplicates: 0</span>
+                                                    </div>
+                                                    <div class="mon-portal-items-list" data-portal-items="ausbildung_de"></div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Azubiyo -->
+                                            <div class="mon-portal-card" data-portal-card="azubiyo">
+                                                <div class="mon-portal-header">
+                                                    <div class="mon-portal-title-wrap">
+                                                        <span class="mon-portal-icon">💼</span>
+                                                        <span class="mon-portal-name">Azubiyo</span>
+                                                        <span class="mon-portal-state state-pending" data-portal-state="azubiyo">Pending</span>
+                                                    </div>
+                                                    <div class="mon-portal-right">
+                                                        <span class="mon-portal-counts" data-portal-counts="azubiyo">0 scanned • 0 accepted</span>
+                                                        <button type="button" class="mon-portal-toggle" data-portal-toggle="azubiyo">Details ▼</button>
+                                                    </div>
+                                                </div>
+                                                <div class="mon-portal-drawer" data-portal-drawer="azubiyo" hidden>
+                                                    <div class="mon-portal-meta">
+                                                        <span class="mon-portal-endpoint">URL: https://www.azubiyo.de/ausbildungsplaetze/</span>
+                                                        <span class="mon-portal-duration" data-portal-duration="azubiyo">Duration: -</span>
+                                                    </div>
+                                                    <div class="mon-portal-breakdown" data-portal-breakdown="azubiyo">
+                                                        <span class="mon-chip-sm">Accepted: 0</span>
+                                                        <span class="mon-chip-sm">Rejected: 0</span>
+                                                        <span class="mon-chip-sm">Duplicates: 0</span>
+                                                    </div>
+                                                    <div class="mon-portal-items-list" data-portal-items="azubiyo"></div>
+                                                </div>
+                                            </div>
+
+                                            <!-- AUBI-plus -->
+                                            <div class="mon-portal-card" data-portal-card="aubi_plus">
+                                                <div class="mon-portal-header">
+                                                    <div class="mon-portal-title-wrap">
+                                                        <span class="mon-portal-icon">📘</span>
+                                                        <span class="mon-portal-name">AUBI-plus</span>
+                                                        <span class="mon-portal-state state-pending" data-portal-state="aubi_plus">Pending</span>
+                                                    </div>
+                                                    <div class="mon-portal-right">
+                                                        <span class="mon-portal-counts" data-portal-counts="aubi_plus">0 scanned • 0 accepted</span>
+                                                        <button type="button" class="mon-portal-toggle" data-portal-toggle="aubi_plus">Details ▼</button>
+                                                    </div>
+                                                </div>
+                                                <div class="mon-portal-drawer" data-portal-drawer="aubi_plus" hidden>
+                                                    <div class="mon-portal-meta">
+                                                        <span class="mon-portal-endpoint">URL: https://www.aubi-plus.de/suchmaschine/</span>
+                                                        <span class="mon-portal-duration" data-portal-duration="aubi_plus">Duration: -</span>
+                                                    </div>
+                                                    <div class="mon-portal-breakdown" data-portal-breakdown="aubi_plus">
+                                                        <span class="mon-chip-sm">Accepted: 0</span>
+                                                        <span class="mon-chip-sm">Rejected: 0</span>
+                                                        <span class="mon-chip-sm">Duplicates: 0</span>
+                                                    </div>
+                                                    <div class="mon-portal-items-list" data-portal-items="aubi_plus"></div>
+                                                </div>
+                                            </div>
+
+                                            <!-- IHK Lehrstellenbörse -->
+                                            <div class="mon-portal-card" data-portal-card="ihk">
+                                                <div class="mon-portal-header">
+                                                    <div class="mon-portal-title-wrap">
+                                                        <span class="mon-portal-icon">🏢</span>
+                                                        <span class="mon-portal-name">IHK Lehrstellenbörse</span>
+                                                        <span class="mon-portal-state state-pending" data-portal-state="ihk">Pending</span>
+                                                    </div>
+                                                    <div class="mon-portal-right">
+                                                        <span class="mon-portal-counts" data-portal-counts="ihk">0 scanned • 0 accepted</span>
+                                                        <button type="button" class="mon-portal-toggle" data-portal-toggle="ihk">Details ▼</button>
+                                                    </div>
+                                                </div>
+                                                <div class="mon-portal-drawer" data-portal-drawer="ihk" hidden>
+                                                    <div class="mon-portal-meta">
+                                                        <span class="mon-portal-endpoint">URL: https://www.lehrstellen-boerse.de/</span>
+                                                        <span class="mon-portal-duration" data-portal-duration="ihk">Duration: -</span>
+                                                    </div>
+                                                    <div class="mon-portal-breakdown" data-portal-breakdown="ihk">
+                                                        <span class="mon-chip-sm">Accepted: 0</span>
+                                                        <span class="mon-chip-sm">Rejected: 0</span>
+                                                        <span class="mon-chip-sm">Duplicates: 0</span>
+                                                    </div>
+                                                    <div class="mon-portal-items-list" data-portal-items="ihk"></div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Google Maps -->
+                                            <div class="mon-portal-card" data-portal-card="google_maps">
+                                                <div class="mon-portal-header">
+                                                    <div class="mon-portal-title-wrap">
+                                                        <span class="mon-portal-icon">📍</span>
+                                                        <span class="mon-portal-name">Google Maps &amp; Directory</span>
+                                                        <span class="mon-portal-state state-pending" data-portal-state="google_maps">Pending</span>
+                                                    </div>
+                                                    <div class="mon-portal-right">
+                                                        <span class="mon-portal-counts" data-portal-counts="google_maps">0 scanned • 0 accepted</span>
+                                                        <button type="button" class="mon-portal-toggle" data-portal-toggle="google_maps">Details ▼</button>
+                                                    </div>
+                                                </div>
+                                                <div class="mon-portal-drawer" data-portal-drawer="google_maps" hidden>
+                                                    <div class="mon-portal-meta">
+                                                        <span class="mon-portal-endpoint">Endpoint: https://overpass-api.de/api/interpreter</span>
+                                                        <span class="mon-portal-duration" data-portal-duration="google_maps">Duration: -</span>
+                                                    </div>
+                                                    <div class="mon-portal-breakdown" data-portal-breakdown="google_maps">
+                                                        <span class="mon-chip-sm">Accepted: 0</span>
+                                                        <span class="mon-chip-sm">Rejected: 0</span>
+                                                        <span class="mon-chip-sm">Websites: 0</span>
+                                                    </div>
+                                                    <div class="mon-portal-items-list" data-portal-items="google_maps"></div>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div class="scraper-console-terminal" id="scraper_console_terminal_1">
-                                        <div class="terminal-row terminal-muted"><span class="terminal-ts">[00:00:00]</span> Ready to initialize multi-portal search pipeline...</div>
+
+                                    <!-- 3. Google Maps Live Monitor Card -->
+                                    <div class="mon-gmaps-card" id="mon_gmaps_monitor" style="display:none;">
+                                        <div class="mon-gmaps-header">
+                                            <div class="mon-gmaps-title">
+                                                <span>📍 Google Maps Live Company &amp; Career Crawler</span>
+                                            </div>
+                                            <div class="mon-gmaps-target">
+                                                <span>City: <strong id="mon_gmaps_city">-</strong></span>
+                                                <span>Industry: <strong id="mon_gmaps_category">-</strong></span>
+                                            </div>
+                                        </div>
+                                        <div class="mon-gmaps-grid">
+                                            <div class="mon-gmaps-stat">
+                                                <span class="mon-gstat-lbl">Businesses Found</span>
+                                                <strong class="mon-gstat-val" id="mon_gmaps_companies">0</strong>
+                                            </div>
+                                            <div class="mon-gmaps-stat">
+                                                <span class="mon-gstat-lbl">Websites Visited</span>
+                                                <strong class="mon-gstat-val" id="mon_gmaps_websites">0</strong>
+                                            </div>
+                                            <div class="mon-gmaps-stat">
+                                                <span class="mon-gstat-lbl">Emails Extracted</span>
+                                                <strong class="mon-gstat-val mon-text-success" id="mon_gmaps_emails">0</strong>
+                                            </div>
+                                            <div class="mon-gmaps-stat">
+                                                <span class="mon-gstat-lbl">Verified Vacancies</span>
+                                                <strong class="mon-gstat-val mon-text-success" id="mon_gmaps_vacancies">0</strong>
+                                            </div>
+                                            <div class="mon-gmaps-stat">
+                                                <span class="mon-gstat-lbl">Potential Employers</span>
+                                                <strong class="mon-gstat-val" id="mon_gmaps_potential">0</strong>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- 4. Tabbed Monitoring Center -->
+                                    <div class="mon-tabs-section">
+                                        <div class="mon-tabs-nav">
+                                            <button type="button" class="mon-tab-btn is-active" id="mon_tab_btn_logs">
+                                                <span>🖥️ Live Activity Stream</span>
+                                                <span class="mon-tab-badge" id="mon_badge_logs">0</span>
+                                            </button>
+                                            <button type="button" class="mon-tab-btn" id="mon_tab_btn_items">
+                                                <span>💼 Discovered Opportunities</span>
+                                                <span class="mon-tab-badge" id="mon_badge_items">0</span>
+                                            </button>
+                                        </div>
+
+                                        <!-- Tab 1: Live Activity Logs -->
+                                        <div class="mon-tab-pane" id="mon_tab_pane_logs">
+                                            <div class="mon-log-toolbar">
+                                                <div class="mon-log-search-wrap">
+                                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                                    <input type="text" id="mon_log_search_input" placeholder="Search logs by keyword, URL, or rejection reason...">
+                                                </div>
+                                                <div class="mon-log-filters">
+                                                    <button type="button" class="mon-chip is-active" data-log-filter="all">All</button>
+                                                    <button type="button" class="mon-chip" data-log-filter="info">Info</button>
+                                                    <button type="button" class="mon-chip" data-log-filter="success">Success</button>
+                                                    <button type="button" class="mon-chip" data-log-filter="rejected">Rejections</button>
+                                                    <button type="button" class="mon-chip" data-log-filter="error">Errors</button>
+                                                </div>
+                                                <div class="mon-log-actions">
+                                                    <button type="button" class="mon-btn-sm" id="mon_btn_export_logs" title="Export logs as JSON file">Export Logs 📥</button>
+                                                    <button type="button" class="mon-btn-sm" id="scraper_console_clear_1" title="Clear console">Clear</button>
+                                                </div>
+                                            </div>
+                                            <div class="scraper-console-terminal mon-terminal" id="scraper_console_terminal_1">
+                                                <div class="terminal-row terminal-muted"><span class="terminal-ts">[00:00:00]</span> Scraper Monitoring Dashboard initialized. Ready to stream live data...</div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Tab 2: Discovered Opportunities Feed -->
+                                        <div class="mon-tab-pane" id="mon_tab_pane_items" style="display:none;">
+                                            <div class="mon-items-toolbar">
+                                                <span class="mon-items-count-text" id="mon_items_count_label">0 Opportunities Discovered</span>
+                                                <div class="mon-items-filter-chips">
+                                                    <button type="button" class="mon-chip is-active" data-item-filter="all">All</button>
+                                                    <button type="button" class="mon-chip" data-item-filter="accepted">Verified Matches</button>
+                                                    <button type="button" class="mon-chip" data-item-filter="rejected">Excluded</button>
+                                                </div>
+                                            </div>
+                                            <div class="mon-items-feed" id="mon_discovered_items_feed">
+                                                <div class="mon-items-empty">Waiting for discovered positions and companies...</div>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -468,7 +761,7 @@
                                         <svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
                                         <span>⚡ Auto-Extract Contacts</span>
                                     </button>
-                                    <button id="btn_generate_cover_letters_1" type="button" class="progress-btn primary-action btn-generate-cover-letters" style="display:none; text-decoration:none; padding:10px 18px; border-radius:8px; font-weight:700; align-items:center; gap:6px; cursor:pointer; background:linear-gradient(135deg, #6366f1, #4f46e5); color:#ffffff; border:none; box-shadow:0 2px 8px rgba(99,102,241,0.25);">⚡ Generate Cover Letters</button>
+                                    <button id="btn_generate_cover_letters_1" type="button" class="progress-btn primary-action btn-generate-cover-letters" style="display:none;">⚡ Generate Cover Letters</button>
                                     <a id="export_excel_btn_1" href="/api/search/download" class="export-excel-btn" style="display:none;">
                                         <svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                                         <span>Export to Excel (.xlsx)</span>
@@ -1576,10 +1869,8 @@
                             <p>Organize, preview, deduplicate, and merge lead lists.</p>
                         </div>
                         <div class="hero-actions">
-                            <a href="{{ url_for('index') }}" data-section-link="search" class="hub-btn-secondary"
-                                style="font-size: 13px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    stroke-width="2">
+                            <a href="{{ url_for('index') }}" data-section-link="search" class="ab-hero-search-btn">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                     <circle cx="11" cy="11" r="8"></circle>
                                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                                 </svg>
@@ -1591,16 +1882,34 @@
                     <!-- Statistics Summary Strip -->
                     <div class="ab-stats-strip">
                         <div class="ab-stat-card">
-                            <span class="ab-stat-label">Datasets</span>
-                            <strong class="ab-stat-value" id="ab-stat-total-files">0</strong>
+                            <div class="ab-stat-icon-wrap ab-stat-icon-blue">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                            </div>
+                            <div class="ab-stat-content">
+                                <span class="ab-stat-label">Datasets</span>
+                                <strong class="ab-stat-value" id="ab-stat-total-files">0</strong>
+                                <span class="ab-stat-sub">Ready for outreach</span>
+                            </div>
                         </div>
                         <div class="ab-stat-card">
-                            <span class="ab-stat-label">Total Leads</span>
-                            <strong class="ab-stat-value" id="ab-stat-total-rows">0</strong>
+                            <div class="ab-stat-icon-wrap ab-stat-icon-indigo">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                            </div>
+                            <div class="ab-stat-content">
+                                <span class="ab-stat-label">Total Leads</span>
+                                <strong class="ab-stat-value" id="ab-stat-total-rows">0</strong>
+                                <span class="ab-stat-sub">Aggregated candidates</span>
+                            </div>
                         </div>
                         <div class="ab-stat-card">
-                            <span class="ab-stat-label">Total Size</span>
-                            <strong class="ab-stat-value" id="ab-stat-total-size">0 KB</strong>
+                            <div class="ab-stat-icon-wrap ab-stat-icon-emerald">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                            </div>
+                            <div class="ab-stat-content">
+                                <span class="ab-stat-label">Total Size</span>
+                                <strong class="ab-stat-value" id="ab-stat-total-size">0 KB</strong>
+                                <span class="ab-stat-sub">Excel &amp; CSV storage</span>
+                            </div>
                         </div>
                     </div>
 
@@ -3938,82 +4247,88 @@
                     </div>
                 </section>
 
-                <section id="ai-settings-section" class="app-section" data-section="ai-settings" {% if initial_section
-                    !="ai-settings" %}hidden{% endif %}>
+                <section id="ai-settings-section" class="app-section" data-section="ai-settings" {% if initial_section != "ai-settings" %}hidden{% endif %}>
                     <div class="ai-settings-wrapper">
                         <!-- Alert Banner -->
                         <div id="ai-settings-alert" class="ai-alert" hidden></div>
 
-                        <!-- Header Card -->
+                        <!-- Compact Header -->
                         <div class="ai-header-card">
                             <div class="ai-header-left">
-                                <h1>
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#38bdf8"
-                                        stroke-width="2">
-                                        <path
-                                            d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z">
-                                        </path>
+                                <div class="ai-header-title-wrap">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"></path>
                                         <circle cx="12" cy="12" r="3"></circle>
                                         <path d="M12 7v2m0 6v2m-5-5h2m6 0h2"></path>
                                     </svg>
-                                    AI Settings
-                                </h1>
-                                <p>Official OpenAI GPT Luna &amp; Google Gemini integration — direct provider
-                                    connectivity without external proxies.</p>
+                                    <h1>AI Settings</h1>
+                                </div>
+                                <p>Official OpenAI GPT &amp; Google Gemini connectivity, models, and usage monitoring.</p>
                             </div>
                             <div class="ai-header-right">
-                                <span class="ai-status-pill pill-active" id="ai-active-provider-pill">Active: OpenAI
-                                    GPT-6 Luna</span>
+                                <span class="ai-status-pill pill-active" id="ai-active-provider-pill">Active: OpenAI GPT-6 Luna</span>
                             </div>
                         </div>
 
                         <!-- Card 1: Provider Selection -->
-                        <div class="ai-card">
-                            <h3 class="ai-card-title">
-                                <span>Primary AI Provider (Provider Selection)</span>
-                                <span class="ai-status-pill pill-active">Real-time Routing</span>
-                            </h3>
-                            <p style="font-size:13px; color:#94a3b8; margin:0;">Choose which AI engine is used for CV
-                                parsing, ATS optimization, Golden Hooks, and cover letter generation:</p>
+                        <div class="ai-card ai-provider-card">
+                            <div class="ai-card-header">
+                                <div class="ai-card-title-group">
+                                    <h3 class="ai-card-title">Primary AI Provider</h3>
+                                    <p class="ai-card-subtitle">Active engine for CV parsing, ATS scoring, and letter generation</p>
+                                </div>
+                            </div>
 
                             <div class="ai-provider-selector">
                                 <label class="ai-provider-option">
                                     <input type="radio" name="ai_primary_provider" value="openai" checked>
-                                    <div class="ai-provider-info">
-                                        <h4>OpenAI GPT Luna — Primary (Recommended)</h4>
-                                        <p>Direct connection to the official OpenAI API (GPT-6 Luna). Highest semantic
-                                            precision for professional applications.</p>
+                                    <div class="ai-provider-card-inner">
+                                        <div class="ai-provider-top">
+                                            <div class="ai-provider-brand">
+                                                <span class="ai-provider-icon">⚡</span>
+                                                <span class="ai-provider-name">OpenAI GPT</span>
+                                            </div>
+                                            <span class="ai-badge-recommend">Recommended</span>
+                                        </div>
+                                        <p class="ai-provider-desc">Direct OpenAI API with highest semantic precision for applications.</p>
                                     </div>
                                 </label>
 
                                 <label class="ai-provider-option">
                                     <input type="radio" name="ai_primary_provider" value="gemini">
-                                    <div class="ai-provider-info">
-                                        <h4>Google Gemini — Primary</h4>
-                                        <p>Google AI Studio API (Flash models). High rate limits, ideal for high-volume
-                                            processing and fallbacks.</p>
+                                    <div class="ai-provider-card-inner">
+                                        <div class="ai-provider-top">
+                                            <div class="ai-provider-brand">
+                                                <span class="ai-provider-icon">✨</span>
+                                                <span class="ai-provider-name">Google Gemini</span>
+                                            </div>
+                                            <span class="ai-badge-subtle">High Volume</span>
+                                        </div>
+                                        <p class="ai-provider-desc">Google AI Studio API with high rate limits and fast generation.</p>
                                     </div>
                                 </label>
 
                                 <label class="ai-provider-option">
                                     <input type="radio" name="ai_primary_provider" value="offline">
-                                    <div class="ai-provider-info">
-                                        <h4>Local Processing — Offline Mode</h4>
-                                        <p>Heuristic, rule-based processing executed locally on your machine. 100%
-                                            privacy-compliant, 0 tokens, 0 cost.</p>
+                                    <div class="ai-provider-card-inner">
+                                        <div class="ai-provider-top">
+                                            <div class="ai-provider-brand">
+                                                <span class="ai-provider-icon">🔒</span>
+                                                <span class="ai-provider-name">Offline Mode</span>
+                                            </div>
+                                            <span class="ai-badge-subtle">0 Tokens</span>
+                                        </div>
+                                        <p class="ai-provider-desc">Rule-based local heuristics. 100% private, zero external API cost.</p>
                                     </div>
                                 </label>
                             </div>
 
-                            <div
-                                style="display:flex; align-items:center; gap:10px; margin-top:6px; padding:10px 14px; background:rgba(15,23,42,0.5); border-radius:8px;">
-                                <input type="checkbox" id="ai-gemini-fallback-toggle"
-                                    style="cursor:pointer; width:16px; height:16px;">
-                                <label for="ai-gemini-fallback-toggle"
-                                    style="font-size:12.5px; color:#cbd5e1; cursor:pointer;">
-                                    <strong>Enable Gemini Fallback:</strong> If OpenAI is temporarily overloaded or
-                                    encounters a timeout, automatically failover to Gemini. (Never triggers unexpected
-                                    third-party costs without approval).
+                            <div class="ai-fallback-bar">
+                                <label class="ai-fallback-toggle-label" for="ai-gemini-fallback-toggle">
+                                    <input type="checkbox" id="ai-gemini-fallback-toggle">
+                                    <span class="ai-fallback-text">
+                                        <strong>Auto-failover to Gemini:</strong> Automatically switch if OpenAI experiences temporary timeouts.
+                                    </span>
                                 </label>
                             </div>
                         </div>
@@ -4021,173 +4336,166 @@
                         <!-- 2-Column: OpenAI Configuration & Google Gemini Configuration -->
                         <div class="ai-grid-2">
                             <!-- OpenAI Card -->
-                            <div class="ai-card">
-                                <div class="ai-card-title">
-                                    <div style="display:flex; align-items:center; gap:8px;">
-                                        <span style="font-size:18px;">⚡</span>
-                                        <span>Official OpenAI API</span>
+                            <div class="ai-card ai-api-card">
+                                <div class="ai-card-header">
+                                    <div class="ai-card-title-group">
+                                        <div class="ai-title-with-icon">
+                                            <span class="ai-card-icon">⚡</span>
+                                            <h3 class="ai-card-title">OpenAI API</h3>
+                                        </div>
+                                        <p class="ai-card-subtitle">Official GPT-4o / Luna direct connectivity</p>
                                     </div>
-                                    <span id="ai-openai-status-badge"
-                                        class="ai-status-pill pill-untested">Untested</span>
+                                    <span id="ai-openai-status-badge" class="ai-status-pill pill-untested">Untested</span>
                                 </div>
 
-                                <div class="ai-form-group">
-                                    <label class="ai-label">
-                                        <span>OpenAI API Key</span>
-                                        <span id="ai-openai-key-badge"
-                                            class="ai-status-pill pill-inactive">Checking...</span>
-                                    </label>
-                                    <div class="ai-input-wrap">
-                                        <input type="password" id="ai-openai-key-input" class="ai-input"
-                                            placeholder="sk-proj-..." autocomplete="off">
-                                        <button type="button" id="ai-openai-toggle-key" class="ai-btn-secondary"
-                                            title="Show / hide key">Show</button>
+                                <div class="ai-card-body">
+                                    <div class="ai-form-group">
+                                        <div class="ai-label-row">
+                                            <label class="ai-label" for="ai-openai-key-input">API Key</label>
+                                            <span id="ai-openai-key-badge" class="ai-status-pill pill-inactive">Checking...</span>
+                                        </div>
+                                        <div class="ai-input-wrap">
+                                            <input type="password" id="ai-openai-key-input" class="ai-input" placeholder="sk-proj-..." autocomplete="off">
+                                            <button type="button" id="ai-openai-toggle-key" class="ai-btn-input-action" title="Toggle visibility">Show</button>
+                                        </div>
+                                        <span class="ai-help-text">Securely encrypted on server. Never exposed to browser.</span>
                                     </div>
-                                    <span style="font-size:11px; color:#64748b;">Key is securely managed on the backend
-                                        and never exposed in plain text in the browser.</span>
+
+                                    <div class="ai-form-group">
+                                        <label class="ai-label" for="ai-openai-model-select">Model Selection</label>
+                                        <select id="ai-openai-model-select" class="ai-select">
+                                            <option value="gpt-6-luna">GPT-6 Luna (Default / High Precision)</option>
+                                            <option value="gpt-6-luna-pro">GPT-6 Luna Pro</option>
+                                            <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
+                                            <option value="gpt-4o-mini">GPT-4o Mini (Cost-efficient)</option>
+                                            <option value="gpt-4o">GPT-4o (Full version)</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="ai-actions-row">
+                                        <button type="button" id="ai-openai-save-btn" class="ai-btn-primary">Save Settings</button>
+                                        <button type="button" id="ai-openai-test-btn" class="ai-btn-secondary" title="Tests key via GET /v1/models (zero cost)">Test Connection</button>
+                                    </div>
                                 </div>
 
-                                <div class="ai-form-group">
-                                    <label class="ai-label" for="ai-openai-model-select">OpenAI Model</label>
-                                    <select id="ai-openai-model-select" class="ai-select">
-                                        <option value="gpt-6-luna">GPT-6 Luna (Default / Dashboard)</option>
-                                        <option value="gpt-6-luna-pro">GPT-6 Luna Pro</option>
-                                        <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
-                                        <option value="gpt-4o-mini">GPT-4o Mini (Cost-efficient)</option>
-                                        <option value="gpt-4o">GPT-4o (Full version)</option>
-                                    </select>
-                                </div>
-
-                                <div style="display:flex; gap:10px; margin-top:4px;">
-                                    <button type="button" id="ai-openai-save-btn" class="ai-btn-primary"
-                                        style="flex:1;">Save OpenAI Settings</button>
-                                    <button type="button" id="ai-openai-test-btn" class="ai-btn-secondary"
-                                        title="Tests API key via GET /v1/models (zero cost)">Test Connection (0
-                                        Cost)</button>
-                                </div>
-
-                                <div class="ai-meta-row">
-                                    <span>Status: <strong id="ai-openai-status-msg"
-                                            style="color:#e2e8f0;">Ready</strong></span>
-                                    <span>Last Test: <strong id="ai-openai-last-tested">-</strong></span>
+                                <div class="ai-card-footer">
+                                    <div class="ai-status-info">
+                                        <span class="ai-status-dot"></span>
+                                        <span>Status: <strong id="ai-openai-status-msg">Ready</strong></span>
+                                    </div>
+                                    <div class="ai-last-tested">
+                                        <span>Last Test: <strong id="ai-openai-last-tested">-</strong></span>
+                                    </div>
                                 </div>
                             </div>
 
                             <!-- Gemini Card -->
-                            <div class="ai-card">
-                                <div class="ai-card-title">
-                                    <div style="display:flex; align-items:center; gap:8px;">
-                                        <span style="font-size:18px;">✨</span>
-                                        <span>Google Gemini API (Secondary)</span>
+                            <div class="ai-card ai-api-card">
+                                <div class="ai-card-header">
+                                    <div class="ai-card-title-group">
+                                        <div class="ai-title-with-icon">
+                                            <span class="ai-card-icon">✨</span>
+                                            <h3 class="ai-card-title">Google Gemini API</h3>
+                                        </div>
+                                        <p class="ai-card-subtitle">Google AI Studio Flash model integration</p>
                                     </div>
-                                    <span id="ai-gemini-status-badge"
-                                        class="ai-status-pill pill-untested">Untested</span>
+                                    <span id="ai-gemini-status-badge" class="ai-status-pill pill-untested">Untested</span>
                                 </div>
 
-                                <div class="ai-form-group">
-                                    <label class="ai-label">
-                                        <span>Gemini API Key</span>
-                                        <span id="ai-gemini-key-badge"
-                                            class="ai-status-pill pill-inactive">Checking...</span>
-                                    </label>
-                                    <div class="ai-input-wrap">
-                                        <input type="password" id="ai-gemini-key-input" class="ai-input"
-                                            placeholder="AIzaSy..." autocomplete="off">
-                                        <button type="button" id="ai-gemini-toggle-key"
-                                            class="ai-btn-secondary">Show</button>
+                                <div class="ai-card-body">
+                                    <div class="ai-form-group">
+                                        <div class="ai-label-row">
+                                            <label class="ai-label" for="ai-gemini-key-input">API Key</label>
+                                            <span id="ai-gemini-key-badge" class="ai-status-pill pill-inactive">Checking...</span>
+                                        </div>
+                                        <div class="ai-input-wrap">
+                                            <input type="password" id="ai-gemini-key-input" class="ai-input" placeholder="AIzaSy..." autocomplete="off">
+                                            <button type="button" id="ai-gemini-toggle-key" class="ai-btn-input-action" title="Toggle visibility">Show</button>
+                                        </div>
+                                        <span class="ai-help-text">From Google AI Studio. Free tier up to 500 RPD.</span>
                                     </div>
-                                    <span style="font-size:11px; color:#64748b;">From Google AI Studio. Free tier
-                                        available (up to 500 RPD).</span>
+
+                                    <div class="ai-form-group">
+                                        <label class="ai-label" for="ai-gemini-model-select">Model Selection</label>
+                                        <select id="ai-gemini-model-select" class="ai-select">
+                                            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                            <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite (500 RPD Free)</option>
+                                            <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite (500 RPD Free)</option>
+                                            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="ai-actions-row">
+                                        <button type="button" id="ai-gemini-save-btn" class="ai-btn-primary">Save Settings</button>
+                                        <button type="button" id="ai-gemini-test-btn" class="ai-btn-secondary">Test Connection</button>
+                                    </div>
                                 </div>
 
-                                <div class="ai-form-group">
-                                    <label class="ai-label" for="ai-gemini-model-select">Gemini Model</label>
-                                    <select id="ai-gemini-model-select" class="ai-select">
-                                        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                                        <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite (500 RPD Free)
-                                        </option>
-                                        <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite (500 RPD Free)
-                                        </option>
-                                        <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                                    </select>
-                                </div>
-
-                                <div style="display:flex; gap:10px; margin-top:4px;">
-                                    <button type="button" id="ai-gemini-save-btn" class="ai-btn-primary"
-                                        style="flex:1;">Save Gemini Settings</button>
-                                    <button type="button" id="ai-gemini-test-btn" class="ai-btn-secondary">Test
-                                        Connection</button>
-                                </div>
-
-                                <div class="ai-meta-row">
-                                    <span>Status: <strong id="ai-gemini-status-msg"
-                                            style="color:#e2e8f0;">Ready</strong></span>
-                                    <span>Last Test: <strong id="ai-gemini-last-tested">-</strong></span>
+                                <div class="ai-card-footer">
+                                    <div class="ai-status-info">
+                                        <span class="ai-status-dot"></span>
+                                        <span>Status: <strong id="ai-gemini-status-msg">Ready</strong></span>
+                                    </div>
+                                    <div class="ai-last-tested">
+                                        <span>Last Test: <strong id="ai-gemini-last-tested">-</strong></span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
 
                         <!-- Card 3: Usage Dashboard & Cost Tracking -->
-                        <div class="ai-card">
-                            <div class="ai-card-title">
-                                <div style="display:flex; align-items:center; gap:8px;">
-                                    <span style="font-size:18px;">📊</span>
-                                    <span>AI Usage Monitoring &amp; Cost Estimation</span>
+                        <div class="ai-card ai-usage-card">
+                            <div class="ai-card-header">
+                                <div class="ai-card-title-group">
+                                    <div class="ai-title-with-icon">
+                                        <span class="ai-card-icon">📊</span>
+                                        <h3 class="ai-card-title">AI Usage Monitoring &amp; Cost Estimation</h3>
+                                    </div>
+                                    <p class="ai-card-subtitle">Aggregated inference requests, token volume, and response cache efficiency</p>
                                 </div>
-                                <div style="display:flex; gap:8px;">
-                                    <button type="button" id="ai-btn-refresh-usage" class="ai-btn-secondary"
-                                        style="padding:4px 10px; font-size:12px;">Refresh</button>
-                                    <button type="button" id="ai-btn-reset-cache" class="ai-btn-secondary"
-                                        style="padding:4px 10px; font-size:12px;"
-                                        title="Clears the local response cache">Clear Cache</button>
+                                <div class="ai-header-actions">
+                                    <button type="button" id="ai-btn-refresh-usage" class="ai-btn-secondary ai-btn-sm">Refresh</button>
+                                    <button type="button" id="ai-btn-reset-cache" class="ai-btn-secondary ai-btn-sm" title="Clears the local response cache">Clear Cache</button>
                                 </div>
                             </div>
 
                             <div class="ai-metrics-grid">
                                 <div class="ai-metric-box">
-                                    <span class="ai-metric-label">Active Provider &amp; Model</span>
-                                    <span class="ai-metric-val" id="ai-usage-model"
-                                        style="font-size:15px; color:#38bdf8;">gpt-6-luna</span>
-                                    <span id="ai-usage-provider" style="font-size:11px; color:#94a3b8;">Official
-                                        OpenAI</span>
+                                    <span class="ai-metric-label">Active Model</span>
+                                    <span class="ai-metric-val" id="ai-usage-model">gpt-6-luna</span>
+                                    <span class="ai-metric-sub" id="ai-usage-provider">Official OpenAI</span>
                                 </div>
                                 <div class="ai-metric-box">
-                                    <span class="ai-metric-label">Total Requests (Success / Error)</span>
-                                    <span class="ai-metric-val">
-                                        <span id="ai-usage-total-requests">0</span>
-                                        <span style="font-size:13px; color:#94a3b8; font-weight:normal;">(<span
-                                                id="ai-usage-success-requests" style="color:#34d399;">0</span> / <span
-                                                id="ai-usage-failed-requests" style="color:#f87171;">0</span>)</span>
-                                    </span>
+                                    <span class="ai-metric-label">Total Requests</span>
+                                    <div class="ai-metric-val-group">
+                                        <span class="ai-metric-val" id="ai-usage-total-requests">0</span>
+                                        <span class="ai-metric-split">(<span id="ai-usage-success-requests" class="text-success">0</span> / <span id="ai-usage-failed-requests" class="text-error">0</span>)</span>
+                                    </div>
+                                    <span class="ai-metric-sub">Success / Error ratio</span>
                                 </div>
                                 <div class="ai-metric-box">
-                                    <span class="ai-metric-label">Token Consumption (In / Out)</span>
+                                    <span class="ai-metric-label">Tokens</span>
                                     <span class="ai-metric-val" id="ai-usage-total-tokens">0</span>
-                                    <span style="font-size:11px; color:#94a3b8;"><span
-                                            id="ai-usage-input-tokens">0</span> In • <span
-                                            id="ai-usage-output-tokens">0</span> Out</span>
+                                    <span class="ai-metric-sub"><span id="ai-usage-input-tokens">0</span> In • <span id="ai-usage-output-tokens">0</span> Out</span>
                                 </div>
                                 <div class="ai-metric-box">
-                                    <span class="ai-metric-label">Estimated Cost (USD)</span>
-                                    <span class="ai-metric-val ai-cost-tag" id="ai-usage-estimated-cost">$0.0000
-                                        USD</span>
-                                    <span style="font-size:11px; color:#94a3b8;">Account Credit: approx. $4.97</span>
+                                    <span class="ai-metric-label">Estimated Cost</span>
+                                    <span class="ai-metric-val ai-cost-tag" id="ai-usage-estimated-cost">$0.0000 USD</span>
+                                    <span class="ai-metric-sub">Credit: approx. $4.97</span>
                                 </div>
                                 <div class="ai-metric-box">
                                     <span class="ai-metric-label">Cache Hit Rate</span>
-                                    <span class="ai-metric-val" id="ai-usage-cache-rate" style="color:#a78bfa;">0% (Zero
-                                        Cost)</span>
-                                    <span style="font-size:11px; color:#94a3b8;"><span id="ai-usage-cache-hits">0</span>
-                                        repeated calls blocked</span>
+                                    <span class="ai-metric-val ai-cache-tag" id="ai-usage-cache-rate">0% (Zero Cost)</span>
+                                    <span class="ai-metric-sub"><span id="ai-usage-cache-hits">0</span> cached calls</span>
                                 </div>
                             </div>
 
                             <!-- Daily Breakdown Table -->
-                            <div style="margin-top:10px;">
-                                <h4 style="margin:0 0 8px; font-size:13px; color:#cbd5e1;">Daily History (Last 7 Days)
-                                </h4>
-                                <div
-                                    style="overflow-x:auto; border-radius:8px; border:1px solid rgba(255,255,255,0.08);">
+                            <div class="ai-table-wrap">
+                                <div class="ai-table-header">
+                                    <h4 class="ai-table-title">Daily History (Last 7 Days)</h4>
+                                </div>
+                                <div class="ai-table-container">
                                     <table class="ai-table">
                                         <thead>
                                             <tr>
@@ -4205,10 +4513,8 @@
                                         </tbody>
                                     </table>
                                 </div>
-                                <p style="font-size:11.5px; color:#64748b; margin:8px 0 0;">
-                                    ℹ️ Note: This is a local cost calculation based on actual token usage and official
-                                    OpenAI pricing ($0.20/1M In, $1.20/1M Out for Luna). Real account balance is managed
-                                    in your OpenAI dashboard.
+                                <p class="ai-table-note">
+                                    ℹ️ Local estimation based on actual tokens processed. Official balances are tracked directly in provider consoles.
                                 </p>
                             </div>
                         </div>
@@ -5036,7 +5342,7 @@
     </script>
     <script src="{{ url_for('static', filename='spa/utils.js') }}?v=2.2"></script>
     <script src="{{ url_for('static', filename='spa/supabase-client.js') }}?v=2.2"></script>
-    <script src="{{ url_for('static', filename='spa/sections/search.js') }}?v=6.0"></script>
+    <script src="{{ url_for('static', filename='spa/sections/search.js') }}?v=8.0"></script>
     <script src="{{ url_for('static', filename='spa/sections/dashboard.js') }}?v=2.2"></script>
     <script src="{{ url_for('static', filename='spa/sections/supabase.js') }}?v=2.2"></script>
     <script src="{{ url_for('static', filename='spa/sections/money.js') }}?v=3.0"></script>
@@ -5047,7 +5353,7 @@
     <script src="{{ url_for('static', filename='spa/sections/autofill-hub.js') }}?v=2.2"></script>
     <script src="{{ url_for('static', filename='spa/sections/ai-settings.js') }}?v=1.0"></script>
     <script src="{{ url_for('static', filename='spa/sections/whatsapp.js') }}?v=1.0"></script>
-    <script src="{{ url_for('static', filename='spa/sections/conductor.js') }}?v=3.0"></script>
+    <script src="{{ url_for('static', filename='spa/sections/conductor.js') }}?v=4.0"></script>
     <script src="{{ url_for('static', filename='spa/app.js') }}?v=2.2"></script>
     <script src="{{ url_for('static', filename='auto_continue.js') }}" defer></script>
 </body>

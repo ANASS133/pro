@@ -5857,7 +5857,7 @@ def _fetch_combined_jobs(
     auto_categories: bool = True,
     custom_categories: Optional[Union[List[str], str]] = None,
 ) -> Union[List[Dict], Tuple[List[Dict], Dict[str, Any]]]:
-    """Fetches jobs from enabled scrapers, tracking verified matches and audit metrics throughout."""
+    """Fetches jobs from enabled scrapers with real-time multi-portal instrumentation and audit metrics."""
     from scraper.search_filter_engine import (
         filter_and_deduplicate_jobs,
         filter_and_deduplicate_jobs_with_audit,
@@ -5887,47 +5887,505 @@ def _fetch_combined_jobs(
     has_portals = is_all or source_clean in {"job_portals", "jobboersen", "jobbörsen", "portals"}
     has_gmaps = is_all or source_clean in {"google_maps", "google-maps", "maps"}
 
-    jobs: List[Dict] = []
-    seen_refs = set()
+    # Scraper Monitoring Dashboard Tracker (thread-safe; portals run concurrently)
+    import copy as _copy
+    import re as _re
+    from concurrent.futures import wait as _futures_wait
 
-    def report_progress(data: Dict):
-        if callable(progress_callback):
+    try:
+        _portal_soft_timeout = max(10, int(os.environ.get("PORTAL_SOFT_TIMEOUT_SECONDS", "45")))
+    except (TypeError, ValueError):
+        _portal_soft_timeout = 45
+    try:
+        _portal_hard_timeout = max(_portal_soft_timeout + 5, int(os.environ.get("PORTAL_TIMEOUT_SECONDS", "150")))
+    except (TypeError, ValueError):
+        _portal_hard_timeout = 150
+    # Google Maps crawls many company websites, so it gets a larger budget.
+    _portal_timeouts = {
+        "google_maps": (_portal_soft_timeout * 2, int(_portal_hard_timeout * 1.6)),
+    }
+
+    _secret_re = _re.compile(
+        r"(?i)((?:api[_-]?key|access[_-]?token|token|secret|password|passwd|key|auth)=)([^&\s'\"]+)"
+    )
+
+    def _redact(text: Any) -> str:
+        """Strips credentials/tokens from any text that ends up in monitoring logs."""
+        return _secret_re.sub(r"\1***", str(text or ""))
+
+    state_lock = threading.RLock()
+
+    class _ScraperMonitoringTracker:
+        TERMINAL_STATES = {"completed", "failed", "timeout", "skipped"}
+
+        def __init__(self):
+            self.lock = threading.RLock()
+            self.start_time = time.time()
+            self.log_counter = 0
+            portal_defs = [
+                ("arbeitsagentur", "Arbeitsagentur", "https://rest.arbeitsagentur.de/opensearch/anti-robot/jobs"),
+                ("ausbildung_de", "Ausbildung.de", "https://www.ausbildung.de/suche/"),
+                ("azubiyo", "Azubiyo", "https://www.azubiyo.de/ausbildungsplaetze/"),
+                ("aubi_plus", "AUBI-plus", "https://www.aubi-plus.de/suchmaschine/"),
+                ("ihk", "IHK Lehrstellenbörse", "https://www.lehrstellen-boerse.de/"),
+                ("google_maps", "Google Maps", "https://overpass-api.de/api/interpreter"),
+            ]
+            self.portals = {}
+            for key, name, url in portal_defs:
+                soft, hard = _portal_timeouts.get(key, (_portal_soft_timeout, _portal_hard_timeout))
+                self.portals[key] = {
+                    "key": key,
+                    "name": name,
+                    "url": url,
+                    "state": "pending",
+                    # `status` mirrors `state` for older frontends that read p.status
+                    "status": "pending",
+                    "scanned": 0,
+                    "accepted": 0,
+                    "rejected": 0,
+                    "duplicates": 0,
+                    "errors": 0,
+                    "duration_ms": 0,
+                    "elapsed_ms": 0,
+                    "slow": False,
+                    "soft_timeout_s": soft,
+                    "timeout_s": hard,
+                    "current_task": "Queued in pipeline",
+                    "rejection_reasons": {},
+                    "discovered_items": [],
+                }
+            self.google_maps_metrics = {
+                "city": location or "Berlin",
+                "category": keyword,
+                "companies_found": 0,
+                "websites_visited": 0,
+                "emails_extracted": 0,
+                "verified_vacancies": 0,
+                "potential_employers": 0,
+            }
+            self.workers = {
+                "active": 0,
+                "running": 0,
+                "active_names": [],
+                "queued": 6,
+                "completed": 0,
+                "failed": 0,
+                "timed_out": 0,
+                "total": 6,
+                "finished": 0,
+                "parallel": True,
+            }
+            self.all_logs = []
+            self.new_logs_buffer = []
+            self.recent_items = []
+            self._items_cursor = 0
+            self._totals_cache = (-1, 0)
+
+        # ---- state helpers -------------------------------------------------
+        def _set_state(self, p, state):
+            p["state"] = state
+            p["status"] = state
+
+        def is_abandoned(self, portal_key):
+            with self.lock:
+                p = self.portals.get(portal_key)
+                return bool(p and p["state"] in ("timeout", "skipped"))
+
+        def set_skipped(self, active_keys):
+            with self.lock:
+                for k, p in self.portals.items():
+                    if k not in active_keys:
+                        self._set_state(p, "skipped")
+                        p["current_task"] = "Skipped (not selected in search source)"
+                self._update_workers()
+
+        def _update_workers(self):
+            states = [p["state"] for p in self.portals.values()]
+            running = [p["name"] for p in self.portals.values() if p["state"] == "running"]
+            self.workers["queued"] = states.count("pending")
+            self.workers["completed"] = states.count("completed")
+            self.workers["failed"] = states.count("failed") + states.count("timeout")
+            self.workers["timed_out"] = states.count("timeout")
+            self.workers["running"] = len(running)
+            self.workers["active"] = len(running)
+            self.workers["active_names"] = running
+            self.workers["total"] = sum(1 for s in states if s != "skipped")
+            self.workers["finished"] = self.workers["completed"] + self.workers["failed"]
+
+        def compute_percent(self):
+            total = self.workers.get("total") or 0
+            if total <= 0:
+                return 100
+            return int(5 + 90 * (self.workers.get("finished", 0) / total))
+
+        def all_finished(self):
+            with self.lock:
+                return all(p["state"] in self.TERMINAL_STATES for p in self.portals.values())
+
+        # ---- logging -------------------------------------------------------
+        def log(self, portal_key, level, message, url=None, task=None, item=None, rejection_reason=None):
+            with self.lock:
+                self.log_counter += 1
+                p_name = self.portals.get(portal_key, {}).get("name", str(portal_key).capitalize())
+                clean_item = None
+                if item and isinstance(item, dict):
+                    clean_item = {
+                        "title": item.get("title") or item.get("name") or "Position",
+                        "company": item.get("company") or item.get("name") or "Unternehmen",
+                        "location": item.get("location") or item.get("city") or "",
+                        "url": _redact(item.get("apply_url") or item.get("url") or item.get("website") or ""),
+                        "source": item.get("source") or p_name,
+                        "status": "rejected" if rejection_reason else "accepted",
+                        "rejection_reason": rejection_reason,
+                        "application_method": item.get("application_method") or item.get("bewerbung_art") or ("email" if item.get("email") else "portal"),
+                        "email": item.get("email") or "",
+                    }
+
+                entry = {
+                    "id": self.log_counter,
+                    "timestamp": datetime.now().strftime("%H:%M:%S"),
+                    "portal": portal_key,
+                    "portal_name": p_name,
+                    "level": level,
+                    "message": _redact(message),
+                    "url": _redact(url) if url else None,
+                    "task": _redact(task) if task else None,
+                    "rejection_reason": _redact(rejection_reason) if rejection_reason else None,
+                    "item": clean_item,
+                }
+                self.all_logs.append(entry)
+                self.new_logs_buffer.append(entry)
+                if len(self.all_logs) > 500:
+                    self.all_logs = self.all_logs[-500:]
+                if len(self.new_logs_buffer) > 300:
+                    self.new_logs_buffer = self.new_logs_buffer[-300:]
+
+        # ---- lifecycle -----------------------------------------------------
+        def start_portal(self, portal_key, task, url=None, **_legacy):
+            with self.lock:
+                p = self.portals.get(portal_key)
+                if not p:
+                    return
+                self._set_state(p, "running")
+                p["start_time"] = time.time()
+                p["current_task"] = task
+                if url:
+                    p["url"] = url
+                self._update_workers()
+                self.log(portal_key, "info", task, url=url, task=task)
+            self.emit_progress(portal_key, task, status="running")
+
+        def set_task(self, portal_key, task, scanned=None, url=None, level="info"):
+            with self.lock:
+                p = self.portals.get(portal_key)
+                if not p or p["state"] != "running":
+                    return
+                p["current_task"] = task
+                if scanned is not None:
+                    p["scanned"] = int(scanned)
+                self.log(portal_key, level, task, url=url, task=task)
+            self.emit_progress(portal_key, task, status="running")
+
+        def finish_portal(
+            self,
+            portal_key,
+            stage_desc,
+            source_valid=0,
+            source_raw=0,
+            discovered_jobs=None,
+            audit_exclusions=None,
+            error=None,
+            cross_duplicates=0,
+            **_legacy,
+        ):
+            with self.lock:
+                p = self.portals.get(portal_key)
+                if not p or p["state"] in ("timeout", "skipped"):
+                    # Late result from a portal that was already abandoned after its timeout.
+                    if p is not None and p["state"] == "timeout":
+                        self.log(portal_key, "warning", f"Late response ignored (portal exceeded {p['timeout_s']}s timeout)")
+                    return
+
+                if error:
+                    self._set_state(p, "failed")
+                    p["errors"] += 1
+                    p["current_task"] = f"Failed: {_redact(error)}"
+                    self.log(portal_key, "error", f"Scraper execution failed: {error}")
+                    status = "source_error"
+                else:
+                    self._set_state(p, "completed")
+                    p["scanned"] = source_raw
+                    p["accepted"] = source_valid
+                    p["rejected"] = max(0, source_raw - source_valid)
+                    p["duplicates"] += int(cross_duplicates or 0)
+                    p["current_task"] = f"Completed ({source_valid} verified of {source_raw} scanned)"
+                    status = "source_done"
+
+                    if audit_exclusions:
+                        for ex in audit_exclusions:
+                            stg = ex.get("stage") or "other"
+                            p["rejection_reasons"][stg] = p["rejection_reasons"].get(stg, 0) + 1
+                            if ex.get("stage") == "duplicate":
+                                p["duplicates"] += 1
+                            self.log(
+                                portal_key,
+                                "rejected",
+                                f"Excluded: '{ex.get('title')}' at '{ex.get('company')}' — {ex.get('reason')}",
+                                item=ex,
+                                rejection_reason=ex.get("reason"),
+                            )
+
+                    if discovered_jobs:
+                        for j in discovered_jobs[:25]:
+                            clean = {
+                                "title": j.get("title") or j.get("name") or "Position",
+                                "company": j.get("company") or j.get("name") or "Unternehmen",
+                                "location": j.get("location") or j.get("city") or "",
+                                "url": _redact(j.get("apply_url") or j.get("url") or j.get("website") or ""),
+                                "source": j.get("source") or p["name"],
+                                "portal": portal_key,
+                                "status": "accepted",
+                                "application_method": j.get("application_method") or j.get("bewerbung_art") or ("email" if j.get("email") else "portal"),
+                                "email": j.get("email") or "",
+                                "has_form": bool(j.get("has_form")),
+                            }
+                            p["discovered_items"].append(clean)
+                            self.recent_items.append(clean)
+                            self.log(
+                                portal_key,
+                                "success",
+                                f"Discovered matching position: '{clean['title']}' at '{clean['company']}' ({clean['location']})",
+                                item=clean,
+                            )
+
+                if "start_time" in p:
+                    p["duration_ms"] = int((time.time() - p["start_time"]) * 1000)
+                    p["elapsed_ms"] = p["duration_ms"]
+                if p["slow"] and not error:
+                    p["slow"] = False
+
+                self._update_workers()
+                self.log(
+                    portal_key,
+                    "success" if not error else "error",
+                    f"{p['name']} finished in {p['duration_ms'] / 1000:.1f}s — "
+                    f"{self.workers['finished']}/{self.workers['total']} portals done",
+                )
+
+            self.emit_progress(
+                portal_key,
+                stage_desc,
+                finished_source=portal_key,
+                source_count=source_valid,
+                source_raw_count=source_raw,
+                status=status,
+            )
+
+        def check_timeouts(self):
+            """Flags slow portals and abandons portals that exceeded their hard timeout."""
+            timed_out = []
+            now = time.time()
+            with self.lock:
+                for key, p in self.portals.items():
+                    if p["state"] != "running" or "start_time" not in p:
+                        continue
+                    elapsed = now - p["start_time"]
+                    p["elapsed_ms"] = int(elapsed * 1000)
+                    if elapsed >= p["timeout_s"]:
+                        self._set_state(p, "timeout")
+                        p["errors"] += 1
+                        p["slow"] = True
+                        p["duration_ms"] = p["elapsed_ms"]
+                        p["current_task"] = f"Timed out after {int(elapsed)}s — portal unresponsive, skipped"
+                        self.log(key, "error", f"{p['name']} did not respond within {p['timeout_s']}s; continuing without it")
+                        timed_out.append(key)
+                    elif elapsed >= p["soft_timeout_s"] and not p["slow"]:
+                        p["slow"] = True
+                        self.log(key, "warning", f"{p['name']} is slow: still running after {int(elapsed)}s (timeout at {p['timeout_s']}s)")
+                if timed_out:
+                    self._update_workers()
+            return timed_out
+
+        def _current_totals(self):
+            """Global (cross-portal, deduplicated) accepted/raw counts."""
+            with state_lock:
+                snapshot = list(jobs)
+            if not snapshot:
+                return 0, 0
+            if self._totals_cache[0] == len(snapshot):
+                return self._totals_cache[1], len(snapshot)
+            try:
+                valid_now = filter_and_deduplicate_jobs(
+                    snapshot,
+                    keyword=keyword,
+                    location=location,
+                    published_since_days=published_since_days,
+                    mode=mode_clean,
+                )
+                valid_count = len(valid_now)
+            except Exception as err:  # pragma: no cover - defensive
+                logger.debug("live totals calculation failed: %s", err)
+                valid_count = self._totals_cache[1]
+            self._totals_cache = (len(snapshot), valid_count)
+            return valid_count, len(snapshot)
+
+        def emit_progress(
+            self,
+            source,
+            stage,
+            percent=None,
+            found=None,
+            raw_found=None,
+            finished_source=None,
+            source_count=None,
+            source_raw_count=None,
+            status="running",
+            audit=None,
+        ):
+            if not callable(progress_callback):
+                return
+
+            if found is None or raw_found is None:
+                live_found, live_raw = self._current_totals()
+                found = live_found if found is None else found
+                raw_found = live_raw if raw_found is None else raw_found
+
+            with self.lock:
+                now = time.time()
+                for p in self.portals.values():
+                    if p["state"] == "running" and "start_time" in p:
+                        p["elapsed_ms"] = int((now - p["start_time"]) * 1000)
+                if percent is None:
+                    percent = self.compute_percent()
+
+                total_scanned = sum(p["scanned"] for p in self.portals.values())
+                total_rejected = sum(p["rejected"] for p in self.portals.values())
+                total_duplicates = sum(p["duplicates"] for p in self.portals.values())
+                total_errors = sum(p["errors"] for p in self.portals.values())
+                running_names = list(self.workers.get("active_names") or [])
+
+                new_items = self.recent_items[self._items_cursor:]
+                self._items_cursor = len(self.recent_items)
+
+                data = {
+                    "source": source,
+                    "stage": _redact(stage),
+                    "percent": percent,
+                    "found": found,
+                    "raw_found": raw_found,
+                    "finished_source": finished_source,
+                    "source_count": source_count,
+                    "source_raw_count": source_raw_count,
+                    "status": status,
+                    "audit": audit,
+                    "portals": _copy.deepcopy(self.portals),
+                    "live_metrics": {
+                        # `scanned` kept for compatibility; `raw_scanned` is what the dashboard reads
+                        "scanned": max(total_scanned, raw_found or 0),
+                        "raw_scanned": max(total_scanned, raw_found or 0),
+                        "accepted": found or 0,
+                        "rejected": total_rejected,
+                        "duplicates": total_duplicates,
+                        "errors": total_errors,
+                        "execution_time_seconds": round(now - self.start_time, 2),
+                        "active_portal": ", ".join(running_names) if running_names else ("Done" if status == "complete" else "—"),
+                    },
+                    "google_maps_metrics": dict(self.google_maps_metrics),
+                    "workers": _copy.deepcopy(self.workers),
+                    "new_logs": list(self.new_logs_buffer),
+                    # Only items discovered since the previous event (frontend appends them)
+                    "recent_items": list(new_items[-50:]),
+                    "elapsed_seconds": round(now - self.start_time, 1),
+                }
+                self.new_logs_buffer.clear()
             try:
                 progress_callback(data)
             except Exception as e:
                 logger.debug("progress_callback error: %s", e)
 
-    def _calc_valid_counts():
-        if not jobs:
-            return 0, {}
-        valid_now = filter_and_deduplicate_jobs(
-            jobs,
-            keyword=keyword,
-            location=location,
-            published_since_days=published_since_days,
-            mode=mode_clean,
-        )
-        counts = {}
-        for vj in valid_now:
-            v_src = str(vj.get("source") or "").lower()
-            counts[v_src] = counts.get(v_src, 0) + 1
-        return len(valid_now), counts
+    tracker = _ScraperMonitoringTracker()
+
+    active_keys = []
+    if has_portals or source_clean in {"arbeitsagentur", "arbeitsagentur.de"}:
+        active_keys.append("arbeitsagentur")
+    if has_portals or source_clean in {"ausbildung_de", "ausbildung.de"}:
+        active_keys.append("ausbildung_de")
+    if has_portals or source_clean in {"azubiyo", "azubiyo.de"}:
+        active_keys.append("azubiyo")
+    if has_portals or source_clean in {"aubi_plus", "aubi-plus", "aubi_plus.de"}:
+        active_keys.append("aubi_plus")
+    if has_portals or source_clean in {"ihk", "ihk.de", "ihk_lehrstellenboerse"}:
+        active_keys.append("ihk")
+    if has_gmaps:
+        active_keys.append("google_maps")
+
+    tracker.set_skipped(active_keys)
+
+    jobs: List[Dict] = []
+    seen_refs = set()
+
+    def _merge_portal_jobs(portal_key, new_jobs, default_source, ref_fn):
+        """Thread-safely merges a portal's raw jobs into the shared list; returns cross-portal duplicates."""
+        dup = 0
+        with state_lock:
+            if tracker.is_abandoned(portal_key):
+                return 0
+            for j in new_jobs:
+                j.setdefault("source", default_source)
+                ref = ref_fn(j)
+                if ref and ref not in seen_refs:
+                    seen_refs.add(ref)
+                    jobs.append(j)
+                elif ref:
+                    dup += 1
+        return dup
+
+    def _simple_ref(j):
+        return j.get("reference") or j.get("url")
+
+    def _aa_ref(j):
+        return j.get("reference") or j.get("url") or j.get("apply_url") or j.get("refnr") or f"{j.get('company')}_{j.get('title')}"
+
+    def _run_standard_portal(portal_key, label, start_task, url, fetch_fn, default_source, ref_fn):
+        tracker.start_portal(portal_key, start_task, url=url)
+        try:
+            portal_jobs = list(fetch_fn() or [])
+            tracker.set_task(
+                portal_key,
+                f"{label}: received {len(portal_jobs)} listings — validating relevance, location & dates...",
+                scanned=len(portal_jobs),
+            )
+            valid_jobs, p_audit = filter_and_deduplicate_jobs_with_audit(
+                portal_jobs,
+                keyword=keyword,
+                location=location,
+                published_since_days=published_since_days,
+                mode=mode_clean,
+            )
+            dup = _merge_portal_jobs(portal_key, portal_jobs, default_source, ref_fn)
+            tracker.finish_portal(
+                portal_key,
+                f"{label}: {len(portal_jobs)} scanned ({len(valid_jobs)} matching positions)",
+                source_valid=len(valid_jobs),
+                source_raw=len(portal_jobs),
+                discovered_jobs=valid_jobs,
+                audit_exclusions=(p_audit or {}).get("exclusions", []),
+                cross_duplicates=dup,
+            )
+        except Exception as exc:
+            logger.warning("%s search failed: %s", label, exc)
+            tracker.finish_portal(portal_key, f"{label} failed: {exc}", error=exc)
+
+    portal_runners = []
 
     # 1. Arbeitsagentur
-    if has_portals or source_clean in {"arbeitsagentur", "arbeitsagentur.de"}:
+    if "arbeitsagentur" in active_keys:
         aa_label = "Live Jobs" if mode_clean == "arbeit" else "Vocational / Apprenticeships"
-        report_progress({
-            "source": "arbeitsagentur",
-            "stage": f"Arbeitsagentur ({aa_label}): Fetching official live vacancies...",
-            "percent": 15 if is_all else 20,
-            "found": len(jobs),
-            "status": "running",
-        })
-        try:
-            aa_scraper = EnhancedJobScraper()
-            aa_limit = max_jobs if not is_all and not has_portals else max(15, max_jobs // 2)
-            aa_angebotsart = 1 if mode_clean == "arbeit" else 4
-            aa_jobs = aa_scraper.fetch_all_jobs(
+        aa_limit = max_jobs if not is_all and not has_portals else max(15, max_jobs // 2)
+        aa_angebotsart = 1 if mode_clean == "arbeit" else 4
+
+        def _fetch_aa():
+            return EnhancedJobScraper().fetch_all_jobs(
                 keyword,
                 location,
                 max_jobs=aa_limit,
@@ -5935,271 +6393,74 @@ def _fetch_combined_jobs(
                 angebotsart=aa_angebotsart,
                 umkreis=radius_val,
             )
-            for j in aa_jobs:
-                j.setdefault("source", "Arbeitsagentur")
-                ref = j.get("reference") or j.get("url") or j.get("apply_url") or j.get("refnr") or f"{j.get('company')}_{j.get('title')}"
-                if ref and ref not in seen_refs:
-                    seen_refs.add(ref)
-                    jobs.append(j)
 
-            valid_total, valid_by_src = _calc_valid_counts()
-            aa_valid = sum(c for k, c in valid_by_src.items() if "arbeitsagentur" in k)
-            report_progress({
-                "source": "arbeitsagentur",
-                "finished_source": "arbeitsagentur",
-                "stage": f"Arbeitsagentur: {len(aa_jobs)} scanned ({aa_valid} matching positions)",
-                "percent": 25 if is_all else 100,
-                "found": valid_total,
-                "raw_found": len(jobs),
-                "source_count": aa_valid,
-                "source_raw_count": len(aa_jobs),
-                "status": "source_done",
-            })
-        except Exception as exc:
-            logger.warning("Arbeitsagentur search failed: %s", exc)
-            valid_total, _ = _calc_valid_counts()
-            report_progress({
-                "source": "arbeitsagentur",
-                "finished_source": "arbeitsagentur",
-                "stage": f"Arbeitsagentur search failed: {exc}",
-                "percent": 25 if is_all else 100,
-                "found": valid_total,
-                "raw_found": len(jobs),
-                "source_count": 0,
-                "status": "source_error",
-            })
+        portal_runners.append(("arbeitsagentur", lambda: _run_standard_portal(
+            "arbeitsagentur", "Arbeitsagentur",
+            f"Arbeitsagentur ({aa_label}): Fetching official live vacancies...",
+            "https://rest.arbeitsagentur.de/opensearch/anti-robot/jobs",
+            _fetch_aa, "Arbeitsagentur", _aa_ref,
+        )))
 
     # 2. Ausbildung.de
-    if has_portals or source_clean in {"ausbildung_de", "ausbildung.de"}:
-        valid_total, _ = _calc_valid_counts()
-        report_progress({
-            "source": "ausbildung_de",
-            "stage": "Ausbildung.de: Crawling apprenticeship listings...",
-            "percent": 35 if is_all else 20,
-            "found": valid_total,
-            "raw_found": len(jobs),
-            "status": "running",
-        })
-        try:
-            adb_scraper = AusbildungDeScraper()
-            adb_limit = max_jobs if not is_all and not has_portals else max(15, max_jobs // 3)
-            adb_jobs = adb_scraper.fetch_jobs(
-                keyword=keyword,
-                location=location,
-                max_jobs=adb_limit,
-                published_since_days=published_since_days,
-            )
-            for j in adb_jobs:
-                j.setdefault("source", "ausbildung.de")
-                ref = j.get("reference") or j.get("url")
-                if ref and ref not in seen_refs:
-                    seen_refs.add(ref)
-                    jobs.append(j)
-
-            valid_total, valid_by_src = _calc_valid_counts()
-            adb_valid = sum(c for k, c in valid_by_src.items() if "ausbildung" in k)
-            report_progress({
-                "source": "ausbildung_de",
-                "finished_source": "ausbildung_de",
-                "stage": f"Ausbildung.de: {len(adb_jobs)} scanned ({adb_valid} matching positions)",
-                "percent": 50 if is_all else 100,
-                "found": valid_total,
-                "raw_found": len(jobs),
-                "source_count": adb_valid,
-                "source_raw_count": len(adb_jobs),
-                "status": "source_done",
-            })
-        except Exception as exc:
-            logger.warning("Ausbildung.de search failed: %s", exc)
-            valid_total, _ = _calc_valid_counts()
-            report_progress({
-                "source": "ausbildung_de",
-                "finished_source": "ausbildung_de",
-                "stage": f"Ausbildung.de failed: {exc}",
-                "percent": 50 if is_all else 100,
-                "found": valid_total,
-                "raw_found": len(jobs),
-                "source_count": 0,
-                "status": "source_error",
-            })
+    if "ausbildung_de" in active_keys:
+        adb_limit = max_jobs if not is_all and not has_portals else max(15, max_jobs // 3)
+        portal_runners.append(("ausbildung_de", lambda: _run_standard_portal(
+            "ausbildung_de", "Ausbildung.de",
+            "Ausbildung.de: Crawling apprenticeship listings...",
+            "https://www.ausbildung.de/suche/",
+            lambda: AusbildungDeScraper().fetch_jobs(
+                keyword=keyword, location=location, max_jobs=adb_limit, published_since_days=published_since_days,
+            ),
+            "ausbildung.de", _simple_ref,
+        )))
 
     # 3. Azubiyo.de
-    if has_portals or source_clean in {"azubiyo", "azubiyo.de"}:
-        valid_total, _ = _calc_valid_counts()
-        report_progress({
-            "source": "azubiyo",
-            "stage": "Azubiyo: Querying vocational listings...",
-            "percent": 55 if is_all else 20,
-            "found": valid_total,
-            "raw_found": len(jobs),
-            "status": "running",
-        })
-        try:
-            azubiyo_scraper = AzubiyoScraper()
-            az_limit = max_jobs if not is_all and not has_portals else max(12, max_jobs // 4)
-            az_jobs = azubiyo_scraper.fetch_jobs(
-                keyword=keyword,
-                location=location,
-                max_jobs=az_limit,
-            )
-            for j in az_jobs:
-                j.setdefault("source", "azubiyo.de")
-                ref = j.get("reference") or j.get("url")
-                if ref and ref not in seen_refs:
-                    seen_refs.add(ref)
-                    jobs.append(j)
-
-            valid_total, valid_by_src = _calc_valid_counts()
-            az_valid = sum(c for k, c in valid_by_src.items() if "azubiyo" in k)
-            report_progress({
-                "source": "azubiyo",
-                "finished_source": "azubiyo",
-                "stage": f"Azubiyo: {len(az_jobs)} scanned ({az_valid} matching positions)",
-                "percent": 70 if is_all else 100,
-                "found": valid_total,
-                "raw_found": len(jobs),
-                "source_count": az_valid,
-                "source_raw_count": len(az_jobs),
-                "status": "source_done",
-            })
-        except Exception as exc:
-            logger.warning("Azubiyo search failed: %s", exc)
-            valid_total, _ = _calc_valid_counts()
-            report_progress({
-                "source": "azubiyo",
-                "finished_source": "azubiyo",
-                "stage": f"Azubiyo failed: {exc}",
-                "percent": 70 if is_all else 100,
-                "found": valid_total,
-                "raw_found": len(jobs),
-                "source_count": 0,
-                "status": "source_error",
-            })
+    if "azubiyo" in active_keys:
+        az_limit = max_jobs if not is_all and not has_portals else max(12, max_jobs // 4)
+        portal_runners.append(("azubiyo", lambda: _run_standard_portal(
+            "azubiyo", "Azubiyo",
+            "Azubiyo: Querying vocational listings...",
+            "https://www.azubiyo.de/ausbildungsplaetze/",
+            lambda: AzubiyoScraper().fetch_jobs(keyword=keyword, location=location, max_jobs=az_limit),
+            "azubiyo.de", _simple_ref,
+        )))
 
     # 4. AUBI-plus
-    if has_portals or source_clean in {"aubi_plus", "aubi-plus", "aubi_plus.de"}:
-        valid_total, _ = _calc_valid_counts()
-        report_progress({
-            "source": "aubi_plus",
-            "stage": "AUBI-plus: Checking vocational database...",
-            "percent": 75 if is_all else 20,
-            "found": valid_total,
-            "raw_found": len(jobs),
-            "status": "running",
-        })
-        try:
-            aubi_scraper = AubiPlusScraper()
-            aubi_limit = max_jobs if not is_all and not has_portals else max(12, max_jobs // 4)
-            aubi_jobs = aubi_scraper.fetch_jobs(
-                keyword=keyword,
-                location=location,
-                max_jobs=aubi_limit,
-            )
-            for j in aubi_jobs:
-                j.setdefault("source", "aubi-plus.de")
-                ref = j.get("reference") or j.get("url")
-                if ref and ref not in seen_refs:
-                    seen_refs.add(ref)
-                    jobs.append(j)
-
-            valid_total, valid_by_src = _calc_valid_counts()
-            aubi_valid = sum(c for k, c in valid_by_src.items() if "aubi" in k)
-            report_progress({
-                "source": "aubi_plus",
-                "finished_source": "aubi_plus",
-                "stage": f"AUBI-plus: {len(aubi_jobs)} scanned ({aubi_valid} matching positions)",
-                "percent": 85 if is_all else 100,
-                "found": valid_total,
-                "raw_found": len(jobs),
-                "source_count": aubi_valid,
-                "source_raw_count": len(aubi_jobs),
-                "status": "source_done",
-            })
-        except Exception as exc:
-            logger.warning("AUBI-plus search failed: %s", exc)
-            valid_total, _ = _calc_valid_counts()
-            report_progress({
-                "source": "aubi_plus",
-                "finished_source": "aubi_plus",
-                "stage": f"AUBI-plus failed: {exc}",
-                "percent": 85 if is_all else 100,
-                "found": valid_total,
-                "raw_found": len(jobs),
-                "source_count": 0,
-                "status": "source_error",
-            })
+    if "aubi_plus" in active_keys:
+        aubi_limit = max_jobs if not is_all and not has_portals else max(12, max_jobs // 4)
+        portal_runners.append(("aubi_plus", lambda: _run_standard_portal(
+            "aubi_plus", "AUBI-plus",
+            "AUBI-plus: Checking vocational database...",
+            "https://www.aubi-plus.de/suchmaschine/",
+            lambda: AubiPlusScraper().fetch_jobs(keyword=keyword, location=location, max_jobs=aubi_limit),
+            "aubi-plus.de", _simple_ref,
+        )))
 
     # 5. IHK Lehrstellenbörse
-    if has_portals or source_clean in {"ihk", "ihk.de", "ihk_lehrstellenboerse"}:
-        valid_total, _ = _calc_valid_counts()
-        report_progress({
-            "source": "ihk",
-            "stage": "IHK Lehrstellenbörse: Querying Chamber of Commerce registry...",
-            "percent": 90 if is_all else 20,
-            "found": valid_total,
-            "raw_found": len(jobs),
-            "status": "running",
-        })
-        try:
-            ihk_scraper = IhkScraper()
-            ihk_limit = max_jobs if not is_all and not has_portals else max(12, max_jobs // 4)
-            ihk_jobs = ihk_scraper.fetch_jobs(
-                keyword=keyword,
-                location=location,
-                max_jobs=ihk_limit,
-            )
-            for j in ihk_jobs:
-                j.setdefault("source", "ihk.de")
-                ref = j.get("reference") or j.get("url")
-                if ref and ref not in seen_refs:
-                    seen_refs.add(ref)
-                    jobs.append(j)
-
-            valid_total, valid_by_src = _calc_valid_counts()
-            ihk_valid = sum(c for k, c in valid_by_src.items() if "ihk" in k)
-            report_progress({
-                "source": "ihk",
-                "finished_source": "ihk",
-                "stage": f"IHK: {len(ihk_jobs)} scanned ({ihk_valid} matching positions)",
-                "percent": 98 if is_all else 100,
-                "found": valid_total,
-                "raw_found": len(jobs),
-                "source_count": ihk_valid,
-                "source_raw_count": len(ihk_jobs),
-                "status": "source_done",
-            })
-        except Exception as exc:
-            logger.warning("IHK search failed: %s", exc)
-            valid_total, _ = _calc_valid_counts()
-            report_progress({
-                "source": "ihk",
-                "finished_source": "ihk",
-                "stage": f"IHK failed: {exc}",
-                "percent": 98 if is_all else 100,
-                "found": valid_total,
-                "raw_found": len(jobs),
-                "source_count": 0,
-                "status": "source_error",
-            })
+    if "ihk" in active_keys:
+        ihk_limit = max_jobs if not is_all and not has_portals else max(12, max_jobs // 4)
+        portal_runners.append(("ihk", lambda: _run_standard_portal(
+            "ihk", "IHK",
+            "IHK Lehrstellenbörse: Querying Chamber of Commerce registry...",
+            "https://www.lehrstellen-boerse.de/",
+            lambda: IhkScraper().fetch_jobs(keyword=keyword, location=location, max_jobs=ihk_limit),
+            "ihk.de", _simple_ref,
+        )))
 
     # 6. Google Maps (when selected explicitly or as part of all sources)
-    if has_gmaps:
-        valid_total, _ = _calc_valid_counts()
+    def _run_google_maps():
         gmaps_label = "Local Employers & Websites" if mode_clean == "arbeit" else "Local Training Companies & Career Websites"
-        report_progress({
-            "source": "google_maps",
-            "stage": f"Google Maps ({gmaps_label}): Discovering businesses...",
-            "percent": 95 if is_all else 20,
-            "found": valid_total,
-            "raw_found": len(jobs),
-            "status": "running",
-        })
+        tracker.start_portal(
+            "google_maps",
+            f"Google Maps ({gmaps_label}): Discovering businesses...",
+            url="https://overpass-api.de/api/interpreter",
+        )
         try:
             from scraper.google_maps_ausbildung_verifier import GoogleMapsAusbildungVerifier
             from scraper.overpass_scraper import OverpassBusinessScraper
 
-            verifier = GoogleMapsAusbildungVerifier()
             unconfirmed_maps_companies = []
+            gm = tracker.google_maps_metrics
 
             # Determine target employer categories
             parsed_custom_cats = []
@@ -6218,115 +6479,238 @@ def _fetch_combined_jobs(
                 ]
             else:
                 categories_to_query = [keyword]
+            categories_to_query = [c for c in categories_to_query if c] or [keyword]
 
             target_cities = geo_plan.get("targets") or [location or "Berlin"]
+            with tracker.lock:
+                gm["city"] = target_cities[0] if target_cities else (location or "Berlin")
+                gm["category"] = categories_to_query[0]
 
-            report_progress({
-                "source": "google_maps",
-                "stage": f"Google Maps AI: Scanning '{norm_keyword}' ({prof_info.get('sector', 'General')}) across {len(categories_to_query)} industries in {', '.join(target_cities[:3])}...",
-                "percent": 96 if is_all else 30,
-                "found": valid_total,
-                "raw_found": len(jobs),
-                "status": "running",
-            })
+            tracker.log(
+                "google_maps",
+                "info",
+                f"Google Maps AI: Scanning '{norm_keyword}' ({prof_info.get('sector', 'General')}) across {len(categories_to_query[:4])} industries in {', '.join(target_cities[:2])}...",
+            )
 
             overpass_scraper = OverpassBusinessScraper()
             discovered_raw = []
             seen_biz_keys = set()
 
-            for cat_term in categories_to_query[:4]:
-                for target_city in target_cities[:2]:
-                    try:
-                        batch = overpass_scraper.search_businesses(city=target_city, category=cat_term, limit=10)
-                        for b in batch:
-                            b_key = (
-                                (b.get("name") or "").lower().strip(),
-                                (b.get("website") or b.get("street") or b.get("city") or "").lower().strip(),
-                            )
-                            if b_key not in seen_biz_keys:
-                                seen_biz_keys.add(b_key)
-                                b["target_category"] = cat_term
-                                discovered_raw.append(b)
-                    except Exception as err:
-                        logger.debug("Overpass batch error for city=%s cat=%s: %s", target_city, cat_term, err)
+            query_pairs = [(c, city) for c in categories_to_query[:4] for city in target_cities[:2]]
 
-            if not discovered_raw:
+            def _overpass_query(pair):
+                cat_term, target_city = pair
+                if tracker.is_abandoned("google_maps"):
+                    return pair, []
+                with tracker.lock:
+                    gm["category"] = cat_term
+                    gm["city"] = target_city
+                tracker.set_task("google_maps", f"Overpass: searching '{cat_term}' in {target_city}...", url="https://overpass-api.de/api/interpreter")
+                try:
+                    return pair, overpass_scraper.search_businesses(city=target_city, category=cat_term, limit=10) or []
+                except Exception as err:
+                    tracker.log("google_maps", "error", f"Overpass query failed for '{cat_term}' in '{target_city}': {err}")
+                    return pair, []
+
+            # Overpass is rate limited, so only two concurrent queries.
+            with ThreadPoolExecutor(max_workers=2, thread_name_prefix="gmaps-overpass") as ov_pool:
+                for (cat_term, target_city), batch in ov_pool.map(_overpass_query, query_pairs):
+                    with tracker.lock:
+                        gm["companies_found"] += len(batch)
+                    tracker.log(
+                        "google_maps",
+                        "info",
+                        f"Overpass query for category '{cat_term}' in '{target_city}' returned {len(batch)} businesses",
+                        url="https://overpass-api.de/api/interpreter",
+                    )
+                    for b in batch:
+                        b_key = (
+                            (b.get("name") or "").lower().strip(),
+                            (b.get("website") or b.get("street") or b.get("city") or "").lower().strip(),
+                        )
+                        if b_key not in seen_biz_keys:
+                            seen_biz_keys.add(b_key)
+                            b["target_category"] = cat_term
+                            discovered_raw.append(b)
+
+            if not discovered_raw and not tracker.is_abandoned("google_maps"):
                 city_query = location or "Berlin"
-                discovered_raw = overpass_scraper.search_businesses(city=city_query, category=keyword, limit=12)
+                discovered_raw = overpass_scraper.search_businesses(city=city_query, category=keyword, limit=12) or []
+                with tracker.lock:
+                    gm["companies_found"] = len(discovered_raw)
+
+            tracker.set_task(
+                "google_maps",
+                f"Visiting {min(15, len(discovered_raw))} company websites (6 parallel workers)...",
+                scanned=len(discovered_raw),
+            )
+
+            _verifier_local = threading.local()
+
+            def _get_verifier():
+                v = getattr(_verifier_local, "v", None)
+                if v is None:
+                    v = GoogleMapsAusbildungVerifier()
+                    _verifier_local.v = v
+                return v
+
+            def _verify(biz):
+                if tracker.is_abandoned("google_maps"):
+                    return None
+                with tracker.lock:
+                    gm["websites_visited"] += 1
+                tracker.log(
+                    "google_maps",
+                    "info",
+                    f"Inspecting {'company website' if mode_clean == 'arbeit' else 'training opportunities'}: {biz.get('name')} ({biz.get('website') or 'No site'})...",
+                    url=biz.get("website"),
+                )
+                try:
+                    if mode_clean == "arbeit":
+                        return _get_verifier().verify_business_for_arbeit(biz, profession_keyword=norm_keyword)
+                    return _get_verifier().verify_business(biz, profession_keyword=norm_keyword)
+                except Exception as err:
+                    tracker.log("google_maps", "error", f"Website check failed for {biz.get('name')}: {err}", url=biz.get("website"))
+                    return None
+
+            with ThreadPoolExecutor(max_workers=6, thread_name_prefix="gmaps-verify") as v_pool:
+                verified_list = list(v_pool.map(_verify, discovered_raw[:15]))
 
             verified_count = 0
             search_scope_clean = str(search_scope or "both").lower().strip()
+            discovered_maps_jobs = []
+            dup = 0
 
-            if mode_clean == "arbeit":
-                for biz in discovered_raw[:15]:
-                    verified_biz = verifier.verify_business_for_arbeit(biz, profession_keyword=norm_keyword)
-                    ref = verified_biz.get("apply_url") or verified_biz.get("website") or verified_biz.get("name")
-                    if ref and ref not in seen_refs:
-                        seen_refs.add(ref)
-                        jobs.append(verified_biz)
-                        verified_count += 1
-            else:
-                for biz in discovered_raw[:15]:
-                    verified_biz = verifier.verify_business(biz, profession_keyword=norm_keyword)
+            for verified_biz in verified_list:
+                if not verified_biz:
+                    continue
+                if verified_biz.get("email"):
+                    with tracker.lock:
+                        gm["emails_extracted"] += 1
+                    tracker.log("google_maps", "success", f"Extracted email '{verified_biz.get('email')}' for {verified_biz.get('name') or verified_biz.get('company')}", item=verified_biz)
+
+                ref = verified_biz.get("apply_url") or verified_biz.get("website") or verified_biz.get("name")
+
+                if mode_clean == "arbeit":
+                    accept = True
+                else:
                     opp_type = verified_biz.get("opportunity_type") or (
                         "VERIFIED_AUSBILDUNG" if verified_biz.get("is_verified_vacancy") else "POTENTIAL_EMPLOYER"
                     )
-                    ref = verified_biz.get("apply_url") or verified_biz.get("website") or verified_biz.get("name")
+                    if verified_biz.get("is_verified_vacancy"):
+                        with tracker.lock:
+                            gm["verified_vacancies"] += 1
+                        tracker.log("google_maps", "success", f"Confirmed verified Ausbildung: '{verified_biz.get('title')}' at '{verified_biz.get('name') or verified_biz.get('company')}'", item=verified_biz)
+                    elif opp_type == "POTENTIAL_EMPLOYER":
+                        with tracker.lock:
+                            gm["potential_employers"] += 1
 
                     if search_scope_clean == "verified_only":
-                        if opp_type == "VERIFIED_AUSBILDUNG" or verified_biz.get("is_verified_vacancy"):
-                            if ref and ref not in seen_refs:
-                                seen_refs.add(ref)
-                                jobs.append(verified_biz)
-                                verified_count += 1
-                        else:
-                            unconfirmed_maps_companies.append(verified_biz)
+                        accept = opp_type == "VERIFIED_AUSBILDUNG" or bool(verified_biz.get("is_verified_vacancy"))
                     elif search_scope_clean == "potential_only":
-                        if opp_type == "POTENTIAL_EMPLOYER":
-                            if ref and ref not in seen_refs:
-                                seen_refs.add(ref)
-                                jobs.append(verified_biz)
-                                verified_count += 1
-                        else:
-                            unconfirmed_maps_companies.append(verified_biz)
+                        accept = opp_type == "POTENTIAL_EMPLOYER"
                     else:  # "both" (default)
-                        if opp_type in ("VERIFIED_AUSBILDUNG", "POTENTIAL_EMPLOYER") or verified_biz.get("is_verified_vacancy"):
-                            if ref and ref not in seen_refs:
-                                seen_refs.add(ref)
-                                jobs.append(verified_biz)
-                                verified_count += 1
-                        else:
-                            unconfirmed_maps_companies.append(verified_biz)
+                        accept = opp_type in ("VERIFIED_AUSBILDUNG", "POTENTIAL_EMPLOYER") or bool(verified_biz.get("is_verified_vacancy"))
+                    if not accept:
+                        unconfirmed_maps_companies.append(verified_biz)
+                        continue
 
-            # Smart relevance ranking on collected jobs
-            jobs = verifier.smart_rank_employers(jobs, profession=norm_keyword)
+                if not accept:
+                    continue
+                with state_lock:
+                    if tracker.is_abandoned("google_maps"):
+                        break
+                    if ref and ref not in seen_refs:
+                        seen_refs.add(ref)
+                        jobs.append(verified_biz)
+                        discovered_maps_jobs.append(verified_biz)
+                        verified_count += 1
+                    elif ref:
+                        dup += 1
+
             search_cache["unconfirmed_maps_companies"] = unconfirmed_maps_companies
 
-            valid_total, _ = _calc_valid_counts()
-            success_stage = f"Google Maps: {verified_count} businesses verified" if mode_clean == "arbeit" else f"Google Maps: {verified_count} matching training companies/positions"
-            report_progress({
-                "source": "google_maps",
-                "finished_source": "google_maps",
-                "stage": success_stage,
-                "percent": 99 if is_all else 100,
-                "found": valid_total,
-                "raw_found": len(jobs),
-                "source_count": verified_count,
-                "status": "source_done",
-            })
+            success_stage = (
+                f"Google Maps: {verified_count} businesses verified"
+                if mode_clean == "arbeit"
+                else f"Google Maps: {verified_count} matching training companies/positions"
+            )
+            tracker.finish_portal(
+                "google_maps",
+                success_stage,
+                source_valid=verified_count,
+                source_raw=len(discovered_raw),
+                discovered_jobs=discovered_maps_jobs,
+                cross_duplicates=dup,
+            )
         except Exception as exc:
             logger.warning("Google Maps search failed: %s", exc)
-            valid_total, _ = _calc_valid_counts()
-            report_progress({
-                "source": "google_maps",
-                "finished_source": "google_maps",
-                "stage": f"Google Maps failed: {exc}",
-                "percent": 99 if is_all else 100,
-                "found": valid_total,
-                "raw_found": len(jobs),
-                "source_count": 0,
-                "status": "source_error",
-            })
+            tracker.finish_portal("google_maps", f"Google Maps failed: {exc}", error=exc)
+
+    if "google_maps" in active_keys:
+        portal_runners.append(("google_maps", _run_google_maps))
+
+    # Execute all selected portals concurrently, with heartbeats and per-portal timeouts.
+    if portal_runners:
+        tracker.log(
+            "all",
+            "info",
+            f"Launching {len(portal_runners)} portal workers in parallel: "
+            + ", ".join(tracker.portals[k]["name"] for k, _ in portal_runners),
+        )
+        tracker.emit_progress("all", f"Searching {len(portal_runners)} portals in parallel...", status="running")
+
+        executor = ThreadPoolExecutor(max_workers=len(portal_runners), thread_name_prefix="portal")
+        future_map = {executor.submit(fn): key for key, fn in portal_runners}
+        pending_futures = set(future_map)
+        last_heartbeat = time.time()
+        try:
+            while pending_futures:
+                done, pending_futures = _futures_wait(pending_futures, timeout=1.0)
+                for fut in done:
+                    try:
+                        fut.result()
+                    except Exception as exc:  # runners catch their own errors; this is a safety net
+                        key = future_map[fut]
+                        logger.warning("Portal worker %s crashed: %s", key, exc)
+                        tracker.finish_portal(key, f"{key} crashed: {exc}", error=exc)
+
+                if tracker.check_timeouts():
+                    pending_futures = {f for f in pending_futures if not tracker.is_abandoned(future_map[f])}
+
+                # Safety net: a worker whose portal already reached a terminal state is no longer awaited.
+                pending_futures = {
+                    f for f in pending_futures
+                    if tracker.portals[future_map[f]]["state"] not in _ScraperMonitoringTracker.TERMINAL_STATES
+                }
+
+                now = time.time()
+                if pending_futures and now - last_heartbeat >= 2.0:
+                    last_heartbeat = now
+                    with tracker.lock:
+                        running = list(tracker.workers.get("active_names") or [])
+                    hb_stage = (
+                        f"Running in parallel: {', '.join(running)}"
+                        if running
+                        else "Finalizing portal results..."
+                    )
+                    tracker.emit_progress("all", hb_stage, status="heartbeat")
+        finally:
+            # Never block on abandoned (timed-out) workers.
+            executor.shutdown(wait=False)
+
+    # Smart relevance ranking on collected jobs (after all portals have finished)
+    if "google_maps" in active_keys:
+        try:
+            from scraper.google_maps_ausbildung_verifier import GoogleMapsAusbildungVerifier
+
+            with state_lock:
+                jobs = GoogleMapsAusbildungVerifier().smart_rank_employers(list(jobs), profession=norm_keyword)
+        except Exception as rank_err:
+            logger.debug("smart ranking skipped: %s", rank_err)
+
+    with state_lock:
+        jobs = list(jobs)
 
     # Apply shared relevance validation, location filtering, publication date filtering and deduplication
     final_jobs, audit = filter_and_deduplicate_jobs_with_audit(
@@ -6339,22 +6723,38 @@ def _fetch_combined_jobs(
     search_cache["last_search_audit"] = audit
     search_cache["mode"] = mode_clean
 
-    report_progress({
-        "source": "all",
-        "stage": f"Search complete: {len(final_jobs)} matching positions verified (from {len(jobs)} total offers scanned)",
-        "percent": 100,
-        "found": len(final_jobs),
-        "raw_found": len(jobs),
-        "audit": audit,
-        "status": "complete",
-    })
+    # Store full monitoring dashboard summary in audit and search_cache
+    dashboard_summary = {
+        "portals": tracker.portals,
+        "live_metrics": {
+            "scanned": sum(p["scanned"] for p in tracker.portals.values()) or len(jobs),
+            "accepted": len(final_jobs),
+            "rejected": len(audit.get("exclusions", [])),
+            "duplicates": audit.get("exclusions_by_stage", {}).get("duplicate", 0),
+            "errors": sum(p["errors"] for p in tracker.portals.values()),
+            "execution_time_seconds": round(time.time() - tracker.start_time, 2),
+        },
+        "google_maps_metrics": tracker.google_maps_metrics,
+        "workers": tracker.workers,
+        "logs": tracker.all_logs,
+        "recent_items": tracker.recent_items,
+    }
+    audit["dashboard"] = dashboard_summary
+    search_cache["last_scraper_dashboard"] = dashboard_summary
+
+    tracker.emit_progress(
+        source="all",
+        stage=f"Search complete: {len(final_jobs)} matching positions verified (from {len(jobs)} total offers scanned)",
+        percent=100,
+        found=len(final_jobs),
+        raw_found=len(jobs),
+        audit=audit,
+        status="complete",
+    )
 
     if return_audit:
         return final_jobs, audit
     return final_jobs
-
-
-
 @app.route("/search", methods=["POST"])
 def search():
     keyword = request.form.get("keyword", "").strip()

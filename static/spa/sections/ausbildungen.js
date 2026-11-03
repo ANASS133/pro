@@ -80,7 +80,7 @@
             if (updateButton) {
                 updateButton.hidden = false;
                 updateButton.disabled = false;
-                updateButton.textContent = "Update";
+                updateButton.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg> <span>Update</span>';
             }
             if (stopButton) {
                 stopButton.hidden = true;
@@ -135,7 +135,57 @@
             return "Update läuft...";
         }
 
-        // Filter and topic calculation
+        // Formatting and topic calculation
+        function formatDomainTitle(rawName) {
+            if (!rawName) return "Dataset";
+            let text = String(rawName).trim();
+            // Strip leading ID numbers or timestamps, e.g. 740944, 20261028_121614_...
+            text = text.replace(/^[\d_-]+\s*/g, "").trim();
+            if (!text) return "Dataset";
+
+            // Clean up corrupted umlauts and scrape stem artifacts
+            text = text
+                .replace(/\bf\s*r\b/gi, "für")
+                .replace(/\bk\s*lte\b/gi, "Kälte")
+                .replace(/\bmechatroniker\s+f[uü]r\s+k[aä]lte\s+und\s+klimatechnik\b/gi, "Mechatroniker für Kälte- und Klimatechnik")
+                .replace(/\bfachinformatiker\s+anwendungsentwicklung\b/gi, "Fachinformatiker Anwendungsentwicklung")
+                .replace(/\bfachinformatiker\s+systemintegration\b/gi, "Fachinformatiker Systemintegration")
+                .replace(/\bfachinformatiker\b/gi, "Fachinformatiker")
+                .replace(/\bmechatroniker\b/gi, "Mechatroniker")
+                .replace(/\bkoch\b/gi, "Koch");
+
+            // Standardize "ausbildung als" / "ausbildung zu" prefix
+            if (/^ausbildung\s+(als\s+|zu\s+|zum\s+|zur\s+)?/i.test(text)) {
+                text = text.replace(/^ausbildung\s+(als\s+|zu\s+|zum\s+|zur\s+)?/i, "Ausbildung: ");
+            } else if (!/^ausbildung/i.test(text)) {
+                text = "Ausbildung: " + text.charAt(0).toUpperCase() + text.slice(1);
+            }
+
+            // Ensure first letter after "Ausbildung: " is capitalized
+            text = text.replace(/^Ausbildung:\s*([a-zäöü])/i, (_, c) => `Ausbildung: ${c.toUpperCase()}`);
+
+            return text;
+        }
+
+        function getTopicKey(dn) {
+            if (!dn) return "";
+            let clean = String(dn).toLowerCase().replace(/^[\d_-]+\s*/g, "").trim();
+            if (clean.includes("mechatronik")) return "mechatroniker";
+            if (clean.includes("fachinformatik") || clean.includes("informatik")) return "fachinformatiker";
+            if (clean.includes("koch") || clean.includes("köch")) return "koch";
+            if (clean.includes("suchergebnisse")) return "suchergebnisse";
+            if (clean.includes("aluminium") || clean.includes("alu")) return "aluminiumbauer";
+
+            clean = clean
+                .replace(/^ausbildung\s+(als\s+|zu\s+|zum\s+|zur\s+)?/i, "")
+                .replace(/^ausbildung\s*/i, "")
+                .replace(/^stellenangebote?\s*/i, "")
+                .trim();
+
+            const words = clean.split(/\s+/).filter(w => !/^\d+$/.test(w) && w.length > 2);
+            return words[0] || "";
+        }
+
         function getFilteredFiles() {
             return allFiles.filter(item => {
                 // Search query match
@@ -147,8 +197,11 @@
 
                 // Topic chip filter
                 if (activeTopic !== "all") {
+                    const key = getTopicKey(item.domain_name);
                     const d = (item.domain_name || "").toLowerCase();
-                    if (!d.includes(activeTopic.toLowerCase())) return false;
+                    if (key !== activeTopic && !d.includes(activeTopic.toLowerCase())) {
+                        return false;
+                    }
                 }
 
                 return true;
@@ -169,23 +222,22 @@
             if (topicChipsRoot) {
                 const topicCounts = new Map();
                 allFiles.forEach(f => {
-                    const dn = (f.domain_name || "").trim().toLowerCase();
-                    let key = "other";
-                    if (dn.includes("fachinformatiker") || dn.includes("informatik")) {
-                        key = "fachinformatiker";
-                    } else if (dn.includes("koch")) {
-                        key = "koch";
-                    } else if (dn.includes("suchergebnisse")) {
-                        key = "suchergebnisse";
-                    } else if (dn) {
-                        key = dn.split(" ")[0];
+                    const key = getTopicKey(f.domain_name);
+                    if (key) {
+                        topicCounts.set(key, (topicCounts.get(key) || 0) + 1);
                     }
-                    topicCounts.set(key, (topicCounts.get(key) || 0) + 1);
                 });
 
                 let html = `<button type="button" class="ab-chip ${activeTopic === "all" ? "is-active" : ""}" data-topic="all">All (${totalFiles})</button>`;
                 topicCounts.forEach((count, key) => {
-                    const label = key === "fachinformatiker" ? "Fachinformatiker" : (key === "koch" ? "Koch" : (key === "suchergebnisse" ? "Suchergebnisse" : key.charAt(0).toUpperCase() + key.slice(1)));
+                    let label = key;
+                    if (key === "mechatroniker") label = "Mechatroniker";
+                    else if (key === "fachinformatiker") label = "Fachinformatiker";
+                    else if (key === "koch") label = "Koch";
+                    else if (key === "suchergebnisse") label = "Suchergebnisse";
+                    else if (key === "aluminiumbauer") label = "Aluminiumbauer";
+                    else label = key.charAt(0).toUpperCase() + key.slice(1);
+
                     const isActive = activeTopic === key ? "is-active" : "";
                     html += `<button type="button" class="ab-chip ${isActive}" data-topic="${escapeHtml(key)}">${escapeHtml(label)} (${count})</button>`;
                 });
@@ -235,7 +287,7 @@
             const activeJob = item.active_job || null;
             const isRunning = Boolean(activeJob && activeJob.is_running);
             const isSelected = selectedFiles.has(item.filename);
-            const domainTitle = item.domain_name ? (item.domain_name.charAt(0).toUpperCase() + item.domain_name.slice(1)) : "Dataset";
+            const domainTitle = formatDomainTitle(item.domain_name);
 
             return `
                 <article
@@ -276,7 +328,10 @@
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                             <span>Export</span>
                         </a>
-                        <button type="button" class="update-btn" data-update-button ${isRunning ? "hidden" : ""} title="Run web crawler for new emails">Update</button>
+                        <button type="button" class="update-btn" data-update-button ${isRunning ? "hidden" : ""} title="Run web crawler for new emails">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                            <span>Update</span>
+                        </button>
                         <button type="button" class="stop-btn" data-stop-button ${isRunning ? "" : "hidden"}>Stop</button>
                         <button type="button" class="ab-btn-card-action ab-btn-delete" data-delete-btn title="Delete dataset">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>

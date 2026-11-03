@@ -190,26 +190,255 @@
             return d.toTimeString().split(" ")[0];
         }
 
-        function logToConsole(ui, message, level = "info", sourceTag = "") {
-            if (!ui || !ui.consoleTerminal) return;
-            const timeStr = formatConsoleTime();
-            const row = document.createElement("div");
-            row.className = "terminal-row";
+        // --- Real-time Scraper Monitoring Dashboard State ---
+        let monTimerInterval = null;
+        let monStartTime = null;
+        let monLogs = [];
+        let monItems = [];
+        let monActiveLogFilter = "all";
+        let monActiveItemFilter = "all";
+        let monLogQuery = "";
+        let monDashboardInitialized = false;
 
-            let levelClass = "terminal-msg";
-            if (level === "success") levelClass = "terminal-success";
-            else if (level === "warn") levelClass = "terminal-warn";
-            else if (level === "error") levelClass = "terminal-error";
-            else if (level === "muted") levelClass = "terminal-muted";
+        function startExecutionTimer() {
+            if (monTimerInterval) clearInterval(monTimerInterval);
+            monStartTime = Date.now();
+            const timerEl = document.getElementById("mon_exec_timer");
+            monTimerInterval = setInterval(() => {
+                if (!monStartTime || !timerEl) return;
+                const elapsedMs = Date.now() - monStartTime;
+                const totalSec = Math.floor(elapsedMs / 1000);
+                const mins = String(Math.floor(totalSec / 60)).padStart(2, "0");
+                const secs = String(totalSec % 60).padStart(2, "0");
+                const tenths = Math.floor((elapsedMs % 1000) / 100);
+                timerEl.textContent = `⏱ ${mins}:${secs}.${tenths}`;
+            }, 100);
+        }
 
-            const tagStr = sourceTag ? `<span class="terminal-src">[${escapeHtml(sourceTag.toUpperCase())}]</span> ` : "";
-            row.innerHTML = `<span class="terminal-ts">[${timeStr}]</span> ${tagStr}<span class="${levelClass}">${escapeHtml(message)}</span>`;
-
-            ui.consoleTerminal.appendChild(row);
-            while (ui.consoleTerminal.children.length > 200) {
-                ui.consoleTerminal.removeChild(ui.consoleTerminal.firstChild);
+        function stopExecutionTimer() {
+            if (monTimerInterval) {
+                clearInterval(monTimerInterval);
+                monTimerInterval = null;
             }
-            ui.consoleTerminal.scrollTop = ui.consoleTerminal.scrollHeight;
+        }
+
+        function renderTerminalLogs(ui) {
+            const terminal = (ui && ui.consoleTerminal) || document.getElementById("scraper_console_terminal_1");
+            if (!terminal) return;
+            const badgeLogs = document.getElementById("mon_badge_logs");
+            if (badgeLogs) badgeLogs.textContent = String(monLogs.length);
+
+            const q = monLogQuery.toLowerCase();
+            const filtered = monLogs.filter(log => {
+                if (monActiveLogFilter !== "all") {
+                    const lvl = String(log.level || "info").toLowerCase();
+                    if (monActiveLogFilter === "rejected" && !lvl.includes("reject") && !lvl.includes("warn")) return false;
+                    if (monActiveLogFilter === "error" && !lvl.includes("error") && !lvl.includes("fail")) return false;
+                    if (monActiveLogFilter === "success" && !lvl.includes("success")) return false;
+                    if (monActiveLogFilter === "info" && lvl !== "info") return false;
+                }
+                if (q) {
+                    const text = `${log.message || ""} ${log.source || ""} ${log.url || ""} ${log.reason || ""}`.toLowerCase();
+                    if (!text.includes(q)) return false;
+                }
+                return true;
+            });
+
+            if (!filtered.length) {
+                terminal.innerHTML = '<div class="terminal-row terminal-muted"><span class="terminal-ts">[--:--:--]</span> No logs match the selected filter.</div>';
+                return;
+            }
+
+            const html = filtered.slice(-150).map(log => {
+                let lvlClass = "terminal-lvl-info";
+                const lvl = String(log.level || "info").toLowerCase();
+                if (lvl.includes("error") || lvl.includes("fail")) lvlClass = "terminal-lvl-error";
+                else if (lvl.includes("reject") || lvl.includes("warn")) lvlClass = "terminal-lvl-rejected";
+                else if (lvl.includes("success")) lvlClass = "terminal-lvl-success";
+
+                const srcTag = log.source ? `<span class="terminal-src">[${escapeHtml(log.source.toUpperCase())}]</span> ` : "";
+                const urlTag = log.url ? ` <span style="color:#64748b; font-size:10.5px;">(${escapeHtml(log.url)})</span>` : "";
+                const reasonTag = log.reason ? ` <span style="color:#f87171; font-size:10.5px; font-weight:600;">[Excluded: ${escapeHtml(log.reason)}]</span>` : "";
+
+                return `<div class="terminal-row">
+                    <span class="terminal-ts">[${escapeHtml(log.time || formatConsoleTime())}]</span>
+                    ${srcTag}
+                    <span class="${lvlClass}">${escapeHtml(log.message || "")}${urlTag}${reasonTag}</span>
+                </div>`;
+            }).join("");
+
+            terminal.innerHTML = html;
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        function renderDiscoveredItems() {
+            const feed = document.getElementById("mon_discovered_items_feed");
+            const badgeItems = document.getElementById("mon_badge_items");
+            const countLabel = document.getElementById("mon_items_count_label");
+            if (!feed) return;
+
+            if (badgeItems) badgeItems.textContent = String(monItems.length);
+            if (countLabel) countLabel.textContent = `${monItems.length} Opportunities Discovered`;
+
+            const filtered = monItems.filter(item => {
+                if (monActiveItemFilter === "accepted" && item.status !== "accepted") return false;
+                if (monActiveItemFilter === "rejected" && item.status !== "rejected") return false;
+                return true;
+            });
+
+            if (!filtered.length) {
+                feed.innerHTML = '<div class="mon-items-empty">No opportunities match the selected filter.</div>';
+                return;
+            }
+
+            feed.innerHTML = filtered.slice(-100).map(item => {
+                const isAcc = item.status === "accepted";
+                const badge = isAcc
+                    ? '<span class="mon-match-badge">✓ Verified Match</span>'
+                    : `<span class="mon-reason-badge">Excluded: ${escapeHtml(item.reason || "Filtered")}</span>`;
+                const emailTag = item.email ? `<span>📧 ${escapeHtml(item.email)}</span>` : "";
+                const srcTag = item.source ? `<span>Source: ${escapeHtml(item.source)}</span>` : "";
+
+                return `
+                    <div class="mon-item-card ${isAcc ? 'is-accepted' : 'is-rejected'}">
+                        <div class="mon-item-left">
+                            <span class="mon-item-title">${escapeHtml(item.title || "Position")}</span>
+                            <span class="mon-item-company">${escapeHtml(item.company || "Employer")}</span>
+                            <div class="mon-item-meta">
+                                <span>📍 ${escapeHtml(item.location || "Germany")}</span>
+                                ${srcTag}
+                                ${emailTag}
+                            </div>
+                        </div>
+                        <div class="mon-item-right">
+                            ${badge}
+                        </div>
+                    </div>
+                `;
+            }).join("");
+        }
+
+        function initDashboardControls(ui) {
+            if (monDashboardInitialized) return;
+            monDashboardInitialized = true;
+
+            // 1. Dashboard body minimize / expand toggle
+            const toggleBtn = document.getElementById("mon_dashboard_toggle");
+            const bodyEl = document.getElementById("mon_dashboard_body");
+            if (toggleBtn && bodyEl) {
+                toggleBtn.addEventListener("click", () => {
+                    const isCollapsed = bodyEl.style.display === "none";
+                    bodyEl.style.display = isCollapsed ? "block" : "none";
+                    toggleBtn.textContent = isCollapsed ? "▲" : "▼";
+                });
+            }
+
+            // 2. Portal Drawers
+            document.querySelectorAll("[data-portal-toggle]").forEach(btn => {
+                btn.addEventListener("click", () => {
+                    const pId = btn.getAttribute("data-portal-toggle");
+                    const drawer = document.querySelector(`[data-portal-drawer="${pId}"]`);
+                    if (drawer) {
+                        const isHidden = drawer.hidden;
+                        drawer.hidden = !isHidden;
+                        btn.textContent = isHidden ? "Details ▲" : "Details ▼";
+                    }
+                });
+            });
+
+            // 3. Tab switching
+            const tabBtnLogs = document.getElementById("mon_tab_btn_logs");
+            const tabBtnItems = document.getElementById("mon_tab_btn_items");
+            const paneLogs = document.getElementById("mon_tab_pane_logs");
+            const paneItems = document.getElementById("mon_tab_pane_items");
+
+            if (tabBtnLogs && tabBtnItems && paneLogs && paneItems) {
+                tabBtnLogs.addEventListener("click", () => {
+                    tabBtnLogs.classList.add("is-active");
+                    tabBtnItems.classList.remove("is-active");
+                    paneLogs.style.display = "block";
+                    paneItems.style.display = "none";
+                });
+                tabBtnItems.addEventListener("click", () => {
+                    tabBtnItems.classList.add("is-active");
+                    tabBtnLogs.classList.remove("is-active");
+                    paneItems.style.display = "block";
+                    paneLogs.style.display = "none";
+                    renderDiscoveredItems();
+                });
+            }
+
+            // 4. Log filter chips
+            document.querySelectorAll("[data-log-filter]").forEach(chip => {
+                chip.addEventListener("click", () => {
+                    document.querySelectorAll("[data-log-filter]").forEach(c => c.classList.remove("is-active"));
+                    chip.classList.add("is-active");
+                    monActiveLogFilter = chip.getAttribute("data-log-filter") || "all";
+                    renderTerminalLogs(ui);
+                });
+            });
+
+            // 5. Log search input
+            const logSearchInput = document.getElementById("mon_log_search_input");
+            if (logSearchInput) {
+                logSearchInput.addEventListener("input", (e) => {
+                    monLogQuery = (e.target.value || "").trim();
+                    renderTerminalLogs(ui);
+                });
+            }
+
+            // 6. Console Clear
+            const clearBtn = document.getElementById("scraper_console_clear_1");
+            if (clearBtn) {
+                clearBtn.addEventListener("click", () => {
+                    monLogs = [];
+                    renderTerminalLogs(ui);
+                });
+            }
+
+            // 7. Export Logs Button
+            const exportBtn = document.getElementById("mon_btn_export_logs");
+            if (exportBtn) {
+                exportBtn.addEventListener("click", () => {
+                    const exportData = {
+                        exported_at: new Date().toISOString(),
+                        total_logs: monLogs.length,
+                        total_items: monItems.length,
+                        logs: monLogs,
+                        items: monItems,
+                    };
+                    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `jobscout_scraper_logs_${Date.now()}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                });
+            }
+
+            // 8. Item Filters
+            document.querySelectorAll("[data-item-filter]").forEach(chip => {
+                chip.addEventListener("click", () => {
+                    document.querySelectorAll("[data-item-filter]").forEach(c => c.classList.remove("is-active"));
+                    chip.classList.add("is-active");
+                    monActiveItemFilter = chip.getAttribute("data-item-filter") || "all";
+                    renderDiscoveredItems();
+                });
+            });
+        }
+
+        function logToConsole(ui, message, level = "info", sourceTag = "") {
+            const timeStr = formatConsoleTime();
+            monLogs.push({
+                time: timeStr,
+                level: level,
+                source: sourceTag,
+                message: message,
+            });
+            renderTerminalLogs(ui);
         }
 
         function setSearchProgress(ui, progressData) {
@@ -225,24 +454,146 @@
                 ui.progressCard.style.display = "block";
             }
 
+            // Ensure controls are wired
+            initDashboardControls(ui);
+
             // 1. Update Live Target Banner
             if (ui.targetText && stage) {
                 ui.targetText.textContent = stage;
             }
 
             // 2. Update Live Metrics Strip
-            if (ui.metricRaw) {
-                ui.metricRaw.textContent = String(rawFound);
-            }
-            if (ui.metricMatched) {
-                ui.metricMatched.textContent = String(found);
-            }
-            if (ui.metricSource) {
-                ui.metricSource.textContent = source ? source.toUpperCase().replace("_", ".") : "Searching";
+            if (progressData.live_metrics) {
+                const lm = progressData.live_metrics;
+                if (ui.metricRaw) ui.metricRaw.textContent = String(lm.raw_scanned || 0);
+                if (ui.metricMatched) ui.metricMatched.textContent = String(lm.accepted || 0);
+                const rejEl = document.getElementById("mon_kpi_rejected");
+                if (rejEl) rejEl.textContent = String(lm.rejected || 0);
+                const dupEl = document.getElementById("mon_kpi_duplicates");
+                if (dupEl) dupEl.textContent = String(lm.duplicates || 0);
+                const errEl = document.getElementById("mon_kpi_errors");
+                if (errEl) errEl.textContent = String(lm.errors || 0);
+                if (ui.metricSource && lm.active_portal) {
+                    const runningNames = (progressData.workers && progressData.workers.active_names) || [];
+                    ui.metricSource.textContent = runningNames.length > 1 ? `${runningNames.length} running` : String(lm.active_portal);
+                    ui.metricSource.title = String(lm.active_portal);
+                }
+            } else {
+                if (ui.metricRaw) ui.metricRaw.textContent = String(rawFound);
+                if (ui.metricMatched) ui.metricMatched.textContent = String(found);
+                if (ui.metricSource && source) {
+                    ui.metricSource.textContent = source.toUpperCase().replace("_", ".");
+                }
             }
 
-            // 3. Log to Terminal Stream
-            if (stage && stage !== ui.lastLoggedStage) {
+            // 3. Worker Status & Pipeline Summary
+            if (progressData.workers) {
+                const w = progressData.workers;
+                const workerEl = document.getElementById("mon_worker_active");
+                const running = Number(w.running ?? (typeof w.active === "number" ? w.active : 0)) || 0;
+                const finished = Number(w.finished ?? ((w.completed || 0) + (w.failed || 0))) || 0;
+                const total = Number(w.total) || 0;
+                if (workerEl) {
+                    const parts = [`${running} running`, `${w.queued || 0} queued`, `${w.completed || 0} done`];
+                    if (w.failed) parts.push(`${w.failed} failed`);
+                    workerEl.textContent = `Workers (parallel): ${parts.join(" • ")}`;
+                    workerEl.title = (w.active_names || []).join(", ");
+                }
+                const summaryEl = document.getElementById("mon_pipeline_summary");
+                if (summaryEl) {
+                    summaryEl.textContent = `${finished}/${total} portals finished • ${running} running in parallel`;
+                }
+            }
+
+            // 4. Portal Pipeline
+            if (progressData.portals) {
+                const stateLabels = {
+                    pending: "Queued",
+                    running: "Running",
+                    completed: "Completed",
+                    failed: "Failed",
+                    timeout: "Timed out",
+                    skipped: "Skipped",
+                };
+                Object.entries(progressData.portals).forEach(([pKey, pInfo]) => {
+                    const state = String(pInfo.state || pInfo.status || "pending").toLowerCase();
+                    const stateEl = document.querySelector(`[data-portal-state="${pKey}"]`);
+                    if (stateEl) {
+                        stateEl.className = `mon-portal-state state-${state}${pInfo.slow && state === "running" ? " is-slow" : ""}`;
+                        let label = stateLabels[state] || state;
+                        if (state === "running") {
+                            const secs = Math.round((pInfo.elapsed_ms || 0) / 1000);
+                            label = pInfo.slow ? `Slow • ${secs}s` : `Running • ${secs}s`;
+                        }
+                        stateEl.textContent = label;
+                        stateEl.title = pInfo.current_task || "";
+                    }
+                    const cardEl = document.querySelector(`[data-portal-card="${pKey}"]`);
+                    if (cardEl) {
+                        cardEl.dataset.state = state;
+                        cardEl.classList.toggle("is-slow", !!pInfo.slow && state === "running");
+                    }
+                    const countsEl = document.querySelector(`[data-portal-counts="${pKey}"]`);
+                    if (countsEl) {
+                        if (state === "skipped") {
+                            countsEl.textContent = "Not selected";
+                        } else if (state === "pending") {
+                            countsEl.textContent = "Waiting for worker...";
+                        } else if (state === "running" && !pInfo.scanned) {
+                            countsEl.textContent = pInfo.current_task || "Fetching...";
+                        } else if (state === "failed" || state === "timeout") {
+                            countsEl.textContent = pInfo.current_task || "Failed";
+                        } else {
+                            countsEl.textContent = `${pInfo.scanned || 0} scanned • ${pInfo.accepted || 0} accepted`;
+                        }
+                        countsEl.title = pInfo.current_task || "";
+                    }
+                    const durEl = document.querySelector(`[data-portal-duration="${pKey}"]`);
+                    if (durEl) {
+                        const ms = pInfo.duration_ms || pInfo.elapsed_ms || 0;
+                        if (ms) {
+                            durEl.textContent = state === "running"
+                                ? `Elapsed: ${(ms / 1000).toFixed(1)}s / timeout ${pInfo.timeout_s || "-"}s`
+                                : `Duration: ${(ms / 1000).toFixed(1)}s`;
+                        }
+                    }
+                    const breakEl = document.querySelector(`[data-portal-breakdown="${pKey}"]`);
+                    if (breakEl) {
+                        breakEl.innerHTML = `
+                            <span class="mon-chip-sm">Accepted: ${pInfo.accepted || 0}</span>
+                            <span class="mon-chip-sm">Rejected: ${pInfo.rejected || 0}</span>
+                            <span class="mon-chip-sm">Duplicates: ${pInfo.duplicates || 0}</span>
+                        `;
+                    }
+                });
+            }
+
+            // 5. Google Maps Live Crawler
+            if (progressData.google_maps_metrics) {
+                const gm = progressData.google_maps_metrics;
+                const gmCard = document.getElementById("mon_gmaps_monitor");
+                if (gmCard) gmCard.style.display = "block";
+                const cityEl = document.getElementById("mon_gmaps_city");
+                if (cityEl) cityEl.textContent = gm.city || "-";
+                const catEl = document.getElementById("mon_gmaps_category");
+                if (catEl) catEl.textContent = gm.category || "-";
+                const compEl = document.getElementById("mon_gmaps_companies");
+                if (compEl) compEl.textContent = String(gm.companies_found || 0);
+                const webEl = document.getElementById("mon_gmaps_websites");
+                if (webEl) webEl.textContent = String(gm.websites_visited || 0);
+                const emailEl = document.getElementById("mon_gmaps_emails");
+                if (emailEl) emailEl.textContent = String(gm.emails_extracted || 0);
+                const vacEl = document.getElementById("mon_gmaps_vacancies");
+                if (vacEl) vacEl.textContent = String(gm.verified_vacancies || 0);
+                const potEl = document.getElementById("mon_gmaps_potential");
+                if (potEl) potEl.textContent = String(gm.potential_employers || 0);
+            }
+
+            // 6. Ingest New Logs
+            if (Array.isArray(progressData.new_logs) && progressData.new_logs.length) {
+                progressData.new_logs.forEach(l => monLogs.push(l));
+                renderTerminalLogs(ui);
+            } else if (stage && stage !== ui.lastLoggedStage && progressData.status !== "heartbeat") {
                 ui.lastLoggedStage = stage;
                 let lvl = "info";
                 if (progressData.status === "source_done" || pct >= 100) lvl = "success";
@@ -250,7 +601,13 @@
                 logToConsole(ui, stage, lvl, source);
             }
 
-            // 4. Update the Search Button progress bar & label
+            // 7. Ingest Discovered Items
+            if (Array.isArray(progressData.recent_items) && progressData.recent_items.length) {
+                progressData.recent_items.forEach(it => monItems.push(it));
+                renderDiscoveredItems();
+            }
+
+            // 8. Update Search Button progress bar & label
             if (ui.btnBar) {
                 ui.btnBar.style.width = `${pct}%`;
             }
@@ -264,7 +621,7 @@
                 }
             }
 
-            // 5. Update the Search Progress Card
+            // 9. Update Search Progress Card
             if (ui.searchProgressFill) {
                 ui.searchProgressFill.style.width = `${pct}%`;
             }
@@ -282,7 +639,7 @@
                 ui.searchProgressStatus.textContent = stage;
             }
 
-            // 6. Update Portal Badges
+            // 10. Update Portal Badges (legacy)
             if (ui.searchProgressStages) {
                 if (source && source !== "all") {
                     const activePill = ui.searchProgressStages.querySelector(`[data-portal="${source}"]`);
@@ -306,7 +663,7 @@
                 }
             }
 
-            // 4. Update Sidebar Live Job Widget
+            // 11. Update Sidebar Live Job Widget
             const sidebarJob = document.getElementById("sidebar-live-job");
             const sidebarTitle = document.getElementById("sidebar-job-title");
             const sidebarPercent = document.getElementById("sidebar-job-percent");
@@ -350,6 +707,13 @@
                 }
                 if (ui.progressCard) {
                     ui.progressCard.style.display = "block";
+                    const titleEl = document.getElementById("search_progress_title_1");
+                    if (titleEl) titleEl.textContent = "Job search in progress...";
+                    const bodyEl = document.getElementById("mon_dashboard_body");
+                    if (bodyEl) bodyEl.style.display = "block";
+                    const toggleBtn = document.getElementById("mon_dashboard_toggle");
+                    if (toggleBtn) toggleBtn.textContent = "▲";
+
                     if (ui.searchProgressStages) {
                         ui.searchProgressStages.querySelectorAll(".stage-pill").forEach((p) => {
                             p.classList.remove("is-active", "is-done");
@@ -360,6 +724,33 @@
                         });
                     }
                 }
+
+                // Reset dashboard state for new search
+                startExecutionTimer();
+                initDashboardControls(ui);
+                monLogs = [];
+                monItems = [];
+                renderTerminalLogs(ui);
+                renderDiscoveredItems();
+
+                // Reset Portal cards
+                document.querySelectorAll(".mon-portal-state").forEach(p => {
+                    p.className = "mon-portal-state state-pending";
+                    p.textContent = "Queued";
+                });
+                document.querySelectorAll(".mon-portal-counts").forEach(c => {
+                    c.textContent = "Waiting for worker...";
+                });
+                document.querySelectorAll(".mon-portal-duration").forEach(d => {
+                    d.textContent = "Duration: -";
+                });
+                document.querySelectorAll("[data-portal-card]").forEach(c => {
+                    c.classList.remove("is-slow");
+                    c.dataset.state = "pending";
+                });
+                const gmCard = document.getElementById("mon_gmaps_monitor");
+                if (gmCard) gmCard.style.display = "none";
+
                 setSearchProgress(ui, { percent: 5, stage: "Connecting to job portals & directories...", found: 0 });
             } else {
                 ui.searchBtn.disabled = false;
@@ -373,11 +764,14 @@
                 if (ui.loadingEl) {
                     ui.loadingEl.style.display = "none";
                 }
-                setTimeout(() => {
-                    if (ui.progressCard) {
-                        ui.progressCard.style.display = "none";
-                    }
-                }, 3500);
+                stopExecutionTimer();
+
+                const titleEl = document.getElementById("search_progress_title_1");
+                if (titleEl) titleEl.textContent = "Search Pipeline Complete";
+                const activeTag = document.getElementById("mon_worker_active");
+                if (activeTag) activeTag.textContent = "Worker: Done";
+
+                // Keep dashboard visible! Do NOT auto-hide after 3.5s so user can inspect metrics.
 
                 const sidebarJob = document.getElementById("sidebar-live-job");
                 if (sidebarJob) {
@@ -943,16 +1337,29 @@
                 ui.currentEventSource = evtSource;
 
                 await new Promise((resolve, reject) => {
-                    const timeoutTimer = setTimeout(() => {
-                        evtSource.close();
-                        if (ui.currentEventSource === evtSource) ui.currentEventSource = null;
-                        if (!searchCompleted) {
-                            reject(new Error("Stream timeout"));
-                        }
-                    }, 45000);
+                    // Inactivity watchdog: the backend emits a heartbeat every ~2s while portals run,
+                    // so only a silent stream (server gone / network dead) is treated as a failure.
+                    // A long but alive search is never cut off.
+                    const STREAM_IDLE_LIMIT_MS = 90000;
+                    let timeoutTimer = null;
+                    const armWatchdog = () => {
+                        if (timeoutTimer) clearTimeout(timeoutTimer);
+                        timeoutTimer = setTimeout(() => {
+                            evtSource.close();
+                            if (ui.currentEventSource === evtSource) ui.currentEventSource = null;
+                            if (!searchCompleted) {
+                                const err = new Error("Live stream stalled: no data from server for 90s");
+                                err.fatal = true;
+                                reject(err);
+                            }
+                        }, STREAM_IDLE_LIMIT_MS);
+                    };
+                    armWatchdog();
+                    evtSource.addEventListener("start", armWatchdog);
 
                     evtSource.addEventListener("progress", (e) => {
                         if (ui.searchGeneration !== currentGen) return;
+                        armWatchdog();
                         try {
                             const data = JSON.parse(e.data);
                             setSearchProgress(ui, data);
@@ -989,30 +1396,36 @@
                         clearTimeout(timeoutTimer);
                         evtSource.close();
                         if (ui.currentEventSource === evtSource) ui.currentEventSource = null;
-                        if (!searchCompleted) {
-                            reject(new Error("Stream connection failed"));
+                        if (searchCompleted) return;
+                        // A server-sent `event: error` carries data: the search itself failed,
+                        // so re-running it through the fallback would only repeat the failure.
+                        if (e && e.data) {
+                            let msg = "Suche fehlgeschlagen";
+                            try { msg = JSON.parse(e.data).message || msg; } catch (_) {}
+                            const err = new Error(msg);
+                            err.fatal = true;
+                            reject(err);
+                            return;
                         }
+                        reject(new Error("Stream connection failed"));
                     });
                 });
             } catch (streamError) {
                 if (ui.searchGeneration !== currentGen) return;
-                if (!searchCompleted) {
+                if (!searchCompleted && streamError && streamError.fatal) {
+                    logToConsole(ui, streamError.message, "error", "stream");
+                    showError(ui, streamError.message || "Suche fehlgeschlagen");
+                } else if (!searchCompleted) {
                     console.warn("SSE stream failed or not supported, falling back to /api/search:", streamError);
-                    let simPercent = 15;
-                    const simInterval = setInterval(() => {
-                        if (ui.searchGeneration !== currentGen) {
-                            clearInterval(simInterval);
-                            return;
-                        }
-                        if (simPercent < 88) {
-                            simPercent += Math.floor(Math.random() * 8) + 4;
-                            setSearchProgress(ui, {
-                                percent: simPercent,
-                                stage: "Portale werden durchsucht...",
-                                found: Math.floor(simPercent / 4),
-                            });
-                        }
-                    }, 400);
+                    // No simulated numbers: without the live stream we only know that the request is running.
+                    logToConsole(ui, "Live stream unavailable — running search without live metrics (results appear when finished)...", "warning", "stream");
+                    setSearchProgress(ui, {
+                        percent: 5,
+                        stage: "Live stream unavailable — waiting for search results (no live metrics)...",
+                        found: 0,
+                        status: "heartbeat",
+                    });
+                    const simInterval = null;
 
                     try {
                         const response = await fetch(`/api/search?${params.toString()}`);
@@ -1357,6 +1770,8 @@
 
         let activeCategoriesList = [];
         let defaultCategoriesList = [];
+        let allCategoriesList = [];
+        const disabledCategoriesSet = new Set();
         let classifyDebounceTimer = null;
 
         if (toggleCustomBtn && customDrawer) {
@@ -1373,8 +1788,10 @@
             if (!newCustomInput) return;
             const val = newCustomInput.value.trim();
             if (!val) return;
-            if (!activeCategoriesList.some(c => c.toLowerCase() === val.toLowerCase())) {
-                activeCategoriesList.push(val);
+            if (!allCategoriesList.some(c => c.toLowerCase() === val.toLowerCase())) {
+                allCategoriesList.push(val);
+                disabledCategoriesSet.delete(val);
+                activeCategoriesList = allCategoriesList.filter(c => !disabledCategoriesSet.has(c));
                 if (customCategoriesInput) customCategoriesInput.value = activeCategoriesList.join(", ");
                 renderCategoryChips();
                 updateSearchTermsPreview();
@@ -1397,6 +1814,8 @@
 
         if (restoreDefaultBtn) {
             restoreDefaultBtn.addEventListener("click", () => {
+                allCategoriesList = [...defaultCategoriesList];
+                disabledCategoriesSet.clear();
                 activeCategoriesList = [...defaultCategoriesList];
                 if (customCategoriesInput) customCategoriesInput.value = activeCategoriesList.join(", ");
                 renderCategoryChips();
@@ -1418,34 +1837,74 @@
             if (!chipsContainer) return;
             chipsContainer.innerHTML = "";
 
-            if (!activeCategoriesList.length) {
+            if (!allCategoriesList.length) {
                 chipsContainer.innerHTML = `
                     <div class="ai-chips-empty">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                         <span>Type a profession above to automatically discover target employer industries</span>
                     </div>`;
+                activeCategoriesList = [];
                 if (customCategoriesInput) customCategoriesInput.value = "";
                 return;
             }
 
-            activeCategoriesList.forEach((cat, idx) => {
-                const chip = document.createElement("span");
-                chip.className = "ai-sector-chip";
+            allCategoriesList.forEach((cat, idx) => {
+                const isSelected = !disabledCategoriesSet.has(cat);
+                const chip = document.createElement("div");
+                chip.className = `ai-sector-chip ${isSelected ? "is-selected" : "is-unselected"}`;
+                chip.setAttribute("role", "button");
+                chip.setAttribute("tabindex", "0");
+                chip.setAttribute("aria-pressed", isSelected ? "true" : "false");
+                chip.title = isSelected ? "Active in search. Click to exclude." : "Excluded from search. Click to include.";
+
                 chip.innerHTML = `
+                    <span class="ai-chip-check" aria-hidden="true">
+                        ${isSelected
+                            ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+                            : '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle></svg>'
+                        }
+                    </span>
                     <span class="ai-chip-name">${escapeHtml(cat)}</span>
                     <button type="button" class="ai-chip-remove" data-idx="${idx}" title="Remove category" aria-label="Remove category">&times;</button>
                 `;
-                
-                chip.querySelector("button").addEventListener("click", (e) => {
+
+                // Remove button
+                const removeBtn = chip.querySelector(".ai-chip-remove");
+                removeBtn.addEventListener("click", (e) => {
                     e.stopPropagation();
-                    activeCategoriesList.splice(idx, 1);
+                    allCategoriesList.splice(idx, 1);
+                    disabledCategoriesSet.delete(cat);
+                    activeCategoriesList = allCategoriesList.filter(c => !disabledCategoriesSet.has(c));
                     if (customCategoriesInput) customCategoriesInput.value = activeCategoriesList.join(", ");
                     renderCategoryChips();
                     updateSearchTermsPreview();
                 });
 
+                // Toggle chip active state on chip click
+                chip.addEventListener("click", () => {
+                    if (disabledCategoriesSet.has(cat)) {
+                        disabledCategoriesSet.delete(cat);
+                    } else {
+                        disabledCategoriesSet.add(cat);
+                    }
+                    activeCategoriesList = allCategoriesList.filter(c => !disabledCategoriesSet.has(c));
+                    if (customCategoriesInput) customCategoriesInput.value = activeCategoriesList.join(", ");
+                    renderCategoryChips();
+                    updateSearchTermsPreview();
+                });
+
+                // Keyboard accessibility (Enter/Space toggles)
+                chip.addEventListener("keydown", (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        chip.click();
+                    }
+                });
+
                 chipsContainer.appendChild(chip);
             });
 
+            activeCategoriesList = allCategoriesList.filter(c => !disabledCategoriesSet.has(c));
             if (customCategoriesInput) {
                 customCategoriesInput.value = activeCategoriesList.join(", ");
             }
@@ -1476,6 +1935,8 @@
                 if (profSummaryBadge) profSummaryBadge.textContent = "Automatic";
                 activeCategoriesList = [];
                 defaultCategoriesList = [];
+                allCategoriesList = [];
+                disabledCategoriesSet.clear();
                 renderCategoryChips();
                 return;
             }
@@ -1512,6 +1973,8 @@
                     }
                 }
                 defaultCategoriesList = [...cats];
+                allCategoriesList = [...cats];
+                disabledCategoriesSet.clear();
                 activeCategoriesList = [...cats];
                 renderCategoryChips();
                 updateSearchTermsPreview();

@@ -89,6 +89,16 @@
                 radio.checked = (radio.value === settings.primary_provider);
             });
 
+            const activeHeaderPill = document.getElementById("ai-active-provider-pill");
+            if (activeHeaderPill) {
+                const provLabels = {
+                    openai: "Active: OpenAI " + (settings.openai_model || "GPT"),
+                    gemini: "Active: Google Gemini",
+                    offline: "Active: Offline Mode"
+                };
+                activeHeaderPill.textContent = provLabels[settings.primary_provider] || `Active: ${settings.primary_provider}`;
+            }
+
             if (fallbackToggle) {
                 fallbackToggle.checked = Boolean(settings.enable_gemini_fallback);
             }

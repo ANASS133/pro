@@ -122,7 +122,9 @@ out skel qt;
                 resp = self.session.post(
                     endpoint,
                     data={"data": query},
-                    timeout=self.timeout,
+                    # Short connect timeout: an unreachable mirror must fail fast instead of
+                    # blocking the search for the full read timeout on every endpoint.
+                    timeout=(min(8, self.timeout), self.timeout),
                 )
                 if resp.status_code == 200:
                     data = resp.json()

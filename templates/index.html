@@ -621,24 +621,219 @@
                     </button>
                 </form>
 
-                <div class="search-progress-card" id="search_progress_card_1" style="display:none;">
-                    <div class="search-progress-header">
-                        <h4 class="search-progress-title" id="search_progress_title_1">Jobsuche läuft...</h4>
-                        <span class="search-progress-counter" id="search_progress_counter_1">0 Stellen gefunden</span>
-                    </div>
-                    <div class="search-progress-track">
-                        <div class="search-progress-fill" id="search_progress_fill_1" style="width: 0%;">
-                            <span class="search-progress-pct" id="search_progress_pct_1">0%</span>
+                <div class="search-progress-card mon-dashboard-card" id="search_progress_card_1" style="display:none;">
+                    <!-- Dashboard Header -->
+                    <div class="mon-header">
+                        <div class="mon-header-left">
+                            <div class="mon-pulse-badge">
+                                <span class="mon-pulse-dot"></span>
+                                <span class="mon-pulse-text">LIVE SCRAPER MONITOR</span>
+                            </div>
+                            <h4 class="mon-title" id="search_progress_title_1">Job search in progress...</h4>
+                        </div>
+                        <div class="mon-header-right">
+                            <span class="mon-timer-badge" id="mon_exec_timer" title="Elapsed execution time">⏱ 00:00.0</span>
+                            <span class="search-progress-counter mon-counter-badge" id="search_progress_counter_1">0 positions found</span>
+                            <span class="scraper-pct-badge mon-pct-badge" id="search_progress_pct_1">0%</span>
+                            <button type="button" class="mon-toggle-btn" id="mon_dashboard_toggle" title="Minimize / Expand Dashboard">▲</button>
                         </div>
                     </div>
-                    <div class="search-progress-status" id="search_progress_status_1">Verbindung zu Jobbörsen wird aufgebaut...</div>
-                    <div class="search-progress-stages" id="search_progress_stages_1">
+
+                    <!-- Active Stage & Worker Banner -->
+                    <div class="mon-active-bar" id="scraper_target_banner_1">
+                        <div class="mon-active-left">
+                            <svg class="mon-spin-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>
+                            <span class="mon-target-text" id="scraper_target_text_1">Initializing multi-portal search pipeline...</span>
+                        </div>
+                        <div class="mon-active-right">
+                            <span class="mon-worker-tag" id="mon_worker_active">Worker: Idle</span>
+                        </div>
+                    </div>
+
+                    <!-- Main Progress Track -->
+                    <div class="search-progress-track mon-track">
+                        <div class="search-progress-fill mon-fill" id="search_progress_fill_1" style="width: 0%;"></div>
+                    </div>
+
+                    <!-- Hidden backward compatibility elements -->
+                    <div class="search-progress-status" id="search_progress_status_1" style="display:none !important;">Connecting to job portals...</div>
+                    <div class="search-progress-stages" id="search_progress_stages_1" style="display:none !important;">
                         <span class="stage-pill" data-portal="arbeitsagentur">Arbeitsagentur</span>
                         <span class="stage-pill" data-portal="ausbildung_de">Ausbildung.de</span>
                         <span class="stage-pill" data-portal="azubiyo">Azubiyo</span>
                         <span class="stage-pill" data-portal="aubi_plus">AUBI-plus</span>
                         <span class="stage-pill" data-portal="ihk">IHK</span>
                         <span class="stage-pill" data-portal="google_maps">Google Maps</span>
+                    </div>
+
+                    <!-- Collapsible Dashboard Body -->
+                    <div class="mon-body" id="mon_dashboard_body">
+                        <!-- 1. Global Live Metrics KPI Strip -->
+                        <div class="mon-kpi-grid">
+                            <div class="mon-kpi-card">
+                                <div class="mon-kpi-icon mon-icon-blue">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                </div>
+                                <div class="mon-kpi-data">
+                                    <span class="mon-kpi-lbl">Raw Scanned</span>
+                                    <strong class="mon-kpi-val" id="metric_raw_scanned_1">0</strong>
+                                </div>
+                            </div>
+                            <div class="mon-kpi-card">
+                                <div class="mon-kpi-icon mon-icon-emerald">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                </div>
+                                <div class="mon-kpi-data">
+                                    <span class="mon-kpi-lbl">Accepted</span>
+                                    <strong class="mon-kpi-val mon-text-success" id="metric_matched_leads_1">0</strong>
+                                </div>
+                            </div>
+                            <div class="mon-kpi-card">
+                                <div class="mon-kpi-icon mon-icon-rose">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                                </div>
+                                <div class="mon-kpi-data">
+                                    <span class="mon-kpi-lbl">Rejected</span>
+                                    <strong class="mon-kpi-val mon-text-error" id="mon_kpi_rejected">0</strong>
+                                </div>
+                            </div>
+                            <div class="mon-kpi-card">
+                                <div class="mon-kpi-icon mon-icon-purple">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+                                </div>
+                                <div class="mon-kpi-data">
+                                    <span class="mon-kpi-lbl">Duplicates</span>
+                                    <strong class="mon-kpi-val" id="mon_kpi_duplicates">0</strong>
+                                </div>
+                            </div>
+                            <div class="mon-kpi-card">
+                                <div class="mon-kpi-icon mon-icon-amber">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                                </div>
+                                <div class="mon-kpi-data">
+                                    <span class="mon-kpi-lbl">Errors</span>
+                                    <strong class="mon-kpi-val" id="mon_kpi_errors">0</strong>
+                                </div>
+                            </div>
+                            <div class="mon-kpi-card">
+                                <div class="mon-kpi-icon mon-icon-indigo">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                                </div>
+                                <div class="mon-kpi-data">
+                                    <span class="mon-kpi-lbl">Active Portal</span>
+                                    <strong class="mon-kpi-val" id="metric_active_source_1">Ready</strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2. Portals Pipeline Grid -->
+                        <div class="mon-portals-section">
+                            <div class="mon-section-header">
+                                <div class="mon-section-title-wrap">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                                    <span class="mon-section-title">Portals &amp; Live Scraper Pipeline</span>
+                                </div>
+                                <span class="mon-pipeline-summary" id="mon_pipeline_summary">6 Tasks • 0 Completed</span>
+                            </div>
+                            <div class="mon-portals-grid" id="mon_portals_grid">
+                                <div class="mon-portal-card" data-portal-card="arbeitsagentur">
+                                    <div class="mon-portal-header">
+                                        <div class="mon-portal-title-wrap">
+                                            <span class="mon-portal-icon">🏛️</span>
+                                            <span class="mon-portal-name">Arbeitsagentur</span>
+                                            <span class="mon-portal-state state-pending" data-portal-state="arbeitsagentur">Pending</span>
+                                        </div>
+                                        <div class="mon-portal-right">
+                                            <span class="mon-portal-counts" data-portal-counts="arbeitsagentur">0 scanned • 0 accepted</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mon-portal-card" data-portal-card="ausbildung_de">
+                                    <div class="mon-portal-header">
+                                        <div class="mon-portal-title-wrap">
+                                            <span class="mon-portal-icon">🎓</span>
+                                            <span class="mon-portal-name">Ausbildung.de</span>
+                                            <span class="mon-portal-state state-pending" data-portal-state="ausbildung_de">Pending</span>
+                                        </div>
+                                        <div class="mon-portal-right">
+                                            <span class="mon-portal-counts" data-portal-counts="ausbildung_de">0 scanned • 0 accepted</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mon-portal-card" data-portal-card="azubiyo">
+                                    <div class="mon-portal-header">
+                                        <div class="mon-portal-title-wrap">
+                                            <span class="mon-portal-icon">💼</span>
+                                            <span class="mon-portal-name">Azubiyo</span>
+                                            <span class="mon-portal-state state-pending" data-portal-state="azubiyo">Pending</span>
+                                        </div>
+                                        <div class="mon-portal-right">
+                                            <span class="mon-portal-counts" data-portal-counts="azubiyo">0 scanned • 0 accepted</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mon-portal-card" data-portal-card="aubi_plus">
+                                    <div class="mon-portal-header">
+                                        <div class="mon-portal-title-wrap">
+                                            <span class="mon-portal-icon">📘</span>
+                                            <span class="mon-portal-name">AUBI-plus</span>
+                                            <span class="mon-portal-state state-pending" data-portal-state="aubi_plus">Pending</span>
+                                        </div>
+                                        <div class="mon-portal-right">
+                                            <span class="mon-portal-counts" data-portal-counts="aubi_plus">0 scanned • 0 accepted</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mon-portal-card" data-portal-card="ihk">
+                                    <div class="mon-portal-header">
+                                        <div class="mon-portal-title-wrap">
+                                            <span class="mon-portal-icon">🏢</span>
+                                            <span class="mon-portal-name">IHK Lehrstellenbörse</span>
+                                            <span class="mon-portal-state state-pending" data-portal-state="ihk">Pending</span>
+                                        </div>
+                                        <div class="mon-portal-right">
+                                            <span class="mon-portal-counts" data-portal-counts="ihk">0 scanned • 0 accepted</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mon-portal-card" data-portal-card="google_maps">
+                                    <div class="mon-portal-header">
+                                        <div class="mon-portal-title-wrap">
+                                            <span class="mon-portal-icon">📍</span>
+                                            <span class="mon-portal-name">Google Maps</span>
+                                            <span class="mon-portal-state state-pending" data-portal-state="google_maps">Pending</span>
+                                        </div>
+                                        <div class="mon-portal-right">
+                                            <span class="mon-portal-counts" data-portal-counts="google_maps">0 scanned • 0 accepted</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 3. Terminal -->
+                        <div class="mon-tabs-section">
+                            <div class="mon-tabs-nav">
+                                <button type="button" class="mon-tab-btn is-active" id="mon_tab_btn_logs">
+                                    <span>🖥️ Live Activity Stream</span>
+                                    <span class="mon-tab-badge" id="mon_badge_logs">0</span>
+                                </button>
+                            </div>
+                            <div class="mon-tab-pane" id="mon_tab_pane_logs">
+                                <div class="mon-log-toolbar">
+                                    <div class="mon-log-search-wrap">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                        <input type="text" id="mon_log_search_input" placeholder="Search logs...">
+                                    </div>
+                                    <div class="mon-log-actions">
+                                        <button type="button" class="mon-btn-sm" id="scraper_console_clear_1" title="Clear console">Clear</button>
+                                    </div>
+                                </div>
+                                <div class="scraper-console-terminal mon-terminal" id="scraper_console_terminal_1">
+                                    <div class="terminal-row terminal-muted"><span class="terminal-ts">[00:00:00]</span> Scraper Monitoring Dashboard initialized. Ready to stream live data...</div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 

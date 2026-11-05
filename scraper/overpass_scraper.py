@@ -6,7 +6,7 @@ craftsmen, medical practices, and corporate offices across Germany.
 
 import logging
 import re
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 import requests
 
 logger = logging.getLogger(__name__)

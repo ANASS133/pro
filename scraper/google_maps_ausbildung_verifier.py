@@ -104,7 +104,7 @@ class GoogleMapsAusbildungVerifier:
     def __init__(
         self,
         session: Optional[requests.Session] = None,
-        timeout: int = 10,
+        timeout: int = 6,
         max_pages: int = 6,
     ):
         self.timeout = timeout
@@ -136,7 +136,8 @@ class GoogleMapsAusbildungVerifier:
         if not url or not url.startswith("http"):
             return None
         try:
-            resp = self.session.get(url, timeout=self.timeout, allow_redirects=True)
+            timeout_val = (min(3.5, float(self.timeout)), float(self.timeout))
+            resp = self.session.get(url, timeout=timeout_val, allow_redirects=True)
             if resp.status_code == 200:
                 resp.encoding = resp.encoding or "utf-8"
                 return resp.text
@@ -265,6 +266,7 @@ class GoogleMapsAusbildungVerifier:
         business: Dict,
         profession_keyword: str,
         driver=None,
+        deep_form_discovery: bool = False,
     ) -> Dict:
         """
         Executes the mandatory website inspection for a Google Maps business.
@@ -282,6 +284,14 @@ class GoogleMapsAusbildungVerifier:
             business["status"] = "Unbestätigt: Keine Website vorhanden"
             business["verification_notes"] = "Keine offizielle Website auf Google Maps hinterlegt"
             business["source"] = "Google Maps"
+            business["email"] = ""
+            business["email_extracted"] = False
+            business["application_method"] = "none"
+            business["bewerbung_art"] = "Keine Website vorhanden"
+            business["direct_application_url"] = ""
+            business["has_form"] = False
+            business["form_link"] = ""
+            business["employer_website"] = ""
             return business
 
         # Step 2: Open official website
@@ -365,13 +375,19 @@ class GoogleMapsAusbildungVerifier:
 
             # If no email exists, follow vacancy's application links for Bewerbungsformular
             if not business.get("email"):
-                discovery = self.form_discovery.discover_application_form(
-                    business,
-                    driver=driver,
-                )
-                business["has_form"] = discovery.has_form
-                business["form_link"] = discovery.form_link
-                business["bewerbung_link"] = discovery.bewerbung_link or vacancy_url
+                if deep_form_discovery:
+                    discovery = self.form_discovery.discover_application_form(
+                        business,
+                        driver=driver,
+                    )
+                    business["has_form"] = discovery.has_form
+                    business["form_link"] = discovery.form_link
+                    business["bewerbung_link"] = discovery.bewerbung_link or vacancy_url
+                else:
+                    # Fast search mode: avoid deep multi-hop crawling during initial search
+                    business["has_form"] = False
+                    business["form_link"] = ""
+                    business["bewerbung_link"] = vacancy_url
             else:
                 # Email exists -> check if form also exists
                 business["has_form"] = False
@@ -462,12 +478,17 @@ class GoogleMapsAusbildungVerifier:
         if not website or not website.startswith("http"):
             business["email"] = ""
             business["email_extracted"] = False
-            business["application_method"] = "None"
-            business["bewerbung_art"] = "Keine"
-            business["is_verified_vacancy"] = True
+            business["application_method"] = "none"
+            business["bewerbung_art"] = "Keine Website vorhanden"
+            business["is_verified_vacancy"] = False
+            business["opportunity_type"] = "UNVERIFIED"
             business["verification_status"] = "missing_website"
             business["status"] = "Unternehmen erfasst (Keine Website)"
             business["verification_notes"] = "Keine offizielle Website hinterlegt"
+            business["direct_application_url"] = ""
+            business["has_form"] = False
+            business["form_link"] = ""
+            business["employer_website"] = ""
             return business
 
         # Step 2: Open official website homepage
@@ -475,12 +496,17 @@ class GoogleMapsAusbildungVerifier:
         if not html:
             business["email"] = ""
             business["email_extracted"] = False
-            business["application_method"] = "None"
-            business["bewerbung_art"] = "Keine"
-            business["is_verified_vacancy"] = True
+            business["application_method"] = "none"
+            business["bewerbung_art"] = "Keine Website erreichbar"
+            business["is_verified_vacancy"] = False
+            business["opportunity_type"] = "UNVERIFIED"
             business["verification_status"] = "inaccessible_website"
             business["status"] = "Unternehmen erfasst (Website nicht erreichbar)"
             business["verification_notes"] = "Website konnte nicht geladen werden"
+            business["direct_application_url"] = ""
+            business["has_form"] = False
+            business["form_link"] = ""
+            business["employer_website"] = ""
             return business
 
         # Step 3: Extract emails from homepage
@@ -506,7 +532,7 @@ class GoogleMapsAusbildungVerifier:
                     contact_pages.append(clean_url)
 
         # Inspect discovered pages
-        for cp_url in contact_pages:
+        for cp_url in contact_pages[:2]:
             cp_html = self._fetch_page(cp_url)
             if cp_html:
                 emails_found.extend(self.extract_emails_from_html(cp_html))

@@ -48,6 +48,10 @@ from scraper.application_form_discovery import (
     EXCEL_COLUMNS,
     normalize_job_opportunity_row,
 )
+from services.manual_captcha_service import (
+    get_manual_captcha_manager,
+    ManualCaptchaManager,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -185,6 +189,9 @@ auto_extraction_threads_lock = threading.RLock()
 auto_extraction_threads: Dict[str, threading.Thread] = {}
 AUTO_JOBS_STORE_PATH = Path("data") / "progress" / "auto_extraction_jobs.json"
 auto_extraction_jobs: Dict[str, Dict] = {}
+search_runs_lock = threading.RLock()
+SEARCH_RUNS_STORE_PATH = Path("data") / "progress" / "search_runs.json"
+search_runs: Dict[str, Dict] = {}
 ausbildungen_update_jobs_lock = threading.Lock()
 ausbildungen_update_jobs: Dict[str, Dict] = {}
 captcha_context_lock = threading.Lock()
@@ -1754,11 +1761,11 @@ def _prepare_download_jobs(
             f = str(filter_mode).lower().strip()
             if f in {"email", "emails"} and not (app_method == "email" or (has_valid_email and not has_verified_form)):
                 continue
-            elif f in {"form", "online", "online-formular"} and not (app_method == "form" or (has_verified_form and not has_valid_email)):
+            elif f in {"form", "online", "online-formular"} and not (app_method in {"form", "external_link"} or (has_verified_form and not has_valid_email)):
                 continue
-            elif f in {"both", "beide"} and not (app_method == "both" or (has_valid_email and has_verified_form)):
+            elif f in {"both", "beide"} and not (app_method == "both" or (has_valid_email and (has_verified_form or row.get("direct_application_url")))):
                 continue
-            elif f in {"missing", "unknown", "none", "ohne"} and not (app_method == "unknown" or (not has_valid_email and not has_verified_form)):
+            elif f in {"missing", "unknown", "none", "ohne"} and not (app_method == "unknown" or (not has_valid_email and not has_verified_form and not row.get("direct_application_url"))):
                 continue
 
         filtered.append(row)
@@ -2206,39 +2213,53 @@ def run_auto_extraction():
         extractor = WorkingEmailExtractor(
             captcha_userid=CAPTCHA_USERID,
             captcha_apikey=CAPTCHA_APIKEY,
-            headless=False,
+            headless=True,
             known_emails=existing_emails,
         )
 
-        for i in range(start_index, len(jobs)):
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        max_workers = int(os.getenv("AUTO_EXTRACTION_WORKERS", "4"))
+        completed_count = 0
+        progress_lock = threading.Lock()
+
+        def _worker_task_auto(i, job_record):
             with status_lock:
-                if not auto_extraction_status["is_running"] or auto_extraction_status["stop_requested"]:
-                    break
+                if not auto_extraction_status.get("is_running") or auto_extraction_status.get("stop_requested"):
+                    return i, job_record
+            kw = str(auto_extraction_status.get("keyword") or "")
+            processed = extractor.process_job(job_record, profession_keyword=kw)
+            if processed.get("has_form") or processed.get("direct_application_url"):
+                try:
+                    from routes.autofill import queue_autofill_job
+                    queue_autofill_job(processed)
+                except Exception as q_err:
+                    logger.debug("Autofill queue routing: %s", q_err)
+            for log_msg in processed.get("extraction_logs") or []:
+                logger.info("[AutoExtraction] %s", log_msg)
+            nonlocal completed_count
+            with progress_lock:
+                completed_count += 1
+                curr_idx = min(len(jobs), start_index + completed_count)
+                _set_auto_status(
+                    current_index=curr_idx,
+                    emails_found=extractor.stats["emails_found"],
+                    captchas_solved=extractor.stats["captchas_solved"],
+                    failed=extractor.stats["failed"],
+                )
+                if completed_count % 5 == 0:
+                    extractor.save_progress(jobs, curr_idx - 1, base_name="auto_extraction_progress")
+            return i, processed
 
-            with status_lock:
-                auto_extraction_status["current_index"] = i
-
-            failed_before = extractor.stats["failed"]
-            jobs[i] = extractor.process_job(
-                jobs[i],
-                profession_keyword=str(auto_extraction_status.get("keyword") or "")
-            )
-            failed_after = extractor.stats["failed"]
-
-            _set_auto_status(
-                emails_found=extractor.stats["emails_found"],
-                captchas_solved=extractor.stats["captchas_solved"],
-                failed=extractor.stats["failed"],
-            )
-
-            if failed_after > failed_before:
-                error_message = str(jobs[i].get("email") or "Job failed")
-                if not _wait_for_continue_auto(error_message):
-                    break
-
-            if (i + 1) % 10 == 0:
-                extractor.save_progress(jobs, i, base_name="auto_extraction_progress")
-            time.sleep(1)
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(_worker_task_auto, idx, jobs[idx]): idx for idx in range(start_index, len(jobs))}
+            for fut in as_completed(futures):
+                idx, res = fut.result()
+                jobs[idx] = res
+                with status_lock:
+                    if not auto_extraction_status.get("is_running") or auto_extraction_status.get("stop_requested"):
+                        for f in futures:
+                            f.cancel()
+                        break
 
         if jobs:
             extractor.save_progress(jobs, len(jobs) - 1, base_name="auto_extraction_progress")
@@ -2298,49 +2319,244 @@ def _load_auto_extraction_jobs_from_disk() -> Dict[str, Dict]:
     return {}
 
 
+def _save_search_runs_to_disk() -> None:
+    try:
+        SEARCH_RUNS_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with search_runs_lock:
+            serializable_runs = {}
+            for rid, rdata in search_runs.items():
+                if isinstance(rdata, dict):
+                    serializable_runs[rid] = {
+                        k: v for k, v in rdata.items()
+                        if not k.startswith("_")
+                    }
+        tmp_path = SEARCH_RUNS_STORE_PATH.with_suffix(".tmp")
+        with tmp_path.open("w", encoding="utf-8") as f:
+            json.dump(serializable_runs, f, ensure_ascii=False)
+        tmp_path.replace(SEARCH_RUNS_STORE_PATH)
+    except Exception as exc:
+        logger.warning("Could not persist search runs: %s", exc)
+
+
+def _load_search_runs_from_disk() -> Dict[str, Dict]:
+    if not SEARCH_RUNS_STORE_PATH.exists():
+        return {}
+    try:
+        with SEARCH_RUNS_STORE_PATH.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return data
+    except Exception as exc:
+        logger.warning("Could not load search runs: %s", exc)
+    return {}
+
+
+def _is_job_finished(job_record: Dict) -> bool:
+    """Returns True if a job has reached a terminal extraction state."""
+    if not isinstance(job_record, dict):
+        return False
+    if job_record.get("_extracted") is True or job_record.get("extracted") is True:
+        return True
+    if job_record.get("email_extracted") is True:
+        return True
+    status = str(job_record.get("extraction_status") or "").lower()
+    if status in ("completed", "verified", "failed", "captcha_restricted", "manual_required", "timed_out", "done"):
+        return True
+    if status.startswith("error:"):
+        return True
+    email = str(job_record.get("email") or "").strip()
+    if email and "@" in email and "error" not in email.lower():
+        return True
+    if bool(job_record.get("has_form")) is True or bool(job_record.get("form_link")):
+        return True
+    return False
+
+
+def normalize_job_platform(job_record: Optional[Dict]) -> str:
+    """Normalizes the source platform name from the job's 'source' or 'portal' field.
+
+    Supported standard platforms:
+      - Arbeitsagentur
+      - Ausbildung.de
+      - Azubiyo
+      - AUBI-plus
+      - IHK
+      - Google Maps
+    """
+    if not isinstance(job_record, dict) or not job_record:
+        return "No active platform"
+
+    raw = str(
+        job_record.get("source")
+        or job_record.get("portal")
+        or job_record.get("portal_name")
+        or job_record.get("platform")
+        or ""
+    ).strip().lower()
+
+    if any(k in raw for k in ["arbeitsagentur", "jobboerse", "aa_"]):
+        return "Arbeitsagentur"
+    if any(k in raw for k in ["ausbildung.de", "ausbildung_de", "ausbildungde"]):
+        return "Ausbildung.de"
+    if "azubiyo" in raw:
+        return "Azubiyo"
+    if any(k in raw for k in ["aubi_plus", "aubi-plus", "aubi"]):
+        return "AUBI-plus"
+    if any(k in raw for k in ["ihk", "lehrstellen"]):
+        return "IHK"
+    if any(k in raw for k in ["google_maps", "google-maps", "google maps", "maps", "overpass", "gmaps"]):
+        return "Google Maps"
+
+    # Only inspect URL if source / portal wasn't specified
+    if not raw:
+        url = str(job_record.get("apply_url") or job_record.get("url") or "").lower()
+        if "arbeitsagentur.de" in url:
+            return "Arbeitsagentur"
+        if "ausbildung.de" in url:
+            return "Ausbildung.de"
+        if "azubiyo.de" in url:
+            return "Azubiyo"
+        if "aubi-plus.de" in url:
+            return "AUBI-plus"
+        if "lehrstellen-boerse.de" in url or "ihk" in url:
+            return "IHK"
+        if "google.com/maps" in url or "maps.google" in url or bool(job_record.get("maps_url")):
+            return "Google Maps"
+
+    if raw:
+        return raw.title()
+    return "Arbeitsagentur"
+
+
+def _persist_job_progress(job_id: str, jobs: List[Dict], current_index: int, job_meta: Optional[Dict] = None) -> None:
+    """Persists progress to disk, ensuring all jobs and stats are preserved."""
+    try:
+        PROGRESS_DIR.mkdir(parents=True, exist_ok=True)
+        stats = {
+            "emails_found": job_meta.get("emails_found", 0) if job_meta else 0,
+            "recruitment_emails": job_meta.get("recruitment_emails", 0) if job_meta else 0,
+            "forms_found": job_meta.get("forms_found", 0) if job_meta else 0,
+            "external_links": job_meta.get("external_links", 0) if job_meta else 0,
+            "fast_path_hits": job_meta.get("fast_path_hits", 0) if job_meta else 0,
+            "selenium_fallbacks": job_meta.get("selenium_fallbacks", 0) if job_meta else 0,
+            "failed": job_meta.get("failed", 0) if job_meta else 0,
+            "captchas_solved": job_meta.get("captchas_solved", 0) if job_meta else 0,
+        }
+        payload = {
+            "job_id": job_id,
+            "last_index": max(0, current_index - 1),
+            "total": len(jobs),
+            "stats": stats,
+            "jobs": jobs,
+            "processed_jobs": jobs[:current_index] if current_index >= 0 else [],
+        }
+        spec_path = PROGRESS_DIR / f"auto_extraction_progress_{job_id}.json"
+        with spec_path.open("w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        gen_path = PROGRESS_DIR / "auto_extraction_progress.json"
+        with gen_path.open("w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        logger.warning("[AutoJob %s] Could not persist progress file: %s", job_id[:8], exc)
+
+
 def _recover_auto_job_from_progress(job_id: str) -> Optional[Dict]:
-    progress_file = Path("data") / "progress" / "auto_extraction_progress.json"
+    job_specific_file = Path("data") / "progress" / f"auto_extraction_progress_{job_id}.json"
+    fallback_file = Path("data") / "progress" / "auto_extraction_progress.json"
+    progress_file = job_specific_file if job_specific_file.exists() else fallback_file
     if not progress_file.exists():
         return None
     try:
         with progress_file.open("r", encoding="utf-8") as f:
             pdata = json.load(f)
+        file_job_id = pdata.get("job_id")
+        if file_job_id and file_job_id != job_id and progress_file == fallback_file:
+            return None
         last_index = int(pdata.get("last_index", -1))
         total = int(pdata.get("total", 0))
         stats = pdata.get("stats", {}) or {}
         extracted_jobs = pdata.get("jobs", []) or []
 
+        all_jobs = []
+        with search_runs_lock:
+            for s_run in search_runs.values():
+                if isinstance(s_run, dict) and s_run.get("auto_job_id") == job_id:
+                    all_jobs = list(s_run.get("jobs") or [])
+                    break
         cached = _load_search_cache_from_disk()
-        all_jobs = list(cached.get("jobs") or [])
-        keyword = cached.get("keyword") or ""
-        location = cached.get("location") or ""
-        published_since = cached.get("published_since") or "all"
+        if not all_jobs:
+            if cached.get("jobs"):
+                all_jobs = list(cached.get("jobs") or [])
 
-        if len(all_jobs) >= len(extracted_jobs):
+        if not all_jobs:
+            all_jobs = extracted_jobs
+        elif len(all_jobs) >= len(extracted_jobs):
             for idx, ej in enumerate(extracted_jobs):
                 if idx < len(all_jobs) and isinstance(ej, dict):
-                    all_jobs[idx] = ej
+                    all_jobs[idx].update(ej)
         else:
             all_jobs = extracted_jobs
 
-        final_total = total if total > 0 else (len(all_jobs) if all_jobs else len(extracted_jobs))
-        current_idx = last_index + 1 if last_index >= 0 else len(extracted_jobs)
+        final_total = max(total, len(all_jobs), len(extracted_jobs))
+        finished_count = sum(1 for j in all_jobs if _is_job_finished(j))
+        current_idx = last_index + 1 if last_index >= 0 else finished_count
         now = datetime.now().isoformat()
+
+        # Recount discovered emails and forms directly from all_jobs to guarantee accuracy
+        emails_found = max(
+            int(stats.get("emails_found") or 0),
+            sum(1 for j in all_jobs if isinstance(j, dict) and j.get("email") and "@" in str(j.get("email")) and "error" not in str(j.get("email")).lower())
+        )
+        forms_found = max(
+            int(stats.get("forms_found") or 0),
+            sum(1 for j in all_jobs if isinstance(j, dict) and (j.get("has_form") or j.get("form_link") or j.get("application_method") in ("form", "both")))
+        )
 
         recovered_job = {
             "job_id": job_id,
-            "keyword": keyword,
-            "location": location,
-            "published_since": _normalize_published_since(published_since),
+            "search_run_id": pdata.get("search_run_id") or "",
+            "keyword": pdata.get("keyword") or cached.get("keyword") or "",
+            "location": pdata.get("location") or cached.get("location") or "",
+            "published_since": _normalize_published_since(pdata.get("published_since") or cached.get("published_since") or "all"),
             "is_running": False,
             "stop_requested": False,
             "paused": True,
             "continue_requested": False,
             "current_index": current_idx,
             "total_jobs": final_total,
-            "emails_found": int(stats.get("emails_found") or 0),
+            "emails_found": emails_found,
+            "recruitment_emails": int(stats.get("recruitment_emails") or 0),
+            "forms_found": forms_found,
+            "external_links": int(stats.get("external_links") or 0),
+            "fast_path_hits": int(stats.get("fast_path_hits") or 0),
+            "selenium_fallbacks": int(stats.get("selenium_fallbacks") or 0),
+            "rate_limited_count": int(stats.get("rate_limited_count") or 0),
             "captchas_solved": int(stats.get("captchas_solved") or 0),
             "failed": int(stats.get("failed") or 0),
+            "avg_time_per_job": float(stats.get("avg_time_per_job") or 0.0),
+            "estimated_remaining_seconds": 0.0,
+            "active_workers": 0,
+            "status_label": "Paused",
+            "workers": {
+                f"worker_{w}": {
+                    "id": f"Worker {w}",
+                    "worker_id": w,
+                    "status": "idle",
+                    "connection_status": "pending",
+                    "network_profile": f"Worker-{w}",
+                    "public_ip": "Checking...",
+                    "current_platform": "No active platform",
+                    "current_job_title": "",
+                    "current_employer": "",
+                    "current_stage": "Paused" if pdata and pdata.get("paused") else "Idle",
+                    "current_job": "Paused" if pdata and pdata.get("paused") else "Waiting for task...",
+                    "completed_count": 0,
+                    "method": "—",
+                    "last_activity": "—",
+                }
+                for w in range(1, 5)
+            },
+            "activity_feed": [],
             "jobs": all_jobs,
             "last_error": "",
             "created_at": now,
@@ -2364,6 +2580,52 @@ def _recover_auto_job_from_progress(job_id: str) -> Optional[Dict]:
         return None
 
 
+def _sync_progress_into_job(job_id: str) -> None:
+    """Syncs the latest extracted contact details from disk into in-memory job records."""
+    job_specific_file = Path("data") / "progress" / f"auto_extraction_progress_{job_id}.json"
+    fallback_file = Path("data") / "progress" / "auto_extraction_progress.json"
+    progress_file = job_specific_file if job_specific_file.exists() else fallback_file
+    if not progress_file.exists():
+        return
+    try:
+        with progress_file.open("r", encoding="utf-8") as f:
+            pdata = json.load(f)
+        file_job_id = pdata.get("job_id")
+        if file_job_id and file_job_id != job_id:
+            return
+        extracted_jobs = pdata.get("jobs", []) or []
+        if not extracted_jobs:
+            return
+        job = auto_extraction_jobs.get(job_id)
+        if not job:
+            return
+        existing_jobs = job.get("jobs") or []
+        if isinstance(existing_jobs, list):
+            fields_to_sync = (
+                "email",
+                "email_extracted",
+                "email_type",
+                "contact_person",
+                "has_form",
+                "form_link",
+                "direct_application_url",
+                "application_method",
+                "application_url_type",
+                "extraction_status",
+                "extraction_method",
+                "required_documents",
+            )
+            for idx, ej in enumerate(extracted_jobs):
+                if idx < len(existing_jobs) and isinstance(ej, dict):
+                    target = existing_jobs[idx]
+                    if isinstance(target, dict):
+                        for k in fields_to_sync:
+                            if k in ej and ej[k] is not None and ej[k] != "":
+                                target[k] = ej[k]
+    except Exception as exc:
+        logger.debug("Syncing progress into job %s: %s", job_id, exc)
+
+
 # Populate in-memory store from persisted jobs on startup
 try:
     _loaded_jobs = _load_auto_extraction_jobs_from_disk()
@@ -2372,15 +2634,25 @@ try:
 except Exception as _e:
     logger.warning("Startup load of auto extraction jobs skipped: %s", _e)
 
+try:
+    _loaded_search_runs = _load_search_runs_from_disk()
+    if _loaded_search_runs:
+        search_runs.update(_loaded_search_runs)
+except Exception as _e:
+    logger.warning("Startup load of search runs skipped: %s", _e)
+
 
 def _create_auto_extraction_job(
-    jobs: List[Dict], keyword: str, location: str, published_since: str
+    jobs: List[Dict], keyword: str, location: str, published_since: str, search_run_id: Optional[str] = None
 ) -> str:
     job_id = str(uuid.uuid4())
     now = datetime.now().isoformat()
+    effective_run_id = str(search_run_id or "").strip() or f"run_{int(time.time())}_{uuid.uuid4().hex[:8]}"
+
     with auto_extraction_jobs_lock:
         auto_extraction_jobs[job_id] = {
             "job_id": job_id,
+            "search_run_id": effective_run_id,
             "keyword": keyword,
             "location": location,
             "published_since": _normalize_published_since(published_since),
@@ -2391,8 +2663,51 @@ def _create_auto_extraction_job(
             "current_index": 0,
             "total_jobs": len(jobs),
             "emails_found": 0,
+            "recruitment_emails": 0,
+            "forms_found": 0,
+            "external_links": 0,
+            "fast_path_hits": 0,
+            "selenium_fallbacks": 0,
+            "rate_limited_count": 0,
             "captchas_solved": 0,
+            "captcha_metrics": {
+                "challenges_detected": 0,
+                "unique_challenges": 0,
+                "jobs_requiring_captcha": 0,
+                "service_requests": 0,
+                "responses_received": 0,
+                "website_verifications_confirmed": 0,
+                "manual_verification_required": 0,
+                "recent_events": [],
+            },
             "failed": 0,
+            "manual_review_queue": [],
+            "last_progress_at": "",
+            "throughput_jobs_per_minute": 0.0,
+            "avg_time_per_job": 0.0,
+            "estimated_remaining_seconds": 0.0,
+            "active_workers": 0,
+            "status_label": "Idle",
+            "workers": {
+                f"worker_{w}": {
+                    "id": f"Worker {w}",
+                    "worker_id": w,
+                    "status": "idle",
+                    "connection_status": "pending",
+                    "network_profile": f"Worker-{w}",
+                    "public_ip": "Checking...",
+                    "current_platform": "No active platform",
+                    "current_job_title": "",
+                    "current_employer": "",
+                    "current_stage": "Idle",
+                    "current_job": "Waiting for task...",
+                    "completed_count": 0,
+                    "method": "—",
+                    "last_activity": "—",
+                }
+                for w in range(1, 5)
+            },
+            "activity_feed": [],
             "jobs": [dict(job) for job in jobs],
             "last_error": "",
             "created_at": now,
@@ -2400,6 +2715,24 @@ def _create_auto_extraction_job(
             "finished_at": "",
         }
     _save_auto_extraction_jobs_to_disk()
+
+    with search_runs_lock:
+        if effective_run_id in search_runs:
+            search_runs[effective_run_id]["auto_job_id"] = job_id
+        else:
+            search_runs[effective_run_id] = {
+                "search_run_id": effective_run_id,
+                "keyword": keyword,
+                "location": location,
+                "published_since": _normalize_published_since(published_since),
+                "jobs": [dict(job) for job in jobs],
+                "total": len(jobs),
+                "audit": {},
+                "created_at": now,
+                "auto_job_id": job_id,
+            }
+        _save_search_runs_to_disk()
+
     return job_id
 
 
@@ -2444,7 +2777,7 @@ def _wait_for_continue_auto_job(job_id: str, error_message: str) -> bool:
 
 
 def _run_auto_extraction_job(job_id: str):
-    extractor = None
+    worker_extractors = {}
     with auto_extraction_threads_lock:
         auto_extraction_threads[job_id] = threading.current_thread()
     try:
@@ -2453,20 +2786,49 @@ def _run_auto_extraction_job(job_id: str):
             if not job:
                 job = _recover_auto_job_from_progress(job_id)
             if not job:
+                logger.error("[AutoJob %s] Job not found to run.", job_id[:8])
                 return
             jobs = job.get("jobs") or []
-            start_index = int(job.get("current_index") or 0)
+            total_jobs_count = len(jobs)
+            unfinished_indices = [idx for idx, j in enumerate(jobs) if not _is_job_finished(j)]
+            start_index = total_jobs_count - len(unfinished_indices)
+
+            job["total_jobs"] = total_jobs_count
+            job["current_index"] = start_index
             job["is_running"] = True
             job["stop_requested"] = False
             job["paused"] = False
             job["continue_requested"] = False
             job["last_error"] = ""
+            job["status_label"] = "Running"
             job["updated_at"] = datetime.now().isoformat()
             emails_count = int(job.get("emails_found") or 0)
             captchas_solved = int(job.get("captchas_solved") or 0)
             failed_count = int(job.get("failed") or 0)
 
-        existing_emails = _extract_valid_emails_from_records(jobs[:start_index])
+        logger.info(
+            "[AutoJob %s] Starting/resuming: %d total jobs, %d already processed, %d pending.",
+            job_id[:8],
+            total_jobs_count,
+            start_index,
+            len(unfinished_indices),
+        )
+
+        if not unfinished_indices:
+            logger.info("[AutoJob %s] All %d jobs are already finished. Marking completed.", job_id[:8], total_jobs_count)
+            with auto_extraction_jobs_lock:
+                cj = auto_extraction_jobs.get(job_id)
+                if cj:
+                    cj["is_running"] = False
+                    cj["paused"] = False
+                    cj["continue_requested"] = False
+                    cj["current_index"] = total_jobs_count
+                    cj["status_label"] = "Completed"
+                    cj["finished_at"] = datetime.now().isoformat()
+            _save_auto_extraction_jobs_to_disk()
+            return
+
+        existing_emails = _extract_valid_emails_from_records(jobs)
         initial_stats = {
             "processed": start_index,
             "emails_found": emails_count if emails_count else len(existing_emails),
@@ -2474,63 +2836,499 @@ def _run_auto_extraction_job(job_id: str):
             "captchas_solved": captchas_solved,
             "failed": failed_count,
         }
-        extractor = WorkingEmailExtractor(
-            captcha_userid=CAPTCHA_USERID,
-            captcha_apikey=CAPTCHA_APIKEY,
-            headless=False,
-            known_emails=existing_emails,
-            initial_stats=initial_stats,
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from scraper.rate_limiter import extract_domain, GLOBAL_CIRCUIT_BREAKER
+        from services.worker_network_router import (
+            load_worker_network_profiles,
+            verify_all_worker_connections,
         )
+        from services.captcha_monitor import get_captcha_tracker
+        captcha_tracker = get_captcha_tracker(job_id)
 
-        for i in range(start_index, len(jobs)):
+        max_workers = int(os.getenv("AUTO_EXTRACTION_WORKERS", "4"))
+        worker_profiles = load_worker_network_profiles(max_workers=max_workers)
+        verify_all_worker_connections(worker_profiles)
+
+        with auto_extraction_jobs_lock:
+            cj = auto_extraction_jobs.get(job_id)
+            if cj:
+                cj_workers = cj.setdefault("workers", {})
+                for w_id in range(1, max_workers + 1):
+                    prof = worker_profiles[w_id]
+                    is_failed = (prof.connection_status == "failed" and not prof.allow_direct_fallback)
+                    prev_w = cj_workers.get(f"worker_{w_id}") or {}
+                    cj_workers[f"worker_{w_id}"] = {
+                        "id": f"Worker {w_id}",
+                        "worker_id": w_id,
+                        "status": "blocked" if is_failed else "idle",
+                        "connection_status": prof.connection_status,
+                        "network_profile": prof.profile_name,
+                        "public_ip": prof.public_ip,
+                        "current_platform": prev_w.get("current_platform") or "No active platform",
+                        "current_job_title": prev_w.get("current_job_title") or "",
+                        "current_employer": prev_w.get("current_employer") or "",
+                        "current_stage": "Blocked" if is_failed else "Idle",
+                        "current_job": "Offline (Fail-Closed)" if is_failed else "Waiting for task...",
+                        "completed_count": int(prev_w.get("completed_count") or 0),
+                        "method": "—",
+                        "last_activity": datetime.now().strftime("%H:%M:%S"),
+                    }
+                cj["active_workers"] = 0
+
+        available_worker_ids = []
+        for w_id in range(1, max_workers + 1):
+            prof = worker_profiles[w_id]
+            if prof.connection_status == "failed" and not prof.allow_direct_fallback:
+                logger.warning("Worker %s network route offline, skipping per fail-closed setting.", w_id)
+                continue
+            try:
+                w_extractor = WorkingEmailExtractor(
+                    captcha_userid=CAPTCHA_USERID,
+                    captcha_apikey=CAPTCHA_APIKEY,
+                    headless=True,
+                    known_emails=existing_emails,
+                    initial_stats=initial_stats if w_id == 1 else None,
+                    worker_id=w_id,
+                    network_profile=prof,
+                    job_id=job_id,
+                )
+                worker_extractors[w_id] = w_extractor
+                available_worker_ids.append(w_id)
+            except Exception as ext_err:
+                logger.error("Failed to init extractor for worker %s: %s", w_id, ext_err)
+                with auto_extraction_jobs_lock:
+                    cj = auto_extraction_jobs.get(job_id)
+                    if cj and "workers" in cj:
+                        cj["workers"][f"worker_{w_id}"]["status"] = "blocked"
+                        cj["workers"][f"worker_{w_id}"]["connection_status"] = "failed"
+                        cj["workers"][f"worker_{w_id}"]["current_job"] = f"Init error: {ext_err}"
+
+        if not available_worker_ids:
+            logger.error("All extraction workers failed network verification under fail-closed mode.")
             with auto_extraction_jobs_lock:
-                job = auto_extraction_jobs.get(job_id)
-                if not job:
-                    return
-                if not job.get("is_running") or job.get("stop_requested"):
-                    break
-                job["current_index"] = i
-                job["updated_at"] = datetime.now().isoformat()
+                cj = auto_extraction_jobs.get(job_id)
+                if cj:
+                    cj["is_running"] = False
+                    cj["last_error"] = "All worker network routes failed verification (fail-closed enforced)"
+                    cj["status_label"] = "Failed (Network Unavailable)"
+                    cj["finished_at"] = datetime.now().isoformat()
+            _save_auto_extraction_jobs_to_disk()
+            return
 
-            failed_before = int(extractor.stats.get("failed") or 0)
-            jobs[i] = extractor.process_job(
-                jobs[i],
-                profession_keyword=str(job.get("keyword") or "")
-            )
-            failed_after = int(extractor.stats.get("failed") or 0)
+        completed_count = 0
+        total_time_spent = 0.0
+        progress_lock = threading.Lock()
+        worker_assignment_lock = threading.Lock()
+        unique_emails_seen = set(existing_emails)
+        worker_slots = queue.Queue()
+        for worker_id in available_worker_ids:
+            worker_slots.put(worker_id)
 
-            _set_auto_job_status(
-                job_id,
-                emails_found=int(extractor.stats.get("emails_found") or 0),
-                captchas_solved=int(extractor.stats.get("captchas_solved") or 0),
-                failed=int(extractor.stats.get("failed") or 0),
-            )
+        def _worker_task_job(i, job_record):
+            with auto_extraction_jobs_lock:
+                current_job = auto_extraction_jobs.get(job_id)
+                if not current_job or not current_job.get("is_running") or current_job.get("paused") or current_job.get("stop_requested"):
+                    return i, job_record
 
-            if failed_after > failed_before:
-                error_message = str(jobs[i].get("email") or "Job failed")
-                if not _wait_for_continue_auto_job(job_id, error_message):
-                    break
+            w_id = worker_slots.get()
+            t0 = time.time()
+            has_error = False
+            processed = job_record
 
-            if (i + 1) % 5 == 0:
-                extractor.save_progress(jobs, i)
-                _save_auto_extraction_jobs_to_disk()
-            time.sleep(1)
+            try:
+                worker_ext = worker_extractors.get(w_id)
+                if not worker_ext:
+                    return i, job_record
 
-        if jobs:
-            extractor.save_progress(jobs, min(len(jobs) - 1, max(0, start_index)))
+                platform = normalize_job_platform(job_record)
+                job_title = str(job_record.get("title") or job_record.get("job_title") or job_record.get("name") or "Apprenticeship Position").strip()
+                company_name = str(job_record.get("company") or job_record.get("firma") or job_record.get("name") or f"Job #{i+1}").strip()
+                initial_stage = "Verifying Business" if platform == "Google Maps" else "HTTP Fast-Path"
+                now_str = datetime.now().strftime("%H:%M:%S")
+
+                with progress_lock:
+                    with auto_extraction_jobs_lock:
+                        cj = auto_extraction_jobs.get(job_id)
+                        if cj and "workers" in cj:
+                            w_state = cj["workers"].setdefault(f"worker_{w_id}", {})
+                            w_state["id"] = f"Worker {w_id}"
+                            w_state["worker_id"] = w_id
+                            w_state["status"] = "working"
+                            w_state["current_platform"] = platform
+                            w_state["current_job_title"] = job_title
+                            w_state["current_employer"] = company_name
+                            w_state["current_stage"] = initial_stage
+                            w_state["current_job"] = f"{company_name} — {job_title}"[:40]
+                            w_state["method"] = initial_stage
+                            w_state["last_activity"] = now_str
+                            cj["active_workers"] = sum(1 for w in cj["workers"].values() if w.get("status") == "working")
+
+                def report_worker_stage(stage_name: str):
+                    with progress_lock:
+                        with auto_extraction_jobs_lock:
+                            cj_inner = auto_extraction_jobs.get(job_id)
+                            if cj_inner and "workers" in cj_inner:
+                                ws = cj_inner["workers"].get(f"worker_{w_id}")
+                                if ws and ws.get("status") == "working":
+                                    ws["current_stage"] = stage_name
+                                    ws["method"] = stage_name
+                                    ws["last_activity"] = datetime.now().strftime("%H:%M:%S")
+
+                try:
+                    kw = str(current_job.get("keyword") or "")
+                    worker_ext.search_run_id = str(current_job.get("search_run_id") or "")
+                    worker_ext.current_job_index = i
+                    try:
+                        processed = worker_ext.process_job(
+                            job_record,
+                            profession_keyword=kw,
+                            on_stage_change=report_worker_stage,
+                        )
+                    except TypeError as t_err:
+                        if "on_stage_change" in str(t_err):
+                            processed = worker_ext.process_job(job_record, profession_keyword=kw)
+                        else:
+                            raise
+                    is_manual = bool(processed.get("manual_review_required")) or processed.get("extraction_status") == "manual_required"
+                    processed["attempt_state"] = "manual_required" if is_manual else "completed"
+                    processed["attempt_finished_at"] = datetime.now().isoformat()
+                    processed["_extracted"] = not is_manual
+                    processed["extracted"] = not is_manual
+                    if processed.get("has_form") or processed.get("direct_application_url"):
+                        try:
+                            from routes.autofill import queue_autofill_job
+                            queue_autofill_job(processed)
+                        except Exception as q_err:
+                            logger.debug("Autofill queue routing: %s", q_err)
+                    for log_msg in processed.get("extraction_logs") or []:
+                        logger.info("[AutoJob %s] %s", job_id[:8], log_msg)
+                except Exception as exc:
+                    has_error = True
+                    logger.error("Auto extraction row %s failed: %s", i, exc)
+                    processed = dict(job_record)
+                    processed["email"] = f"ERROR: {exc}"
+                    processed["email_extracted"] = False
+                    is_timeout = "timeout" in type(exc).__name__.lower() or "timed out" in str(exc).lower()
+                    processed["extraction_status"] = "timed_out" if is_timeout else "failed"
+                    processed["attempt_state"] = processed["extraction_status"]
+                    processed["attempt_finished_at"] = datetime.now().isoformat()
+                    processed["_extracted"] = True
+                    processed["extracted"] = True
+            finally:
+                elapsed_job = time.time() - t0
+                worker_slots.put(w_id)
+
+            raw_method = str(processed.get("extraction_method") or "fast_http").lower()
+            if "selenium" in raw_method or processed.get("extraction_status") == "captcha_restricted":
+                method_used = "Selenium"
+            elif "cache" in raw_method:
+                method_used = "Cache"
+            else:
+                method_used = "Fast-HTTP"
+
+            email_val = processed.get("email") or ""
+            email_type = str(processed.get("email_type") or "").lower()
+            has_form = bool(processed.get("has_form")) or processed.get("application_method") in ("form", "both")
+            direct_url = str(processed.get("direct_application_url") or "").strip()
+            is_external_link = bool(direct_url and not has_form) or processed.get("application_method") == "external_link"
+
+            job_url = processed.get("apply_url") or processed.get("url") or ""
+            domain_name = extract_domain(job_url) if job_url else "unknown"
+            is_rate_limited, _ = GLOBAL_CIRCUIT_BREAKER.is_cooling_down(domain_name)
+
+            nonlocal completed_count, total_time_spent
+            with progress_lock:
+                completed_count += 1
+                total_time_spent += elapsed_job
+                jobs[i] = processed
+                curr_idx = min(len(jobs), total_jobs_count - len([j for j in jobs if not _is_job_finished(j)]))
+                avg_time = round(total_time_spent / completed_count, 2) if completed_count else 0.0
+                remaining_jobs = max(0, len(jobs) - curr_idx)
+                active_count = max(1, min(actual_workers, remaining_jobs))
+                throughput_per_second = completed_count / max(0.001, total_time_spent / actual_workers)
+                est_rem_seconds = round(remaining_jobs / throughput_per_second, 0) if throughput_per_second > 0 else 0
+
+                with auto_extraction_jobs_lock:
+                    cj = auto_extraction_jobs.get(job_id)
+                    if not cj:
+                        return i, processed
+
+                    if "workers" in cj and f"worker_{w_id}" in cj["workers"]:
+                        w_state = cj["workers"][f"worker_{w_id}"]
+                        is_manual = processed.get("extraction_status") == "manual_required"
+                        w_state["completed_count"] = int(w_state.get("completed_count") or 0) + 1
+                        w_state["method"] = method_used
+                        w_state["last_activity"] = datetime.now().strftime("%H:%M:%S")
+
+                        if is_manual:
+                            w_state["status"] = "manual_required"
+                            w_state["current_stage"] = "Manual Review"
+                            w_state["current_job"] = f"Manual review: {company_name[:20]}"
+                        elif remaining_jobs > 0:
+                            w_state["status"] = "waiting"
+                            w_state["current_stage"] = "Waiting for task..."
+                            w_state["current_job"] = f"Finished {company_name[:25]}"
+                        else:
+                            w_state["status"] = "idle"
+                            w_state["current_platform"] = "No active platform"
+                            w_state["current_stage"] = "Idle"
+                            w_state["current_job_title"] = ""
+                            w_state["current_employer"] = ""
+                            w_state["current_job"] = f"Finished {company_name[:25]}"
+
+                    cj["active_workers"] = sum(1 for w in cj["workers"].values() if w.get("status") == "working")
+                    cj["current_index"] = curr_idx
+                    cj["total_jobs"] = len(jobs)
+                    cj["avg_time_per_job"] = avg_time
+                    cj["estimated_remaining_seconds"] = est_rem_seconds
+                    cj["throughput_jobs_per_minute"] = round(throughput_per_second * 60, 2)
+                    cj["last_progress_at"] = datetime.now().isoformat()
+
+                    if processed.get("extraction_status") == "manual_required":
+                        review_queue = cj.setdefault("manual_review_queue", [])
+                        if not any(item.get("job_index") == i for item in review_queue if isinstance(item, dict)):
+                            review_queue.append({
+                                "job_index": i,
+                                "job": processed,
+                                "reason": processed.get("manual_review_reason") or "Human verification required",
+                                "checkpointed_at": datetime.now().isoformat(),
+                                "state": "manual_required",
+                            })
+
+                    norm_email = email_val.lower().strip().strip(".,;:") if email_val else ""
+                    is_new_email = False
+                    if norm_email and "@" in norm_email and "error" not in norm_email:
+                        if norm_email not in unique_emails_seen:
+                            unique_emails_seen.add(norm_email)
+                            cj["emails_found"] = len(unique_emails_seen)
+                            is_new_email = True
+                            if email_type in ("direct", "official_listing", "recruitment") or (email_type != "impressum"):
+                                cj["recruitment_emails"] = int(cj.get("recruitment_emails") or 0) + 1
+
+                    if has_form:
+                        cj["forms_found"] = int(cj.get("forms_found") or 0) + 1
+                    elif is_external_link:
+                        cj["external_links"] = int(cj.get("external_links") or 0) + 1
+
+                    if method_used == "Fast-HTTP":
+                        cj["fast_path_hits"] = int(cj.get("fast_path_hits") or 0) + 1
+                    elif method_used == "Selenium":
+                        cj["selenium_fallbacks"] = int(cj.get("selenium_fallbacks") or 0) + 1
+
+                    if is_rate_limited:
+                        cj["rate_limited_count"] = int(cj.get("rate_limited_count") or 0) + 1
+
+                    if has_error:
+                        cj["failed"] = int(cj.get("failed") or 0) + 1
+
+                    cj["captcha_metrics"] = captcha_tracker.get_summary()
+                    cj["captchas_solved"] = captcha_tracker.website_verifications_confirmed_count
+
+                    # Live activity feed item
+                    feed = cj.setdefault("activity_feed", [])
+                    ts = datetime.now().strftime("%H:%M:%S")
+                    if is_new_email:
+                        badge = "Recruitment" if email_type != "impressum" else "Impressum"
+                        feed.append({
+                            "timestamp": ts,
+                            "type": "email",
+                            "badge": badge,
+                            "company": company_name,
+                            "message": f"Found email for {company_name}",
+                            "detail": norm_email,
+                        })
+                    if has_form:
+                        feed.append({
+                            "timestamp": ts,
+                            "type": "form",
+                            "badge": "Form",
+                            "company": company_name,
+                            "message": f"Application form discovered for {company_name}",
+                            "detail": processed.get("form_link") or direct_url or "",
+                        })
+                    elif is_external_link:
+                        feed.append({
+                            "timestamp": ts,
+                            "type": "link",
+                            "badge": "Apply URL",
+                            "company": company_name,
+                            "message": f"External apply link found for {company_name}",
+                            "detail": direct_url or "",
+                        })
+                    if method_used == "Fast-HTTP" and not is_new_email and not has_form:
+                        feed.append({
+                            "timestamp": ts,
+                            "type": "fast_path",
+                            "badge": "Fast-HTTP",
+                            "company": company_name,
+                            "message": f"Processed {company_name} ({elapsed_job:.2f}s)",
+                            "detail": "",
+                        })
+                    elif method_used == "Selenium":
+                        feed.append({
+                            "timestamp": ts,
+                            "type": "selenium",
+                            "badge": "Selenium",
+                            "company": company_name,
+                            "message": f"Browser fallback used for {company_name}",
+                            "detail": "",
+                        })
+                    if is_rate_limited:
+                        feed.append({
+                            "timestamp": ts,
+                            "type": "rate_limit",
+                            "badge": "429 Cooldown",
+                            "company": company_name,
+                            "message": f"HTTP 429 on {domain_name} - paused for 60s",
+                            "detail": domain_name,
+                        })
+                    if has_error:
+                        feed.append({
+                            "timestamp": ts,
+                            "type": "error",
+                            "badge": "Failed",
+                            "company": company_name,
+                            "message": f"Extraction error for {company_name}",
+                            "detail": str(processed.get("email") or ""),
+                        })
+
+                    if len(feed) > 40:
+                        cj["activity_feed"] = feed[-40:]
+
+                    # Live status label
+                    if cj.get("stop_requested"):
+                        cj["status_label"] = "Stopping..."
+                    elif cj.get("paused"):
+                        cj["status_label"] = "Paused"
+                    elif is_rate_limited:
+                        cj["status_label"] = "Rate Limited (Cooling Down)"
+                    elif cj.get("is_running"):
+                        cj["status_label"] = "Running"
+
+                if completed_count % 5 == 0:
+                    any_ext = next(iter(worker_extractors.values()), None)
+                    if any_ext:
+                        any_ext.save_progress(jobs, curr_idx - 1, custom_stats=cj)
+                    _save_auto_extraction_jobs_to_disk()
+
+                # Sync into originating search run
+                search_run_id = cj.get("search_run_id") if cj else ""
+                if search_run_id:
+                    with search_runs_lock:
+                        s_run = search_runs.get(search_run_id)
+                        if s_run and isinstance(s_run.get("jobs"), list):
+                            if i < len(s_run["jobs"]):
+                                s_run["jobs"][i].update(processed)
+                # Only update search_cache if it currently points to THIS search run
+                if search_run_id and search_cache.get("search_run_id") == search_run_id:
+                    with status_lock:
+                        cache_jobs = search_cache.get("jobs") or []
+                        if i < len(cache_jobs):
+                            cache_jobs[i].update(processed)
+
+            return i, processed
+
+        actual_workers = max(1, len(available_worker_ids))
+        with ThreadPoolExecutor(max_workers=actual_workers) as pool:
+            futures = {pool.submit(_worker_task_job, idx, jobs[idx]): idx for idx in unfinished_indices}
+            for fut in as_completed(futures):
+                idx, res = fut.result()
+                jobs[idx] = res
+                with auto_extraction_jobs_lock:
+                    current_job = auto_extraction_jobs.get(job_id)
+                    if current_job and (not current_job.get("is_running") or current_job.get("paused") or current_job.get("stop_requested")):
+                        logger.info(
+                            "[AutoJob %s] Cooperative interruption triggered (paused=%s, stop=%s); cancelling unstarted futures.",
+                            job_id[:8],
+                            current_job.get("paused"),
+                            current_job.get("stop_requested"),
+                        )
+                        for f in futures:
+                            f.cancel()
+                        break
 
         with auto_extraction_jobs_lock:
             job = auto_extraction_jobs.get(job_id)
             if not job:
                 return
             stop_requested = bool(job.get("stop_requested"))
-            current_index = int(job.get("current_index") or 0)
-            job["is_running"] = False
-            job["paused"] = False
-            job["continue_requested"] = False
-            job["current_index"] = current_index if stop_requested else len(jobs)
-            job["finished_at"] = datetime.now().isoformat()
+            is_paused = bool(job.get("paused"))
+            remaining_unfinished = [idx for idx, j in enumerate(jobs) if not _is_job_finished(j)]
+            processed_count = len(jobs) - len(remaining_unfinished)
+
+            job["jobs"] = jobs
+            job["total_jobs"] = len(jobs)
+            job["current_index"] = processed_count
             job["updated_at"] = datetime.now().isoformat()
+
+            logger.info(
+                "[AutoJob %s] Execution block finished: stop=%s, paused=%s, remaining=%d/%d.",
+                job_id[:8],
+                stop_requested,
+                is_paused,
+                len(remaining_unfinished),
+                len(jobs),
+            )
+
+            if is_paused:
+                job["is_running"] = False
+                job["paused"] = True
+                job["continue_requested"] = False
+                job["status_label"] = "Paused"
+                # DO NOT set finished_at on pause!
+                if "workers" in job and isinstance(job["workers"], dict):
+                    for w in job["workers"].values():
+                        if isinstance(w, dict):
+                            w["status"] = "paused"
+                            w["current_stage"] = "Paused"
+                            w["current_job"] = "Paused"
+            elif stop_requested:
+                job["is_running"] = False
+                job["paused"] = False
+                job["continue_requested"] = False
+                job["status_label"] = "Stopped"
+                job["finished_at"] = datetime.now().isoformat()
+                if "workers" in job and isinstance(job["workers"], dict):
+                    for w in job["workers"].values():
+                        if isinstance(w, dict):
+                            w["status"] = "idle"
+                            w["current_platform"] = "No active platform"
+                            w["current_job_title"] = ""
+                            w["current_employer"] = ""
+                            w["current_stage"] = "Stopped"
+                            w["current_job"] = "Stopped"
+            elif not remaining_unfinished:
+                job["is_running"] = False
+                job["paused"] = False
+                job["continue_requested"] = False
+                job["current_index"] = len(jobs)
+                manual_count = len(job.get("manual_review_queue") or [])
+                job["status_label"] = "Completed with Manual Review" if manual_count else "Completed"
+                job["finished_at"] = datetime.now().isoformat()
+                if "workers" in job and isinstance(job["workers"], dict):
+                    for w in job["workers"].values():
+                        if isinstance(w, dict):
+                            w["status"] = "idle"
+                            w["current_platform"] = "No active platform"
+                            w["current_job_title"] = ""
+                            w["current_employer"] = ""
+                            w["current_stage"] = "Completed"
+                            w["current_job"] = "Completed"
+            else:
+                job["is_running"] = False
+                job["paused"] = True
+                job["continue_requested"] = False
+                job["status_label"] = "Paused"
+                if "workers" in job and isinstance(job["workers"], dict):
+                    for w in job["workers"].values():
+                        if isinstance(w, dict):
+                            w["status"] = "paused"
+                            w["current_stage"] = "Paused"
+                            w["current_job"] = "Paused"
+
+        # Persist checkpoint & disk store
+        _persist_job_progress(job_id, jobs, processed_count, job)
         _save_auto_extraction_jobs_to_disk()
     except Exception as exc:
         logger.error("Auto extraction job %s error: %s", job_id, exc)
@@ -2545,8 +3343,11 @@ def _run_auto_extraction_job(job_id: str):
     finally:
         with auto_extraction_threads_lock:
             auto_extraction_threads.pop(job_id, None)
-        if extractor:
-            extractor.close()
+        for ext in worker_extractors.values():
+            try:
+                ext.close()
+            except Exception:
+                pass
 
 
 def _run_ausbildungen_update_job(job_id: str):
@@ -2591,7 +3392,7 @@ def _run_ausbildungen_update_job(job_id: str):
         extractor = WorkingEmailExtractor(
             captcha_userid=CAPTCHA_USERID,
             captcha_apikey=CAPTCHA_APIKEY,
-            headless=False,
+            headless=True,
             known_emails=existing_emails,
         )
 
@@ -2607,52 +3408,26 @@ def _run_ausbildungen_update_job(job_id: str):
                 job["updated_at"] = datetime.now().isoformat()
 
             try:
-                extractor.open_job(job_row, delay_seconds=1.0)
-
-                captcha_detected = extractor.is_blocked_page() or extractor.check_for_captcha()
-                if captcha_detected:
-                    extractor.stats["captchas_encountered"] += 1
-                    captcha_resolved = False
-                    if extractor.captcha_solver.userid and extractor.captcha_solver.apikey:
-                        captcha_resolved = extractor.handle_captcha()
-                        if captcha_resolved:
-                            time.sleep(2)
-
-                    if not captcha_resolved:
-                        extractor.save_captcha_snapshot("static")
-                        if not _wait_for_continue_ausbildungen_update(
-                            job_id,
-                            "CAPTCHA gefunden. Bitte im Selenium-Fenster loesen und dann unter /captcha_solve bestaetigen.",
-                        ):
-                            break
-                        time.sleep(2)
-
-                email, phone, arbeitsgeber = extractor.extract_contact_info()
-                arbeitsgeber = _normalize_arbeitsgeber_value(arbeitsgeber)
-                apply_url = extractor.extract_application_link(fallback_url=job_row.get("url", ""))
-                normalized_email = _normalize_email(email)
+                processed = extractor.process_job(job_row, profession_keyword=keyword)
+                normalized_email = _normalize_email(processed.get("email"))
                 has_valid_email = bool(normalized_email and "@" in normalized_email)
-
-                job_row["email"] = email if has_valid_email else ""
-                job_row["phone"] = phone
-                job_row["arbeitsgeber"] = arbeitsgeber
-                job_row["apply_url"] = apply_url or job_row.get("url", "")
-                job_row["email_extracted"] = has_valid_email
-
-                discovery = extractor.form_discovery.discover_application_form(
-                    job_row, driver=getattr(extractor, "driver", None)
-                )
-                job_row = normalize_job_opportunity_row(job_row, discovery_result=discovery)
 
                 if has_valid_email:
                     if normalized_email in existing_emails:
                         duplicate_emails += 1
                     else:
                         existing_emails.add(normalized_email)
-                        extractor.stats["emails_found"] += 1
+                        extractor.stats["emails_found"] = int(extractor.stats.get("emails_found") or 0) + 1
 
-                extractor.stats["processed"] += 1
-                fetched_jobs[index] = job_row
+                if processed.get("has_form") or processed.get("direct_application_url"):
+                    try:
+                        from routes.autofill import queue_autofill_job
+                        queue_autofill_job(processed)
+                    except Exception as q_err:
+                        logger.debug("Autofill queue routing: %s", q_err)
+
+                extractor.stats["processed"] = int(extractor.stats.get("processed") or 0) + 1
+                fetched_jobs[index] = processed
             except Exception as exc:
                 logger.error("Ausbildungen update job row %s failed: %s", index, exc)
                 job_row["email"] = f"ERROR: {exc}"
@@ -2660,7 +3435,7 @@ def _run_ausbildungen_update_job(job_id: str):
                 job_row["arbeitsgeber"] = None
                 job_row["email_extracted"] = False
                 fetched_jobs[index] = job_row
-                extractor.stats["failed"] += 1
+                extractor.stats["failed"] = int(extractor.stats.get("failed") or 0) + 1
 
             _set_ausbildungen_update_job(
                 job_id,
@@ -2673,7 +3448,6 @@ def _run_ausbildungen_update_job(job_id: str):
                 captcha_needed=False,
                 phase="extracting",
             )
-            time.sleep(1)
 
         new_rows = _prepare_download_jobs(fetched_jobs)
         merged_rows = _merge_records_by_email(existing_rows, new_rows)
@@ -5324,6 +6098,7 @@ def _save_auto_extraction_export_records(
     fallback_slug: str,
     suffix: str = "",
     unconfirmed_records: Optional[List[Dict]] = None,
+    canonical_only: bool = False,
 ) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     slug = _sanitize_export_slug(keyword, fallback=fallback_slug)
@@ -5377,6 +6152,21 @@ def _save_auto_extraction_export_records(
 
     df_confirmed = pd.DataFrame(confirmed_rows)
     existing_cols = [c for c in EXCEL_COLUMNS if c in df_confirmed.columns]
+    if not canonical_only:
+        for extra_col in [
+            "email_type",
+            "contact_person",
+            "job_listing_url",
+            "employer_website",
+            "direct_application_url",
+            "application_url_type",
+            "required_documents",
+            "extraction_status",
+        ]:
+            if extra_col in df_confirmed.columns and extra_col not in existing_cols:
+                vals = df_confirmed[extra_col].astype(str).str.strip().replace({"nan": "", "None": "", "unverified": ""})
+                if vals.ne("").any():
+                    existing_cols.append(extra_col)
     if existing_cols:
         df_confirmed = df_confirmed[existing_cols]
 
@@ -5699,7 +6489,7 @@ def _run_parallel_task_auto_extraction(job_id: str, task_id: str):
         extractor = WorkingEmailExtractor(
             captcha_userid=CAPTCHA_USERID,
             captcha_apikey=CAPTCHA_APIKEY,
-            headless=False,
+            headless=True,
             known_emails=existing_emails,
         )
 
@@ -5721,7 +6511,6 @@ def _run_parallel_task_auto_extraction(job_id: str, task_id: str):
                 task["extraction_status"] = extraction
                 task["updated_at"] = datetime.now().isoformat()
                 job["updated_at"] = datetime.now().isoformat()
-            time.sleep(1)
 
         prepared_rows = _prepare_download_jobs(jobs)
         if prepared_rows:
@@ -5955,13 +6744,21 @@ def _fetch_combined_jobs(
                     "discovered_items": [],
                 }
             self.google_maps_metrics = {
-                "city": location or "Berlin",
+                "city": location or "Deutschland (Bundesweit)",
                 "category": keyword,
                 "companies_found": 0,
                 "websites_visited": 0,
                 "emails_extracted": 0,
                 "verified_vacancies": 0,
                 "potential_employers": 0,
+                "regions_scanned": 0,
+                "regions_total": 16,
+                "current_region": "-",
+                "municipalities_covered": 0,
+                "failed_regions": 0,
+                "deferred_regions": 0,
+                "resume_status": "idle",
+                "is_completed": False,
             }
             self.workers = {
                 "active": 0,
@@ -6452,17 +7249,19 @@ def _fetch_combined_jobs(
         gmaps_label = "Local Employers & Websites" if mode_clean == "arbeit" else "Local Training Companies & Career Websites"
         tracker.start_portal(
             "google_maps",
-            f"Google Maps ({gmaps_label}): Discovering businesses...",
+            f"Google Maps ({gmaps_label}): Initiating nationwide discovery across cities & rural areas...",
             url="https://overpass-api.de/api/interpreter",
         )
         try:
             from scraper.google_maps_ausbildung_verifier import GoogleMapsAusbildungVerifier
             from scraper.overpass_scraper import OverpassBusinessScraper
+            from services.geographic_batching import geographic_batching
+            from services.geographic_checkpoint_manager import geographic_checkpoint_manager
 
             unconfirmed_maps_companies = []
             gm = tracker.google_maps_metrics
 
-            # Determine target employer categories
+            # 1. Determine target employer categories
             parsed_custom_cats = []
             if custom_categories:
                 if isinstance(custom_categories, list):
@@ -6481,67 +7280,159 @@ def _fetch_combined_jobs(
                 categories_to_query = [keyword]
             categories_to_query = [c for c in categories_to_query if c] or [keyword]
 
-            target_cities = geo_plan.get("targets") or [location or "Berlin"]
+            from services.profession_intelligence import profession_intelligence
+            resolution = profession_intelligence.resolve_osm_tags_for_categories(
+                categories_to_query, profession_context=prof_info
+            )
+            resolved_osm_tags = resolution.get("resolved_tags", [])
+            unresolved_cats = resolution.get("unresolved_categories", [])
+
+            # 2. Comprehensive Geographic Coverage Plan (All 16 Bundesländer, cities & rural municipalities)
+            is_nationwide = geographic_batching.is_nationwide_query(location)
+            geo_plan = geographic_batching.get_nationwide_coverage_plan(location=location)
+            planned_regions = geo_plan.get("regions", [])
+
             with tracker.lock:
-                gm["city"] = target_cities[0] if target_cities else (location or "Berlin")
-                gm["category"] = categories_to_query[0]
+                gm["city"] = location or "Deutschland (Bundesweit)"
+                gm["category"] = categories_to_query[0] if categories_to_query else keyword
+                gm["regions_total"] = len(planned_regions)
+                gm["regions_scanned"] = 0
+                gm["municipalities_covered"] = 0
+                gm["resume_status"] = "active"
+                gm["is_completed"] = False
 
             tracker.log(
                 "google_maps",
                 "info",
-                f"Google Maps AI: Scanning '{norm_keyword}' ({prof_info.get('sector', 'General')}) across {len(categories_to_query[:4])} industries in {', '.join(target_cities[:2])}...",
+                f"Google Maps AI: Starting {'nationwide discovery across ' + str(len(planned_regions)) + ' regions' if is_nationwide else 'localized search in ' + location} for '{norm_keyword}' ({len(resolved_osm_tags)} OSM tags).",
+            )
+            if unresolved_cats:
+                tracker.log(
+                    "google_maps",
+                    "warning",
+                    f"Google Maps AI: Categories without specific OSM tag mapping (omitted from query): {', '.join(unresolved_cats)}",
+                )
+
+            # Persistent Checkpoint
+            search_checkpoint_id = f"gmaps_search_{int(time.time())}"
+            geographic_checkpoint_manager.create_checkpoint(
+                search_id=search_checkpoint_id,
+                profession=norm_keyword,
+                categories=categories_to_query,
+                regions=planned_regions,
+                resolved_osm_tags=resolved_osm_tags,
+                scope=geo_plan.get("scope", "nationwide"),
+                location=location,
             )
 
             overpass_scraper = OverpassBusinessScraper()
             discovered_raw = []
             seen_biz_keys = set()
+            max_per_region = 30 if is_nationwide else 60
+            max_nationwide_budget = 300 if is_nationwide else 100
 
-            query_pairs = [(c, city) for c in categories_to_query[:4] for city in target_cities[:2]]
-
-            def _overpass_query(pair):
-                cat_term, target_city = pair
+            # 3. Phase 1: Geographic Discovery Loop across Regions & Municipalities (Zero 15-business cap!)
+            for reg in planned_regions:
                 if tracker.is_abandoned("google_maps"):
-                    return pair, []
-                with tracker.lock:
-                    gm["category"] = cat_term
-                    gm["city"] = target_city
-                tracker.set_task("google_maps", f"Overpass: searching '{cat_term}' in {target_city}...", url="https://overpass-api.de/api/interpreter")
-                try:
-                    return pair, overpass_scraper.search_businesses(city=target_city, category=cat_term, limit=10) or []
-                except Exception as err:
-                    tracker.log("google_maps", "error", f"Overpass query failed for '{cat_term}' in '{target_city}': {err}")
-                    return pair, []
+                    break
+                if len(discovered_raw) >= max_nationwide_budget:
+                    tracker.log("google_maps", "info", f"Nationwide discovery budget reached ({len(discovered_raw)} companies).")
+                    break
 
-            # Overpass is rate limited, so only two concurrent queries.
-            with ThreadPoolExecutor(max_workers=2, thread_name_prefix="gmaps-overpass") as ov_pool:
-                for (cat_term, target_city), batch in ov_pool.map(_overpass_query, query_pairs):
-                    with tracker.lock:
-                        gm["companies_found"] += len(batch)
-                    tracker.log(
-                        "google_maps",
-                        "info",
-                        f"Overpass query for category '{cat_term}' in '{target_city}' returned {len(batch)} businesses",
-                        url="https://overpass-api.de/api/interpreter",
+                r_id = reg.get("region_id") or "REGION"
+                r_name = reg.get("name") or r_id
+                bbox = reg.get("bbox")
+                target_cities = reg.get("target_cities") or reg.get("major_cities") or []
+
+                with tracker.lock:
+                    gm["current_region"] = r_name
+                    gm["city"] = r_name
+                tracker.set_task(
+                    "google_maps",
+                    f"Overpass: scanning '{r_name}' ({len(categories_to_query)} categories, cities & rural districts)...",
+                    url="https://overpass-api.de/api/interpreter",
+                )
+
+                batch = []
+                # Strategy A: BBox Query (Covers Großstädte, Mittelstädte, Kleinstädte & Dörfer in one spatial slice)
+                if bbox:
+                    try:
+                        batch = overpass_scraper.search_businesses_bbox(
+                            bbox=bbox,
+                            osm_tags=resolved_osm_tags,
+                            categories=categories_to_query,
+                            limit=max_per_region,
+                            default_city=r_name,
+                            profession_context=norm_keyword,
+                        ) or []
+                    except Exception as b_err:
+                        tracker.log("google_maps", "warning", f"BBox query for '{r_name}' failed: {b_err}")
+                        batch = []
+
+                # Strategy B: Municipal sampling across cities, small towns, and rural municipalities if bbox empty
+                if not batch and target_cities:
+                    for t_city in target_cities[:3]:
+                        if tracker.is_abandoned("google_maps"):
+                            break
+                        try:
+                            c_batch = overpass_scraper.search_businesses(
+                                city=t_city,
+                                category=categories_to_query[0] if categories_to_query else "handwerk",
+                                categories=categories_to_query,
+                                osm_tags=resolved_osm_tags,
+                                limit=max(10, max_per_region // 2),
+                                profession_context=norm_keyword,
+                            ) or []
+                            batch.extend(c_batch)
+                        except Exception as c_err:
+                            tracker.log("google_maps", "warning", f"Overpass query for '{t_city}' ({r_name}) failed: {c_err}")
+
+                # Deduplicate and register newly discovered businesses
+                new_in_reg = []
+                for b in batch:
+                    b_key = (
+                        (b.get("name") or "").lower().strip(),
+                        (b.get("website") or b.get("street") or b.get("city") or "").lower().strip(),
                     )
-                    for b in batch:
-                        b_key = (
-                            (b.get("name") or "").lower().strip(),
-                            (b.get("website") or b.get("street") or b.get("city") or "").lower().strip(),
-                        )
-                        if b_key not in seen_biz_keys:
-                            seen_biz_keys.add(b_key)
-                            b["target_category"] = cat_term
-                            discovered_raw.append(b)
+                    if b_key not in seen_biz_keys:
+                        seen_biz_keys.add(b_key)
+                        b["target_category"] = categories_to_query[0]
+                        b["region_id"] = r_id
+                        b["region_name"] = r_name
+                        discovered_raw.append(b)
+                        new_in_reg.append(b)
+
+                with tracker.lock:
+                    gm["companies_found"] = len(discovered_raw)
+                    gm["regions_scanned"] += 1
+                    distinct_mun = {b.get("city") for b in discovered_raw if b.get("city")}
+                    gm["municipalities_covered"] = len(distinct_mun)
+
+                # Persist checkpoint to disk
+                geographic_checkpoint_manager.update_region_progress(
+                    search_id=search_checkpoint_id,
+                    region_id=r_id,
+                    status="scanned",
+                    discovered_batch=new_in_reg,
+                )
+
+                tracker.log(
+                    "google_maps",
+                    "info",
+                    f"Overpass discovery in '{r_name}' returned {len(batch)} businesses ({len(discovered_raw)} total across Germany, {len(distinct_mun)} municipalities)",
+                    url="https://overpass-api.de/api/interpreter",
+                )
 
             if not discovered_raw and not tracker.is_abandoned("google_maps"):
                 city_query = location or "Berlin"
-                discovered_raw = overpass_scraper.search_businesses(city=city_query, category=keyword, limit=12) or []
+                discovered_raw = overpass_scraper.search_businesses(city=city_query, category=keyword, limit=15) or []
                 with tracker.lock:
                     gm["companies_found"] = len(discovered_raw)
 
+            # 4. Phase 2: Separate Verification Queue
             tracker.set_task(
                 "google_maps",
-                f"Visiting {min(15, len(discovered_raw))} company websites (6 parallel workers)...",
+                f"Verifying {len(discovered_raw)} discovered businesses & career websites (6 parallel workers)...",
                 scanned=len(discovered_raw),
             )
 
@@ -6568,72 +7459,113 @@ def _fetch_combined_jobs(
                 try:
                     if mode_clean == "arbeit":
                         return _get_verifier().verify_business_for_arbeit(biz, profession_keyword=norm_keyword)
-                    return _get_verifier().verify_business(biz, profession_keyword=norm_keyword)
+                    return _get_verifier().verify_business(biz, profession_keyword=norm_keyword, deep_form_discovery=False)
                 except Exception as err:
                     tracker.log("google_maps", "error", f"Website check failed for {biz.get('name')}: {err}", url=biz.get("website"))
                     return None
-
-            with ThreadPoolExecutor(max_workers=6, thread_name_prefix="gmaps-verify") as v_pool:
-                verified_list = list(v_pool.map(_verify, discovered_raw[:15]))
 
             verified_count = 0
             search_scope_clean = str(search_scope or "both").lower().strip()
             discovered_maps_jobs = []
             dup = 0
 
-            for verified_biz in verified_list:
-                if not verified_biz:
-                    continue
-                if verified_biz.get("email"):
+            # Register businesses without websites immediately as POTENTIAL_EMPLOYER (preserving small town initiative targets)
+            for biz in discovered_raw:
+                if not biz.get("website"):
+                    biz["opportunity_type"] = "POTENTIAL_EMPLOYER"
+                    biz["is_potential_employer"] = True
+                    ref = biz.get("name") or f"gmaps_{abs(hash(biz.get('name', '')))}"
+                    with state_lock:
+                        if ref not in seen_refs:
+                            seen_refs.add(ref)
+                            jobs.append(biz)
+                            discovered_maps_jobs.append(biz)
+                            verified_count += 1
                     with tracker.lock:
-                        gm["emails_extracted"] += 1
-                    tracker.log("google_maps", "success", f"Extracted email '{verified_biz.get('email')}' for {verified_biz.get('name') or verified_biz.get('company')}", item=verified_biz)
+                        gm["potential_employers"] += 1
 
-                ref = verified_biz.get("apply_url") or verified_biz.get("website") or verified_biz.get("name")
-
-                if mode_clean == "arbeit":
-                    accept = True
-                else:
-                    opp_type = verified_biz.get("opportunity_type") or (
-                        "VERIFIED_AUSBILDUNG" if verified_biz.get("is_verified_vacancy") else "POTENTIAL_EMPLOYER"
-                    )
-                    if verified_biz.get("is_verified_vacancy"):
-                        with tracker.lock:
-                            gm["verified_vacancies"] += 1
-                        tracker.log("google_maps", "success", f"Confirmed verified Ausbildung: '{verified_biz.get('title')}' at '{verified_biz.get('name') or verified_biz.get('company')}'", item=verified_biz)
-                    elif opp_type == "POTENTIAL_EMPLOYER":
-                        with tracker.lock:
-                            gm["potential_employers"] += 1
-
-                    if search_scope_clean == "verified_only":
-                        accept = opp_type == "VERIFIED_AUSBILDUNG" or bool(verified_biz.get("is_verified_vacancy"))
-                    elif search_scope_clean == "potential_only":
-                        accept = opp_type == "POTENTIAL_EMPLOYER"
-                    else:  # "both" (default)
-                        accept = opp_type in ("VERIFIED_AUSBILDUNG", "POTENTIAL_EMPLOYER") or bool(verified_biz.get("is_verified_vacancy"))
-                    if not accept:
-                        unconfirmed_maps_companies.append(verified_biz)
+            # Process businesses with websites concurrently in verification queue
+            from concurrent.futures import as_completed
+            businesses_to_verify = [b for b in discovered_raw if b.get("website")]
+            with ThreadPoolExecutor(max_workers=6, thread_name_prefix="gmaps-verify") as v_pool:
+                futures = {v_pool.submit(_verify, biz): biz for biz in businesses_to_verify[:60]}
+                for fut in as_completed(futures):
+                    if tracker.is_abandoned("google_maps"):
+                        for f in futures:
+                            f.cancel()
+                        break
+                    try:
+                        verified_biz = fut.result()
+                    except Exception as err:
+                        logger.debug("Verification task failed: %s", err)
                         continue
 
-                if not accept:
-                    continue
-                with state_lock:
-                    if tracker.is_abandoned("google_maps"):
-                        break
-                    if ref and ref not in seen_refs:
-                        seen_refs.add(ref)
-                        jobs.append(verified_biz)
-                        discovered_maps_jobs.append(verified_biz)
-                        verified_count += 1
-                    elif ref:
-                        dup += 1
+                    if not verified_biz:
+                        continue
+
+                    if verified_biz.get("email"):
+                        with tracker.lock:
+                            gm["emails_extracted"] += 1
+                        tracker.log(
+                            "google_maps",
+                            "success",
+                            f"Extracted email '{verified_biz.get('email')}' for {verified_biz.get('name') or verified_biz.get('company')}",
+                            item=verified_biz,
+                        )
+
+                    ref = verified_biz.get("apply_url") or verified_biz.get("website") or verified_biz.get("name")
+
+                    if mode_clean == "arbeit":
+                        accept = True
+                    else:
+                        opp_type = verified_biz.get("opportunity_type") or (
+                            "VERIFIED_AUSBILDUNG" if verified_biz.get("is_verified_vacancy") else "POTENTIAL_EMPLOYER"
+                        )
+                        if verified_biz.get("is_verified_vacancy"):
+                            with tracker.lock:
+                                gm["verified_vacancies"] += 1
+                            tracker.log(
+                                "google_maps",
+                                "success",
+                                f"Confirmed verified Ausbildung: '{verified_biz.get('title')}' at '{verified_biz.get('name') or verified_biz.get('company')}'",
+                                item=verified_biz,
+                            )
+                        elif opp_type == "POTENTIAL_EMPLOYER":
+                            with tracker.lock:
+                                gm["potential_employers"] += 1
+
+                        if search_scope_clean == "verified_only":
+                            accept = opp_type == "VERIFIED_AUSBILDUNG" or bool(verified_biz.get("is_verified_vacancy"))
+                        elif search_scope_clean == "potential_only":
+                            accept = opp_type == "POTENTIAL_EMPLOYER"
+                        else:  # "both" (default)
+                            accept = opp_type in ("VERIFIED_AUSBILDUNG", "POTENTIAL_EMPLOYER") or bool(verified_biz.get("is_verified_vacancy"))
+                        if not accept:
+                            unconfirmed_maps_companies.append(verified_biz)
+                            continue
+
+                    if not accept:
+                        continue
+                    # Stream directly into shared jobs collection progressively
+                    with state_lock:
+                        if ref and ref not in seen_refs:
+                            seen_refs.add(ref)
+                            jobs.append(verified_biz)
+                            discovered_maps_jobs.append(verified_biz)
+                            verified_count += 1
+                        elif ref:
+                            dup += 1
 
             search_cache["unconfirmed_maps_companies"] = unconfirmed_maps_companies
 
+            with tracker.lock:
+                gm["is_completed"] = True
+                gm["resume_status"] = "completed"
+
             success_stage = (
-                f"Google Maps: {verified_count} businesses verified"
+                f"Google Maps: {verified_count} businesses verified across {gm.get('municipalities_covered', 0)} municipalities"
                 if mode_clean == "arbeit"
-                else f"Google Maps: {verified_count} matching training companies/positions"
+                else f"Google Maps: {verified_count} matching training companies/positions ({gm.get('municipalities_covered', 0)} municipalities)"
             )
             tracker.finish_portal(
                 "google_maps",
@@ -6824,6 +7756,7 @@ def search():
 
 @app.route("/api/search")
 def api_search():
+    search_run_id = request.args.get("search_run_id", "").strip() or f"run_{int(time.time())}_{uuid.uuid4().hex[:8]}"
     keyword = request.args.get("keyword", "").strip()
     location = request.args.get("location", "").strip()
     source = request.args.get("source", "all").strip().lower()
@@ -6854,6 +7787,24 @@ def api_search():
         jobs = fetch_res
         audit = search_cache.get("last_search_audit") or {}
 
+    with search_runs_lock:
+        search_runs[search_run_id] = {
+            "search_run_id": search_run_id,
+            "keyword": keyword,
+            "location": location,
+            "source": source,
+            "mode": mode,
+            "radius": radius,
+            "published_since": published_since,
+            "jobs": [dict(j) for j in jobs],
+            "total": len(jobs),
+            "audit": audit,
+            "created_at": datetime.now().isoformat(),
+            "auto_job_id": None,
+        }
+        _save_search_runs_to_disk()
+
+    search_cache["search_run_id"] = search_run_id
     search_cache["jobs"] = jobs
     search_cache["keyword"] = keyword
     search_cache["location"] = location
@@ -6878,6 +7829,7 @@ def api_search():
     return jsonify(
         {
             "status": "success",
+            "search_run_id": search_run_id,
             "total": len(jobs),
             "source": source,
             "mode": mode,
@@ -6938,6 +7890,7 @@ def api_classify_profession():
 
 @app.route("/api/search/stream", methods=["GET"])
 def api_search_stream():
+    search_run_id = request.args.get("search_run_id", "").strip() or f"run_{int(time.time())}_{uuid.uuid4().hex[:8]}"
     keyword = request.args.get("keyword", "").strip()
     location = request.args.get("location", "").strip()
     source = request.args.get("source", "all").strip().lower()
@@ -6958,6 +7911,8 @@ def api_search_stream():
         q = queue.Queue()
 
         def progress_cb(data):
+            if isinstance(data, dict):
+                data["search_run_id"] = search_run_id
             q.put(("progress", data))
 
         def worker():
@@ -6981,6 +7936,25 @@ def api_search_stream():
                 else:
                     jobs = fetch_res
                     audit = search_cache.get("last_search_audit") or {}
+
+                with search_runs_lock:
+                    search_runs[search_run_id] = {
+                        "search_run_id": search_run_id,
+                        "keyword": keyword,
+                        "location": location,
+                        "source": source,
+                        "mode": mode,
+                        "radius": radius,
+                        "published_since": published_since,
+                        "jobs": [dict(j) for j in jobs],
+                        "total": len(jobs),
+                        "audit": audit,
+                        "created_at": datetime.now().isoformat(),
+                        "auto_job_id": None,
+                    }
+                    _save_search_runs_to_disk()
+
+                search_cache["search_run_id"] = search_run_id
                 search_cache["jobs"] = jobs
                 search_cache["keyword"] = keyword
                 search_cache["location"] = location
@@ -7004,6 +7978,7 @@ def api_search_stream():
 
                 q.put(("complete", {
                     "status": "success",
+                    "search_run_id": search_run_id,
                     "total": len(jobs),
                     "source": source,
                     "mode": mode,
@@ -7024,7 +7999,7 @@ def api_search_stream():
         t = threading.Thread(target=worker, daemon=True)
         t.start()
 
-        yield f"event: start\ndata: {json.dumps({'message': 'Suche gestartet', 'keyword': keyword, 'source': source})}\n\n"
+        yield f"event: start\ndata: {json.dumps({'message': 'Suche gestartet', 'keyword': keyword, 'source': source, 'search_run_id': search_run_id})}\n\n"
 
         while True:
             try:
@@ -7126,7 +8101,44 @@ def api_ihk_search():
 @app.route("/api/inline/start-auto-extraction", methods=["POST"])
 def api_inline_start_auto_extraction():
     data = request.get_json(silent=True) or {}
+    search_run_id = str(data.get("search_run_id") or "").strip()
+
+    # Prevent duplicate extraction tasks for the same search run
+    if search_run_id:
+        with auto_extraction_jobs_lock:
+            for existing_id, existing_job in auto_extraction_jobs.items():
+                if existing_job.get("search_run_id") == search_run_id:
+                    if existing_job.get("is_running"):
+                        logger.info("Extraction task %s already running for search_run_id %s; returning existing task.", existing_id, search_run_id)
+                        return jsonify({
+                            "success": True,
+                            "job_id": existing_id,
+                            "search_run_id": search_run_id,
+                            "total_jobs": existing_job.get("total_jobs", 0),
+                            "message": "Extraction task already active for this search run.",
+                        })
+                    elif existing_job.get("paused"):
+                        logger.info("Extraction task %s is paused for search_run_id %s; returning existing paused task.", existing_id, search_run_id)
+                        return jsonify({
+                            "success": True,
+                            "job_id": existing_id,
+                            "search_run_id": search_run_id,
+                            "total_jobs": existing_job.get("total_jobs", 0),
+                            "message": "Extraction task paused for this search run. Resume it to continue.",
+                        })
+
     raw_jobs = data.get("jobs")
+    if not isinstance(raw_jobs, list) or not raw_jobs:
+        if search_run_id:
+            with search_runs_lock:
+                s_run = search_runs.get(search_run_id)
+                if s_run and isinstance(s_run.get("jobs"), list):
+                    raw_jobs = s_run["jobs"]
+        if not isinstance(raw_jobs, list) or not raw_jobs:
+            raw_jobs = search_cache.get("jobs")
+            if not isinstance(raw_jobs, list) or not raw_jobs:
+                cache_disk = _load_search_cache_from_disk()
+                raw_jobs = cache_disk.get("jobs") or []
     if not isinstance(raw_jobs, list) or not raw_jobs:
         return jsonify({"success": False, "message": "Keine Stellen für die Extraktion übergeben"}), 400
 
@@ -7138,13 +8150,18 @@ def api_inline_start_auto_extraction():
     location = str(data.get("location") or "").strip()
     published_since = _normalize_published_since(data.get("published_since", "all"))
 
-    search_cache["jobs"] = jobs
-    search_cache["keyword"] = keyword
-    search_cache["location"] = location
-    search_cache["published_since"] = published_since
-    _save_search_cache_to_disk(jobs, keyword, location, published_since)
+    job_id = _create_auto_extraction_job(jobs, keyword, location, published_since, search_run_id=search_run_id)
+    effective_run_id = auto_extraction_jobs[job_id].get("search_run_id")
 
-    job_id = _create_auto_extraction_job(jobs, keyword, location, published_since)
+    # Only update search_cache if it matches this search run
+    if not search_cache.get("search_run_id") or search_cache.get("search_run_id") == effective_run_id:
+        search_cache["search_run_id"] = effective_run_id
+        search_cache["jobs"] = jobs
+        search_cache["keyword"] = keyword
+        search_cache["location"] = location
+        search_cache["published_since"] = published_since
+        _save_search_cache_to_disk(jobs, keyword, location, published_since)
+
     thread = threading.Thread(target=_run_auto_extraction_job, args=(job_id,), daemon=True)
     thread.start()
 
@@ -7152,6 +8169,7 @@ def api_inline_start_auto_extraction():
         {
             "success": True,
             "job_id": job_id,
+            "search_run_id": effective_run_id,
             "total_jobs": len(jobs),
         }
     )
@@ -7159,6 +8177,8 @@ def api_inline_start_auto_extraction():
 
 @app.route("/api/inline/auto-jobs/status/<job_id>", methods=["GET"])
 def api_inline_auto_job_status(job_id: str):
+    from services.captcha_monitor import get_captcha_tracker
+    from services.manual_captcha_service import get_manual_captcha_manager
     with auto_extraction_jobs_lock:
         job = auto_extraction_jobs.get(job_id)
         if not job:
@@ -7167,10 +8187,28 @@ def api_inline_auto_job_status(job_id: str):
             return jsonify({"success": False, "message": "Auto-Extraktionsjob nicht gefunden"}), 404
         total = int(job.get("total_jobs") or 0)
         current = int(job.get("current_index") or 0)
+        last_progress_at = str(job.get("last_progress_at") or "")
+        stalled = False
+        if job.get("is_running") and last_progress_at:
+            try:
+                stalled = (datetime.now() - datetime.fromisoformat(last_progress_at)).total_seconds() >= 60
+            except (TypeError, ValueError):
+                stalled = False
+        raw_workers = job.get("workers") or {}
+        safe_workers = {}
+        for wid, wstate in raw_workers.items():
+            if isinstance(wstate, dict):
+                sw = dict(wstate)
+                sw.pop("proxy_url", None)
+                safe_workers[wid] = sw
+            else:
+                safe_workers[wid] = wstate
+
         payload = {
             "success": True,
             "job": {
                 "job_id": job.get("job_id"),
+                "search_run_id": str(job.get("search_run_id") or ""),
                 "keyword": job.get("keyword", ""),
                 "location": job.get("location", ""),
                 "published_since": job.get("published_since", "all"),
@@ -7179,49 +8217,136 @@ def api_inline_auto_job_status(job_id: str):
                 "paused": bool(job.get("paused")),
                 "current_index": current,
                 "total_jobs": total,
+                "processed_jobs": current,
+                "pending_jobs": max(0, total - current),
+                "manual_review_count": len(job.get("manual_review_queue") or []),
+                "manual_review_queue": list(job.get("manual_review_queue") or []),
                 "emails_found": int(job.get("emails_found") or 0),
+                "recruitment_emails": int(job.get("recruitment_emails") or 0),
+                "forms_found": int(job.get("forms_found") or 0),
+                "external_links": int(job.get("external_links") or 0),
+                "fast_path_hits": int(job.get("fast_path_hits") or 0),
+                "selenium_fallbacks": int(job.get("selenium_fallbacks") or 0),
+                "rate_limited_count": int(job.get("rate_limited_count") or 0),
                 "captchas_solved": int(job.get("captchas_solved") or 0),
+                "active_challenges": get_manual_captcha_manager().get_challenges_for_job(job_id, active_only=True),
+                "captcha_metrics": job.get("captcha_metrics") or get_captcha_tracker(job_id).get_summary(),
                 "failed": int(job.get("failed") or 0),
+                "avg_time_per_job": float(job.get("avg_time_per_job") or 0.0),
+                "estimated_remaining_seconds": 0.0 if stalled else float(job.get("estimated_remaining_seconds") or 0.0),
+                "throughput_jobs_per_minute": float(job.get("throughput_jobs_per_minute") or 0.0),
+                "stalled": stalled,
+                "active_workers": int(job.get("active_workers") or 0),
+                "status_label": "Stalled" if stalled else str(job.get("status_label") or ("Running" if job.get("is_running") else ("Paused" if job.get("paused") else "Completed"))),
+                "workers": safe_workers,
+                "activity_feed": list(job.get("activity_feed") or [])[-35:],
                 "last_error": str(job.get("last_error") or ""),
                 "percentage": (current / total * 100) if total else 0,
                 "updated_at": job.get("updated_at", ""),
                 "finished_at": job.get("finished_at", ""),
+                "network_summary": job.get("network_summary") or {
+                    "capability": "4-Worker Independent Network Routing Supported",
+                    "active_mode": "direct_shared",
+                    "description": "All workers using direct host connection (no proxies configured in .env; shared IP expected)",
+                },
             },
         }
     return jsonify(payload)
 
 
-@app.route("/api/inline/auto-jobs/continue/<job_id>", methods=["POST"])
-def api_inline_continue_auto_job(job_id: str):
+@app.route("/api/inline/auto-jobs/pause/<job_id>", methods=["POST"])
+def api_inline_pause_auto_job(job_id: str):
+    logger.info("[AutoJob %s] Pause requested.", job_id[:8])
+    from services.manual_captcha_service import get_manual_captcha_manager
+    get_manual_captcha_manager().cancel_all_for_job(job_id)
     with auto_extraction_jobs_lock:
         job = auto_extraction_jobs.get(job_id)
         if not job:
             job = _recover_auto_job_from_progress(job_id)
         if not job:
             return jsonify({"success": False, "message": "Auto-Extraktionsjob nicht gefunden"}), 404
-        if not job.get("paused") and not job.get("stop_requested"):
-            return jsonify({"success": False, "message": "Auto-Extraktionsjob ist nicht pausiert"}), 400
+
+        if job.get("paused") and not job.get("is_running"):
+            return jsonify({"success": True, "message": "Bereits pausiert"})
+
+        job["paused"] = True
+        job["is_running"] = False
+        job["continue_requested"] = False
+        job["status_label"] = "Paused"
+        job["updated_at"] = datetime.now().isoformat()
+
+        if "workers" in job and isinstance(job["workers"], dict):
+            for w in job["workers"].values():
+                if isinstance(w, dict) and w.get("status") in ("working", "waiting"):
+                    w["status"] = "paused"
+                    w["current_stage"] = "Paused"
+                    w["current_job"] = "Paused"
+            job["active_workers"] = 0
+
+        _sync_progress_into_job(job_id)
+        _save_auto_extraction_jobs_to_disk()
+
+        jobs = job.get("jobs") or []
+        curr_idx = int(job.get("current_index") or 0)
+        _persist_job_progress(job_id, jobs, curr_idx, job)
+
+    return jsonify({"success": True, "message": "Pausieren angefordert"})
+
+
+@app.route("/api/inline/auto-jobs/continue/<job_id>", methods=["POST"])
+def api_inline_continue_auto_job(job_id: str):
+    logger.info("[AutoJob %s] Continue/Resume requested.", job_id[:8])
+    with auto_extraction_jobs_lock:
+        job = auto_extraction_jobs.get(job_id)
+        if not job:
+            job = _recover_auto_job_from_progress(job_id)
+        if not job:
+            return jsonify({"success": False, "message": "Auto-Extraktionsjob nicht gefunden"}), 404
+
+        # Idempotent: if already actively running, return success
+        if job.get("is_running") and not job.get("paused"):
+            with auto_extraction_threads_lock:
+                existing_thread = auto_extraction_threads.get(job_id)
+                if existing_thread and existing_thread.is_alive():
+                    return jsonify({"success": True, "message": "Job läuft bereits"})
+
+        total = int(job.get("total_jobs") or 0)
+        curr = int(job.get("current_index") or 0)
+        jobs = job.get("jobs") or []
+        unfinished = [idx for idx, j in enumerate(jobs) if not _is_job_finished(j)]
+        if total > 0 and curr >= total and (not jobs or not unfinished):
+            return jsonify({"success": False, "message": "Job ist bereits vollständig abgeschlossen"}), 400
+
         job["is_running"] = True
         job["paused"] = False
         job["stop_requested"] = False
         job["continue_requested"] = True
+        job["status_label"] = "Running"
         job["last_error"] = ""
+        job["finished_at"] = ""
         job["updated_at"] = datetime.now().isoformat()
         _save_auto_extraction_jobs_to_disk()
 
+    # Wait for previous thread to finish if still shutting down
     with auto_extraction_threads_lock:
-        thread = auto_extraction_threads.get(job_id)
-        thread_alive = thread is not None and thread.is_alive()
+        prev_thread = auto_extraction_threads.get(job_id)
+        if prev_thread and prev_thread.is_alive():
+            logger.info("[AutoJob %s] Waiting for previous thread to exit cleanly before resuming...", job_id[:8])
+            prev_thread.join(timeout=5.0)
 
-    if not thread_alive:
-        t = threading.Thread(target=_run_auto_extraction_job, args=(job_id,), daemon=True)
-        t.start()
+    t = threading.Thread(target=_run_auto_extraction_job, args=(job_id,), daemon=True)
+    with auto_extraction_threads_lock:
+        auto_extraction_threads[job_id] = t
+    t.start()
+    logger.info("[AutoJob %s] Worker thread started for resumption.", job_id[:8])
 
     return jsonify({"success": True, "message": "Fortsetzen angefordert"})
 
 
 @app.route("/api/inline/auto-jobs/stop/<job_id>", methods=["POST"])
 def api_inline_stop_auto_job(job_id: str):
+    from services.manual_captcha_service import get_manual_captcha_manager
+    get_manual_captcha_manager().cancel_all_for_job(job_id)
     with auto_extraction_jobs_lock:
         job = auto_extraction_jobs.get(job_id)
         if not job:
@@ -7232,8 +8357,14 @@ def api_inline_stop_auto_job(job_id: str):
         job["stop_requested"] = True
         job["paused"] = False
         job["continue_requested"] = False
+        job["status_label"] = "Stopped"
         job["updated_at"] = datetime.now().isoformat()
+        _sync_progress_into_job(job_id)
         _save_auto_extraction_jobs_to_disk()
+    with status_lock:
+        auto_extraction_status["is_running"] = False
+        auto_extraction_status["stop_requested"] = True
+        auto_extraction_status["paused"] = False
     return jsonify({"success": True, "message": "Stop der Auto-Extraktion angefordert"})
 
 
@@ -7245,6 +8376,7 @@ def api_inline_download_auto_job(job_id: str):
             job = _recover_auto_job_from_progress(job_id)
         if not job:
             return jsonify({"success": False, "message": "Auto-Extraktionsjob nicht gefunden"}), 404
+        _sync_progress_into_job(job_id)
         jobs = list(job.get("jobs") or [])
         keyword = str(job.get("keyword") or "")
 
@@ -7261,10 +8393,215 @@ def api_inline_download_auto_job(job_id: str):
     file_path = AUTO_EXTRACTION_EXPORT_DIR / f"{timestamp}_{slug}_{job_id[:8]}.xlsx"
     df = pd.DataFrame(prepared_jobs)
     existing_cols = [c for c in EXCEL_COLUMNS if c in df.columns]
+    for extra_col in [
+        "email_type",
+        "contact_person",
+        "job_listing_url",
+        "employer_website",
+        "direct_application_url",
+        "application_url_type",
+        "required_documents",
+        "extraction_status",
+    ]:
+        if extra_col in df.columns and extra_col not in existing_cols:
+            existing_cols.append(extra_col)
     if existing_cols:
         df = df[existing_cols]
     df.to_excel(file_path, index=False)
     return send_file(file_path, as_attachment=True, download_name=file_path.name)
+
+
+@app.route("/api/inline/auto-jobs/history", methods=["GET"])
+@app.route("/api/inline/auto-jobs/tasks", methods=["GET"])
+def api_inline_auto_jobs_history():
+    search_run_id = request.args.get("search_run_id", "").strip()
+    with auto_extraction_jobs_lock:
+        tasks = []
+        for jid, job in auto_extraction_jobs.items():
+            if not isinstance(job, dict):
+                continue
+            if search_run_id and job.get("search_run_id") != search_run_id:
+                continue
+            _sync_progress_into_job(jid)
+            tasks.append({
+                "job_id": jid,
+                "search_run_id": str(job.get("search_run_id") or ""),
+                "keyword": str(job.get("keyword") or ""),
+                "location": str(job.get("location") or ""),
+                "published_since": str(job.get("published_since") or "all"),
+                "total_jobs": int(job.get("total_jobs") or 0),
+                "processed_jobs": int(job.get("current_index") or 0),
+                "emails_found": int(job.get("emails_found") or 0),
+                "recruitment_emails": int(job.get("recruitment_emails") or 0),
+                "forms_found": int(job.get("forms_found") or 0),
+                "is_running": bool(job.get("is_running")),
+                "paused": bool(job.get("paused")),
+                "stop_requested": bool(job.get("stop_requested")),
+                "status_label": str(job.get("status_label") or ("Running" if job.get("is_running") else ("Paused" if job.get("paused") else "Completed"))),
+                "created_at": str(job.get("created_at") or ""),
+                "updated_at": str(job.get("updated_at") or ""),
+                "finished_at": str(job.get("finished_at") or ""),
+            })
+        tasks.sort(key=lambda t: t.get("updated_at") or t.get("created_at") or "", reverse=True)
+    return jsonify({"success": True, "tasks": tasks, "total": len(tasks)})
+
+
+@app.route("/api/inline/auto-jobs/active", methods=["GET"])
+def api_inline_active_auto_job():
+    search_run_id = request.args.get("search_run_id", "").strip()
+    with auto_extraction_jobs_lock:
+        running_jobs = []
+        idle_jobs = []
+        for jid, job in auto_extraction_jobs.items():
+            if isinstance(job, dict):
+                if search_run_id and job.get("search_run_id") != search_run_id:
+                    continue
+                t = str(job.get("updated_at") or job.get("created_at") or "")
+                run_id = str(job.get("search_run_id") or "")
+                if job.get("is_running"):
+                    running_jobs.append((t, jid, run_id))
+                else:
+                    idle_jobs.append((t, jid, run_id))
+        if running_jobs:
+            running_jobs.sort(reverse=True)
+            return jsonify({
+                "success": True,
+                "has_active": True,
+                "job_id": running_jobs[0][1],
+                "search_run_id": running_jobs[0][2],
+                "status": "running"
+            })
+        if idle_jobs:
+            idle_jobs.sort(reverse=True)
+            return jsonify({
+                "success": True,
+                "has_active": True,
+                "job_id": idle_jobs[0][1],
+                "search_run_id": idle_jobs[0][2],
+                "status": "idle"
+            })
+    return jsonify({"success": True, "has_active": False, "job_id": None, "search_run_id": None, "status": "none"})
+
+
+@app.route("/api/inline/auto-jobs/challenges/<job_id>", methods=["GET"])
+def api_inline_auto_job_challenges(job_id: str):
+    from services.manual_captcha_service import get_manual_captcha_manager
+    active_only = request.args.get("active", "false").lower() in ("1", "true", "yes")
+    challenges = get_manual_captcha_manager().get_challenges_for_job(job_id, active_only=active_only)
+    return jsonify({"success": True, "challenges": challenges, "count": len(challenges)})
+
+
+@app.route("/api/inline/auto-jobs/challenges/solve", methods=["POST"])
+def api_inline_auto_job_solve_challenge():
+    from services.manual_captcha_service import get_manual_captcha_manager
+    data = request.get_json() or {}
+    ch_id = str(data.get("challenge_id") or "").strip()
+    solution = str(data.get("solution_text") or "").strip()
+    if not ch_id:
+        return jsonify({"success": False, "message": "Missing challenge_id"}), 400
+    if not solution:
+        return jsonify({"success": False, "message": "Bitte geben Sie den CAPTCHA-Code ein."}), 400
+
+    success, msg = get_manual_captcha_manager().submit_solution(ch_id, solution)
+    ch = get_manual_captcha_manager().get_challenge(ch_id)
+    return jsonify({
+        "success": success,
+        "message": msg,
+        "challenge": ch.to_dict() if ch else None,
+        "can_retry": ch.to_dict()["can_retry"] if ch else False,
+    })
+
+
+@app.route("/api/inline/auto-jobs/challenges/verify-interactive", methods=["POST"])
+def api_inline_auto_job_verify_interactive():
+    from services.manual_captcha_service import get_manual_captcha_manager
+    data = request.get_json() or {}
+    ch_id = str(data.get("challenge_id") or "").strip()
+    if not ch_id:
+        return jsonify({"success": False, "message": "Missing challenge_id"}), 400
+
+    success, msg = get_manual_captcha_manager().verify_interactive(ch_id)
+    ch = get_manual_captcha_manager().get_challenge(ch_id)
+    return jsonify({
+        "success": success,
+        "message": msg,
+        "challenge": ch.to_dict() if ch else None,
+        "can_retry": ch.to_dict()["can_retry"] if ch else False,
+    })
+
+
+@app.route("/api/inline/auto-jobs/challenges/skip", methods=["POST"])
+def api_inline_auto_job_skip_challenge():
+    from services.manual_captcha_service import get_manual_captcha_manager
+    data = request.get_json() or {}
+    ch_id = str(data.get("challenge_id") or "").strip()
+    if not ch_id:
+        return jsonify({"success": False, "message": "Missing challenge_id"}), 400
+
+    ok = get_manual_captcha_manager().skip_or_mark_manual(ch_id, reason="Manuell übersprungen")
+    return jsonify({"success": ok, "message": "Prüfung übersprungen und als Manuell markiert."})
+
+
+@app.route("/api/inline/auto-jobs/challenges/open-browser", methods=["POST"])
+def api_inline_auto_job_open_browser_challenge():
+    from services.manual_captcha_service import get_manual_captcha_manager
+    data = request.get_json() or {}
+    ch_id = str(data.get("challenge_id") or "").strip()
+    if not ch_id:
+        return jsonify({"success": False, "message": "Missing challenge_id"}), 400
+
+    ok, url_or_err = get_manual_captcha_manager().open_in_system_browser(ch_id)
+    return jsonify({"success": ok, "url": url_or_err if ok else "", "error": "" if ok else url_or_err})
+
+
+@app.route("/api/inline/auto-jobs/challenges/refresh-image", methods=["POST"])
+def api_inline_auto_job_refresh_challenge_image():
+    from services.manual_captcha_service import get_manual_captcha_manager
+    data = request.get_json() or {}
+    ch_id = str(data.get("challenge_id") or "").strip()
+    if not ch_id:
+        return jsonify({"success": False, "message": "Missing challenge_id"}), 400
+
+    ok, img_or_err = get_manual_captcha_manager().refresh_challenge_image(ch_id)
+    return jsonify({
+        "success": ok,
+        "captcha_image_base64": img_or_err if ok else "",
+        "message": "" if ok else img_or_err,
+    })
+
+
+@app.route("/api/search/runs/<search_run_id>", methods=["GET"])
+def api_get_search_run(search_run_id: str):
+    with search_runs_lock:
+        s_run = search_runs.get(search_run_id)
+        if not s_run:
+            return jsonify({"success": False, "message": "Suchlauf nicht gefunden"}), 404
+        return jsonify({
+            "success": True,
+            "search_run": {
+                "search_run_id": s_run.get("search_run_id"),
+                "keyword": s_run.get("keyword"),
+                "location": s_run.get("location"),
+                "total": s_run.get("total"),
+                "jobs": s_run.get("jobs", []),
+                "auto_job_id": s_run.get("auto_job_id"),
+                "created_at": s_run.get("created_at"),
+            }
+        })
+
+
+@app.route("/api/inline/auto-jobs/jobs/<job_id>", methods=["GET"])
+def api_inline_get_auto_job_jobs(job_id: str):
+    with auto_extraction_jobs_lock:
+        job = auto_extraction_jobs.get(job_id)
+        if not job:
+            job = _recover_auto_job_from_progress(job_id)
+        if not job:
+            return jsonify({"success": False, "message": "Auto-Extraktionsjob nicht gefunden"}), 404
+        _sync_progress_into_job(job_id)
+        jobs = list(job.get("jobs") or [])
+    prepared = [normalize_job_opportunity_row(j) for j in jobs if isinstance(j, dict)]
+    return jsonify({"success": True, "jobs": prepared, "total": len(prepared)})
 
 
 @app.route("/api/inline/auto-jobs/use-for-anschreiben/<job_id>", methods=["POST"])
@@ -8189,14 +9526,25 @@ def download_auto_results():
 @app.route("/api/search/download", methods=["GET"])
 def api_search_download():
     """Direct Excel export of the matching search results using the exact 21-column schema."""
-    jobs = list(search_cache.get("jobs", []))
+    search_run_id = request.args.get("search_run_id", "").strip()
+    jobs = []
+    keyword = ""
+    if search_run_id:
+        with search_runs_lock:
+            s_run = search_runs.get(search_run_id)
+            if s_run:
+                jobs = list(s_run.get("jobs") or [])
+                keyword = str(s_run.get("keyword") or "")
     if not jobs:
-        persisted = _load_search_cache_from_disk()
-        jobs = persisted.get("jobs", [])
+        jobs = list(search_cache.get("jobs", []))
+        if not jobs:
+            persisted = _load_search_cache_from_disk()
+            jobs = persisted.get("jobs", [])
+        if jobs and not keyword:
+            keyword = str(search_cache.get("keyword") or "").strip()
     if not jobs:
         return jsonify({"error": "Keine Suchergebnisse zum Download vorhanden."}), 400
 
-    keyword = str(search_cache.get("keyword") or "").strip()
     filter_mode = request.args.get("filter", "all")
     prepared_jobs = _prepare_download_jobs(jobs, filter_mode=filter_mode)
     if not prepared_jobs:
@@ -8206,6 +9554,7 @@ def api_search_download():
         prepared_jobs,
         keyword,
         fallback_slug="suchergebnisse",
+        canonical_only=True,
     )
     return send_file(
         temp_file,
@@ -8960,7 +10309,35 @@ def api_google_maps_stop(job_id: str):
             return jsonify({"success": False, "message": "Job nicht gefunden"}), 404
         job["stop_requested"] = True
         job["updated_at"] = datetime.now().isoformat()
+    # Also notify checkpoint manager if active
+    from services.geographic_checkpoint_manager import geographic_checkpoint_manager
+    geographic_checkpoint_manager.pause_checkpoint(job_id)
     return jsonify({"success": True, "message": "Stop-Signal gesendet"})
+
+
+@app.route("/api/google-maps/resume/<job_id>", methods=["POST"])
+def api_google_maps_resume(job_id: str):
+    """Resume an interrupted or paused nationwide discovery job from disk checkpoint."""
+    from services.geographic_checkpoint_manager import geographic_checkpoint_manager
+    cp = geographic_checkpoint_manager.resume_checkpoint(job_id)
+    if not cp:
+        return jsonify({"success": False, "message": f"Kein Checkpoint für Job {job_id} gefunden"}), 404
+    return jsonify({
+        "success": True,
+        "job_id": job_id,
+        "status": cp.get("status"),
+        "pending_regions": len(cp.get("pending_regions") or []),
+        "discovered_count": cp.get("stats", {}).get("discovered_count", 0),
+        "message": f"Discovery {job_id} erfolgreich fortgesetzt.",
+    })
+
+
+@app.route("/api/google-maps/checkpoints", methods=["GET"])
+def api_google_maps_checkpoints():
+    """List all available persistent geographic discovery checkpoints."""
+    from services.geographic_checkpoint_manager import geographic_checkpoint_manager
+    cps = geographic_checkpoint_manager.list_checkpoints()
+    return jsonify({"success": True, "checkpoints": cps})
 
 
 @app.route("/api/google-maps/download/<job_id>", methods=["GET"])
@@ -9050,8 +10427,13 @@ def api_google_maps_export(job_id: str, fmt: str):
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
+    debug_mode = os.getenv("FLASK_DEBUG", "True").lower() in ("1", "true", "yes")
+    # On Windows, Werkzeug's file reloader can close socket handles while selectors.select() polls,
+    # causing WinError 10038. Defaulting use_reloader=False prevents this collision.
+    use_reloader = os.getenv("FLASK_USE_RELOADER", "false").lower() in ("1", "true", "yes")
     try:
-        app.run(host="127.0.0.1", port=port, debug=True)
-    except OSError:
-        logger.warning(f"Port {port} is occupied, falling back to port {port + 1}")
-        app.run(host="127.0.0.1", port=port + 1, debug=True)
+        app.run(host="127.0.0.1", port=port, debug=debug_mode, use_reloader=use_reloader)
+    except OSError as e:
+        if "10038" not in str(e) and "10048" in str(e):
+            logger.warning(f"Port {port} is occupied, falling back to port {port + 1}")
+            app.run(host="127.0.0.1", port=port + 1, debug=debug_mode, use_reloader=use_reloader)

@@ -50,11 +50,18 @@ APPLICATION_BUTTON_KEYWORDS = [
     "online bewerben",
     "bewerbung starten",
     "zur bewerbung",
+    "bewerben sie sich",
+    "über internetseite des arbeitgebers",
+    "uber internetseite des arbeitgebers",
+    "bewerbungsportal",
     "bewerbungsformular",
     "direkt bewerben",
     "jetzt online bewerben",
+    "info zur bewerbung",
     "apply now",
+    "apply online",
     "submit application",
+    "start application",
     "hier bewerben",
     "online-bewerbung",
     "online bewerbung",
@@ -65,6 +72,7 @@ APPLICATION_BUTTON_KEYWORDS = [
     "apply",
     "candidater",
     "postuler",
+    "postuler en ligne",
 ]
 
 # Known ATS (Applicant Tracking System) domains used in Germany and internationally
@@ -88,6 +96,19 @@ KNOWN_ATS_DOMAINS = [
     "prescreen.io",
     "prescreen.app",
     "umantis.com",
+    "persis.de",
+    "persis",
+    "covider.de",
+    "rexx-systems.com",
+    "rexx.com",
+    "successfactors.com",
+    "successfactors.eu",
+    "bamboohr.com",
+    "taleo.net",
+    "kenjo.io",
+    "workwise.io",
+    "onlyfy.com",
+    "join.com",
     "haufe.com",
     "successfactors.com",
     "successfactors.eu",
@@ -218,10 +239,27 @@ class ApplicationFormDiscovery:
             return self.cache[url]
 
         try:
-            resp = self.session.get(url, timeout=self.timeout, allow_redirects=True)
-            if resp.status_code == 200 and resp.text:
+            from .rate_limiter import safe_http_get
+            resp = safe_http_get(self.session, url, timeout=self.timeout)
+            if resp is not None and resp.status_code == 200 and resp.text:
                 final_url = resp.url
                 html = resp.text
+
+                # Meta-refresh detection (e.g., Ausbildung.de partner/ATS redirect)
+                meta_match = re.search(r'<meta[^>]*http-equiv=["\']?refresh["\']?[^>]*content=["\']?[^"\'>]*url=([^"\'\s;>]+)', html, re.IGNORECASE)
+                if meta_match:
+                    raw_target = meta_match.group(1).strip(" '\"")
+                    resolved_target = urljoin(final_url, raw_target)
+                    parsed_target = urlparse(resolved_target)
+                    if parsed_target.scheme in ("http", "https") and parsed_target.netloc:
+                        try:
+                            redir_resp = safe_http_get(self.session, resolved_target, timeout=self.timeout)
+                            if redir_resp is not None and redir_resp.status_code == 200 and redir_resp.text:
+                                final_url = redir_resp.url
+                                html = redir_resp.text
+                        except Exception as red_err:
+                            logger.debug("Meta-refresh redirect follow failed for %s: %s", resolved_target, red_err)
+
                 self.cache[url] = (final_url, html)
                 return final_url, html
         except Exception as exc:
@@ -577,7 +615,12 @@ class ApplicationFormDiscovery:
         return result
 
 
-def classify_application_method(email: Optional[str], has_form: bool) -> Tuple[str, str]:
+def classify_application_method(
+    email: Optional[str],
+    has_form: bool,
+    existing_method: str = "",
+    direct_url: str = "",
+) -> Tuple[str, str]:
     """
     Standard application method and art classifier matching the specification:
     | Email available | Verified online form | application_method | bewerbung_art |
@@ -585,6 +628,7 @@ def classify_application_method(email: Optional[str], has_form: bool) -> Tuple[s
     | No              | Yes                  | form               | Online-Formular |
     | Yes             | Yes                  | both               | E-Mail + Online-Formular |
     | No              | No                   | unknown            | Unbekannt |
+    Also supports portal / external_link, phone, and postal channels.
     """
     clean_email = str(email or "").strip().lower()
     has_valid_email = bool(
@@ -595,12 +639,25 @@ def classify_application_method(email: Optional[str], has_form: bool) -> Tuple[s
         and clean_email != "duplicate_email_skipped"
     )
 
-    if has_valid_email and has_form:
+    em = str(existing_method or "").strip().lower()
+    has_direct_url = bool(direct_url and not ApplicationFormDiscovery.is_job_portal_url(direct_url))
+
+    if has_valid_email and (has_form or has_direct_url or em in {"form", "external_link", "portal", "both"}):
         return "both", "E-Mail + Online-Formular"
-    if has_valid_email and not has_form:
+    if has_valid_email:
         return "email", "E-Mail"
-    if not has_valid_email and has_form:
+    if has_form or em == "form":
         return "form", "Online-Formular"
+    if has_direct_url or em in {"external_link", "portal"}:
+        return "external_link", "Online-Portal / Link"
+    if em == "phone":
+        return "phone", "Telefon"
+    if em in {"postal", "schriftlich"}:
+        return "postal", "Post / Schriftlich"
+    if em in {"portal_login_required", "portal_login"}:
+        return "portal_login_required", "Portal-Registrierung erforderlich"
+    if em in {"none", "keine"}:
+        return "none", "Keine"
     return "unknown", "Unbekannt"
 
 
@@ -647,10 +704,31 @@ def normalize_job_opportunity_row(
 
         bewerbung_link = str(row.get("bewerbung_link") or form_link or original_apply_url or "").strip()
 
-    app_method, bewerbung_art = classify_application_method(email_val, has_form)
+    existing_method = str(row.get("application_method") or "").strip()
+    explicit_direct_url = str(row.get("direct_application_url") or "").strip()
+    direct_app_url = explicit_direct_url or form_link
+    if not direct_app_url and discovery_result is None and row.get("has_form"):
+        direct_app_url = str(bewerbung_link if bewerbung_link != original_apply_url else "").strip()
+
+    # Source-aware method inference for postal-only and portal-login portals
+    src_val = str(row.get("source") or "").lower()
+    if ("ihk" in src_val or "ihk" in original_apply_url) and not email_val and not has_form and not direct_app_url:
+        if row.get("postal_only") or "schriftlich" in str(row.get("bewerbungsart", "")).lower() or "post" in str(row.get("bewerbungsart", "")).lower() or existing_method in ("postal", "schriftlich"):
+            existing_method = "postal"
+
+    if ("azubiyo" in src_val or "azubiyo" in original_apply_url) and not email_val and not has_form and not direct_app_url:
+        if row.get("portal_application_only") or row.get("is_portal_login_required") or row.get("portal_login_required") or "login" in str(row.get("bewerbungsart", "")).lower() or "registrier" in str(row.get("bewerbungsart", "")).lower() or existing_method in ("portal_login_required", "portal_login"):
+            existing_method = "portal_login_required"
+
+    app_method, bewerbung_art = classify_application_method(
+        email_val,
+        has_form,
+        existing_method=existing_method,
+        direct_url=direct_app_url,
+    )
 
     # Anrede calculation
-    arbeitsgeber = str(row.get("arbeitsgeber") or "").strip()
+    arbeitsgeber = str(row.get("contact_person") or row.get("arbeitsgeber") or "").strip()
     contact = arbeitsgeber.lower()
     if contact.startswith("herr") or contact.startswith("herrn"):
         anrede = "Sehr geehrter"
@@ -659,7 +737,17 @@ def normalize_job_opportunity_row(
     else:
         anrede = "Sehr geehrte Damen und Herren"
 
-    # Exact 21 columns in exact order
+    # Enriched fields preserved
+    email_type = str(row.get("email_type") or ("recruitment" if email_val else "")).strip()
+    employer_website = str(row.get("employer_website") or "").strip()
+    application_url_type = str(row.get("application_url_type") or ("direct_form" if has_form else ("postal" if app_method == "postal" else ("portal_login" if app_method == "portal_login_required" else "none")))).strip()
+    required_documents = str(row.get("required_documents") or "").strip()
+    default_status = "completed" if (email_val or has_form or direct_app_url or app_method in ("postal", "portal_login_required")) else "unresolved"
+    extraction_status = str(row.get("extraction_status") or default_status).strip()
+    if app_method == "portal_login_required" and extraction_status in ("unresolved", "failed"):
+        extraction_status = "completed"
+    app_methods = row.get("application_methods") or ([app_method] if app_method not in ("unknown", "none") else [])
+
     return {
         "title": str(row.get("title") or "N/A"),
         "company": str(row.get("company") or "N/A"),
@@ -682,4 +770,15 @@ def normalize_job_opportunity_row(
         "vacancies": str(row.get("vacancies") or ""),
         "scraped_at": str(row.get("scraped_at") or time.strftime("%Y-%m-%d %H:%M")),
         "salary": str(row.get("salary") or ""),
+        # Extended fields for full application details
+        "email_type": email_type,
+        "contact_person": arbeitsgeber,
+        "job_listing_url": original_apply_url,
+        "employer_website": employer_website,
+        "direct_application_url": direct_app_url,
+        "application_url_type": application_url_type,
+        "required_documents": required_documents,
+        "extraction_status": extraction_status,
+        "application_methods": app_methods,
+        "extraction_method": str(row.get("extraction_method") or "").strip(),
     }

@@ -652,13 +652,22 @@
                                         <div class="mon-gmaps-header">
                                             <div class="mon-gmaps-title">
                                                 <span>📍 Google Maps Live Company &amp; Career Crawler</span>
+                                                <span class="mon-chip-sm" id="mon_gmaps_resume_status">Active</span>
                                             </div>
                                             <div class="mon-gmaps-target">
-                                                <span>City: <strong id="mon_gmaps_city">-</strong></span>
+                                                <span>Region: <strong id="mon_gmaps_current_region">-</strong></span>
                                                 <span>Industry: <strong id="mon_gmaps_category">-</strong></span>
                                             </div>
                                         </div>
                                         <div class="mon-gmaps-grid">
+                                            <div class="mon-gmaps-stat">
+                                                <span class="mon-gstat-lbl">Regions Scanned</span>
+                                                <strong class="mon-gstat-val" id="mon_gmaps_regions">0 / 16</strong>
+                                            </div>
+                                            <div class="mon-gmaps-stat">
+                                                <span class="mon-gstat-lbl">Municipalities Covered</span>
+                                                <strong class="mon-gstat-val" id="mon_gmaps_municipalities">0</strong>
+                                            </div>
                                             <div class="mon-gmaps-stat">
                                                 <span class="mon-gstat-lbl">Businesses Found</span>
                                                 <strong class="mon-gstat-val" id="mon_gmaps_companies">0</strong>
@@ -767,18 +776,275 @@
                                         <span>Export to Excel (.xlsx)</span>
                                     </a>
                                 </div>
-                                <section id="progress_panel_1" class="progress-panel">
-                                    <h4 class="progress-title">Auto-Extraction Progress</h4>
-                                    <div class="progress-stats">
-                                        <div class="progress-stat"><span id="processed_1" class="value">0</span><span class="label">Processed</span></div>
-                                        <div class="progress-stat"><span id="emails_1" class="value">0</span><span class="label">Emails</span></div>
-                                        <div class="progress-stat"><span id="captcha_1" class="value">0</span><span class="label">CAPTCHAs</span></div>
-                                        <div class="progress-stat"><span id="failed_1" class="value">0</span><span class="label">Errors</span></div>
+                                <section id="progress_panel_1" class="progress-panel modern-extraction-dashboard">
+                                    <div class="dash-topbar">
+                                        <div class="dash-title-group">
+                                            <h4 class="progress-title">Auto-Extraction Progress</h4>
+                                            <span id="extraction_status_badge_1" class="dash-badge status-idle">Idle</span>
+                                            <span id="active_workers_badge_1" class="dash-badge workers-idle">
+                                                <span class="pulse-dot"></span> <span class="workers-text">Workers Idle</span>
+                                            </span>
+                                        </div>
+                                        <div class="dash-meta-pills">
+                                            <span id="progress_eta_1" class="dash-pill eta-pill" title="Estimated remaining time">ETA: --</span>
+                                            <span id="progress_speed_1" class="dash-pill speed-pill" title="Extraction throughput">-- s/job</span>
+                                        </div>
                                     </div>
-                                    <div class="progress-track"><div id="progress_fill_1" class="progress-fill">0%</div></div>
-                                    <div id="progress_status_1" class="progress-status">Idle</div>
+
+                                    <!-- Primary Metrics (4 Prominent Cards) -->
+                                    <div class="dash-primary-grid">
+                                        <div class="dash-primary-card">
+                                            <div class="primary-card-icon">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7.5" r="4"></circle><polyline points="17 11 19 13 23 9"></polyline></svg>
+                                            </div>
+                                            <div class="primary-card-content">
+                                                <div class="primary-card-value">
+                                                    <span id="processed_1" class="val-current">0</span>
+                                                    <span class="val-sep">/</span>
+                                                    <span id="total_1" class="val-total">0</span>
+                                                </div>
+                                                <div class="primary-card-label">Processed Jobs</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="dash-primary-card">
+                                            <div class="primary-card-icon">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                                            </div>
+                                            <div class="primary-card-content">
+                                                <div class="primary-card-value">
+                                                    <span id="emails_1" class="val-current">0</span>
+                                                </div>
+                                                <div class="primary-card-label">Emails Found</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="dash-primary-card">
+                                            <div class="primary-card-icon">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                            </div>
+                                            <div class="primary-card-content">
+                                                <div class="primary-card-value">
+                                                    <span id="forms_1" class="val-current">0</span>
+                                                </div>
+                                                <div class="primary-card-label">Forms Found</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="dash-primary-card">
+                                            <div class="primary-card-icon">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                            </div>
+                                            <div class="primary-card-content">
+                                                <div class="primary-card-value">
+                                                    <span id="percent_num_1" class="val-current">0%</span>
+                                                </div>
+                                                <div class="primary-card-label">Extraction Progress</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Progress Bar & Status Text -->
+                                    <div class="dash-track-section">
+                                        <div class="progress-track"><div id="progress_fill_1" class="progress-fill">0%</div></div>
+                                        <div class="dash-status-row">
+                                            <div id="progress_status_1" class="progress-status">Idle</div>
+                                        </div>
+                                    </div>
                                     <div id="progress_error_1" class="progress-error"></div>
+
+                                    <!-- Secondary Metrics Grid -->
+                                    <div class="dash-secondary-grid">
+                                        <div class="dash-sec-item" title="Verified direct recruitment / HR email addresses">
+                                            <span class="sec-label">Recruitment Emails</span>
+                                            <span id="recruitment_emails_1" class="sec-value">0</span>
+                                        </div>
+                                        <div class="dash-sec-item" title="External career portal & ATS apply links">
+                                            <span class="sec-label">External Apply Links</span>
+                                            <span id="external_links_1" class="sec-value">0</span>
+                                        </div>
+                                        <div class="dash-sec-item" title="Fast HTTP extraction without browser overhead">
+                                            <span class="sec-label">HTTP Fast-Path Hits</span>
+                                            <span id="fast_path_1" class="sec-value">0</span>
+                                        </div>
+                                        <div class="dash-sec-item" title="Full browser extraction for complex JavaScript pages">
+                                            <span class="sec-label">Selenium Fallbacks</span>
+                                            <span id="selenium_fallbacks_1" class="sec-value">0</span>
+                                        </div>
+                                        <div class="dash-sec-item" title="HTTP 429 rate limit events automatically handled">
+                                            <span class="sec-label">Rate Limited (429)</span>
+                                            <span id="rate_limited_1" class="sec-value">0</span>
+                                        </div>
+                                        <div class="dash-sec-item" title="Average duration per position">
+                                            <span class="sec-label">Average Time / Job</span>
+                                            <span id="avg_time_1" class="sec-value">0.0s</span>
+                                        </div>
+                                        <div class="dash-sec-item" title="Failed extraction attempts">
+                                            <span class="sec-label">Failed Jobs</span>
+                                            <span id="failed_1" class="sec-value">0</span>
+                                        </div>
+                                        <div class="dash-sec-item" title="Positions remaining in the queue">
+                                            <span class="sec-label">Pending Jobs</span>
+                                            <span id="pending_1" class="sec-value">0</span>
+                                        </div>
+                                        <div class="dash-sec-item" title="Distinct challenges encountered">
+                                            <span class="sec-label">Unique Challenges</span>
+                                            <span id="captcha_unique_1" class="sec-value">0</span>
+                                        </div>
+                                        <div class="dash-sec-item" title="Outgoing service requests to recognition API">
+                                            <span class="sec-label">Service Requests</span>
+                                            <span id="captcha_requests_1" class="sec-value">0</span>
+                                        </div>
+                                        <div class="dash-sec-item" title="Cases where target website confirmed verification">
+                                            <span class="sec-label">Verified by Site</span>
+                                            <span id="captcha_verified_1" class="sec-value">0</span>
+                                        </div>
+                                        <div class="dash-sec-item" title="Jobs awaiting manual human verification">
+                                            <span class="sec-label">Manual Required</span>
+                                            <span id="captcha_manual_1" class="sec-value">0</span>
+                                        </div>
+                                        <span id="captcha_1" style="display:none;">0</span>
+                                    </div>
+
+                                    <!-- Parallel Workers & Live Activity Details -->
+                                    <div class="dash-split-row">
+                                        <div class="dash-workers-column">
+                                            <div class="dash-subheading">
+                                                <span>Parallel Workers (4 Max)</span>
+                                            </div>
+                                            <div id="workers_grid_1" class="dash-workers-grid">
+                                                <div class="worker-card worker-idle" data-worker="1">
+                                                    <div class="worker-card-head">
+                                                        <span class="worker-name"><span class="w-dot"></span>Worker 1</span>
+                                                        <div class="worker-badges">
+                                                            <span class="worker-conn-badge conn-direct">Direct</span>
+                                                            <span class="worker-tag">Idle</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="worker-route-info">
+                                                        <span class="w-profile">Direct</span>
+                                                        <span class="w-sep">&bull;</span>
+                                                        <span class="w-ip">—</span>
+                                                    </div>
+                                                    <div class="worker-task">Waiting for task...</div>
+                                                    <div class="worker-meta"><span class="w-method">-</span><span class="w-count">0 done</span></div>
+                                                </div>
+                                                <div class="worker-card worker-idle" data-worker="2">
+                                                    <div class="worker-card-head">
+                                                        <span class="worker-name"><span class="w-dot"></span>Worker 2</span>
+                                                        <div class="worker-badges">
+                                                            <span class="worker-conn-badge conn-direct">Direct</span>
+                                                            <span class="worker-tag">Idle</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="worker-route-info">
+                                                        <span class="w-profile">Direct</span>
+                                                        <span class="w-sep">&bull;</span>
+                                                        <span class="w-ip">—</span>
+                                                    </div>
+                                                    <div class="worker-task">Waiting for task...</div>
+                                                    <div class="worker-meta"><span class="w-method">-</span><span class="w-count">0 done</span></div>
+                                                </div>
+                                                <div class="worker-card worker-idle" data-worker="3">
+                                                    <div class="worker-card-head">
+                                                        <span class="worker-name"><span class="w-dot"></span>Worker 3</span>
+                                                        <div class="worker-badges">
+                                                            <span class="worker-conn-badge conn-direct">Direct</span>
+                                                            <span class="worker-tag">Idle</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="worker-route-info">
+                                                        <span class="w-profile">Direct</span>
+                                                        <span class="w-sep">&bull;</span>
+                                                        <span class="w-ip">—</span>
+                                                    </div>
+                                                    <div class="worker-task">Waiting for task...</div>
+                                                    <div class="worker-meta"><span class="w-method">-</span><span class="w-count">0 done</span></div>
+                                                </div>
+                                                <div class="worker-card worker-idle" data-worker="4">
+                                                    <div class="worker-card-head">
+                                                        <span class="worker-name"><span class="w-dot"></span>Worker 4</span>
+                                                        <div class="worker-badges">
+                                                            <span class="worker-conn-badge conn-direct">Direct</span>
+                                                            <span class="worker-tag">Idle</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="worker-route-info">
+                                                        <span class="w-profile">Direct</span>
+                                                        <span class="w-sep">&bull;</span>
+                                                        <span class="w-ip">—</span>
+                                                    </div>
+                                                    <div class="worker-task">Waiting for task...</div>
+                                                    <div class="worker-meta"><span class="w-method">-</span><span class="w-count">0 done</span></div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="dash-feed-column">
+                                            <div class="dash-subheading">
+                                                <span>Live Activity Feed</span>
+                                                <span id="feed_counter_1" class="feed-count-badge">0 events</span>
+                                            </div>
+                                            <div id="activity_feed_list_1" class="dash-feed-list">
+                                                <div class="feed-empty-state">Waiting for extraction events...</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Manual CAPTCHA Review Panel -->
+                                    <div class="dash-manual-captcha-section" id="manual_captcha_section_1" style="display: none;">
+                                        <div class="dash-captcha-banner">
+                                            <div class="dash-captcha-banner-head">
+                                                <div class="dash-captcha-title-group">
+                                                    <span class="dash-captcha-pulse"></span>
+                                                    <span class="dash-captcha-title">Manuelle CAPTCHA-Überprüfung</span>
+                                                    <span class="dash-captcha-count-pill" id="manual_captcha_badge_1">0 Prüfungen</span>
+                                                </div>
+                                                <span class="dash-captcha-desc">Ein Worker wartet auf Ihre Bestätigung, um die Extraktion auf der Zielseite fortzusetzen. Andere Worker arbeiten unterbrechungsfrei weiter.</span>
+                                            </div>
+                                            <div id="manual_captcha_cards_1" class="manual-captcha-cards-grid">
+                                                <!-- Dynamic challenge cards inserted by search.js -->
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- CAPTCHA & Security Diagnostics (Expandable) -->
+                                    <div class="dash-diagnostics-section" id="captcha_diag_section_1">
+                                        <div class="dash-diag-header">
+                                            <button type="button" class="dash-diag-toggle-btn" id="captcha_diag_btn_1" aria-expanded="false">
+                                                <span class="diag-arrow" id="captcha_diag_arrow_1">▶</span>
+                                                <span class="diag-title">CAPTCHA &amp; Security Diagnostics</span>
+                                                <span class="diag-pill" id="captcha_diag_pill_1">0 events</span>
+                                            </button>
+                                            <span class="diag-subtext">Challenge correlation &amp; privacy-safe worker telemetry</span>
+                                        </div>
+                                        <div class="dash-diag-panel" id="captcha_diag_panel_1" style="display: none;">
+                                            <div class="dash-diag-table-wrap">
+                                                <table class="dash-diag-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Time</th>
+                                                            <th>Worker</th>
+                                                            <th>Domain</th>
+                                                            <th>Event Type</th>
+                                                            <th>Status</th>
+                                                            <th>Correlation ID</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="captcha_diag_tbody_1">
+                                                        <tr><td colspan="6" class="diag-empty">No security challenges recorded yet.</td></tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Action Buttons -->
                                     <div class="progress-actions">
+                                        <button id="pause_btn_1" type="button" class="progress-btn pause" style="display:none; background:#fef3c7; color:#b45309; border:1px solid #f59e0b;">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                                            <span>Pause</span>
+                                        </button>
                                         <button id="stop_btn_1" type="button" class="progress-btn stop" style="display:none;">
                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
                                             <span>Stop &amp; Download Results</span>
@@ -796,6 +1062,24 @@
                                             <span>Go to Cover Letters</span>
                                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                                         </button>
+                                    </div>
+                                </section>
+
+                                <!-- Previous Tasks Section -->
+                                <section id="previous_tasks_section_1" class="previous-tasks-section" style="display: none;">
+                                    <div class="previous-tasks-header" id="previous_tasks_toggle_area_1">
+                                        <div class="previous-tasks-title-group">
+                                            <span class="previous-tasks-icon-badge">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                            </span>
+                                            <h4 class="previous-tasks-title">Previous Tasks</h4>
+                                            <span class="previous-tasks-count-pill" id="previous_tasks_count_1">0</span>
+                                        </div>
+                                        <button type="button" id="toggle_previous_tasks_btn_1" class="previous-tasks-toggle-btn">
+                                            Hide Tasks ▴
+                                        </button>
+                                    </div>
+                                    <div id="previous_tasks_list_1" class="previous-tasks-list">
                                     </div>
                                 </section>
                                 <div id="results_error_1" class="results-error" style="display:none;"></div>

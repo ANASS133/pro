@@ -222,8 +222,9 @@ class ImpressumExtractor:
         candidate_urls = self.find_impressum_urls(base_url, homepage_html or "")
         for url in candidate_urls:
             try:
-                resp = self.session.get(url, timeout=self.timeout, allow_redirects=True)
-                if resp.status_code == 200 and resp.text:
+                from .rate_limiter import safe_http_get
+                resp = safe_http_get(self.session, url, timeout=self.timeout)
+                if resp is not None and resp.status_code == 200 and resp.text:
                     parsed = self.extract_from_html(resp.text, source_url=url)
                     if parsed.get("geschaeftsfuehrer") or parsed.get("primary_email"):
                         return parsed
@@ -234,3 +235,6 @@ class ImpressumExtractor:
             return self.extract_from_html(homepage_html, source_url=base_url)
 
         return self.extract_from_html("")
+
+# Backward compatibility alias
+ImpressumExtractor.extract_from_url = ImpressumExtractor.extract_from_website

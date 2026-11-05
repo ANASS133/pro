@@ -257,11 +257,30 @@
                 });
         }
 
-        function stopAndDownload() {
-            fetch('/api/stop_auto_extraction', { method: 'POST' })
-                .then(() => setTimeout(() => {
-                    window.location.href = '/download_auto_results';
-                }, 1200));
+        async function stopAndDownload() {
+            try {
+                showToast('Stoppe Extraktion...', 'info');
+                const resp = await fetch('/api/stop_auto_extraction', { method: 'POST' });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok) {
+                    showToast(data.message || 'Stoppen fehlgeschlagen', 'error');
+                    return;
+                }
+                showToast('Gestoppt. Erstelle Download...', 'success');
+                const dlResp = await fetch('/download_auto_results');
+                if (!dlResp.ok) throw new Error('Download fehlgeschlagen');
+                const blob = await dlResp.blob();
+                const blobUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = blobUrl;
+                a.download = 'auto_extraction_results.xlsx';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => { URL.revokeObjectURL(blobUrl); a.remove(); }, 1500);
+            } catch (err) {
+                showToast(err.message || 'Download fehlgeschlagen', 'error');
+            }
         }
 
         function downloadResults() {

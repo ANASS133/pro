@@ -697,6 +697,59 @@ def get_logged_applications():
     return jsonify({"applications": apps, "total": len(apps)})
 
 
+def queue_autofill_job(job: dict) -> dict:
+    """Adds a discovered job with an application form to the Autofill Queue."""
+    apps = load_applications()
+    url = job.get("direct_application_url") or job.get("form_link") or job.get("bewerbung_link") or job.get("url") or ""
+    company = job.get("company") or "Unbekannt"
+    title = job.get("title") or "Ausbildungsplatz"
+
+    # Avoid duplicate queue entries for identical company + url
+    for a in apps:
+        if a.get("company") == company and a.get("url") == url:
+            return a
+
+    from urllib.parse import urlparse
+    domain = urlparse(url).netloc if url else ""
+
+    new_entry = {
+        "id": f"autofill_{int(datetime.now().timestamp() * 1000)}",
+        "company": company,
+        "title": title,
+        "position": title,
+        "url": url,
+        "domain": domain,
+        "profile": "anass_sibbi",
+        "profileId": "anass_sibbi",
+        "status": "In Queue (Bereit für Autofill)",
+        "fields_filled": 0,
+        "fieldsFilled": 0,
+        "date": datetime.now().strftime("%d.%m.%Y"),
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "source": job.get("source", "Arbeitsagentur"),
+        "application_method": job.get("application_method", "form"),
+        "required_documents": job.get("required_documents", ""),
+    }
+    apps.insert(0, new_entry)
+    save_applications(apps)
+    return new_entry
+
+
+@autofill_bp.route("/api/autofill/queue", methods=["GET", "POST"])
+def autofill_queue_api():
+    """Manages the Autofill Queue of discovered application forms."""
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        entry = queue_autofill_job(data)
+        return jsonify({"success": True, "entry": entry}), 201
+    apps = load_applications()
+    queue_items = [
+        a for a in apps
+        if "queue" in str(a.get("status", "")).lower() or a.get("fields_filled", 0) == 0
+    ]
+    return jsonify({"success": True, "queue": queue_items, "total": len(queue_items)})
+
+
 # --- Test Forms Routes ---
 
 @autofill_bp.route("/test-form", methods=["GET"])

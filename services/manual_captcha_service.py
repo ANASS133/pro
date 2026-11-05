@@ -1,0 +1,428 @@
+"""
+Manual CAPTCHA Review Service for JobScout.
+
+Coordinates human verification when workers encounter CAPTCHAs or bot challenges:
+1. Captures challenge state (platform, job, worker ID, source URL, challenge type, base64 image).
+2. Manages thread-safe synchronization between background workers and user actions.
+3. Submits manual code through legitimate website form inputs and submit buttons.
+4. Supports interactive challenge verification in browser sessions.
+5. Guarantees other workers continue processing uninterrupted.
+6. Verifies website unblocking before confirming success.
+"""
+
+import base64
+import binascii
+import io
+import logging
+import threading
+import time
+import webbrowser
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from typing import Any, Callable, Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
+
+CHALLENGE_TYPES = {"image_text", "recaptcha", "turnstile", "login_required", "unknown"}
+
+
+def validate_captcha_image(data_uri: str) -> Tuple[bool, str]:
+    """Validate that a payload is an actual raster image, not a blank placeholder or page screenshot marker."""
+    if not data_uri:
+        return False, "CAPTCHA image is missing."
+    if not isinstance(data_uri, str) or not data_uri.startswith("data:image/") or ";base64," not in data_uri:
+        return False, "CAPTCHA image payload is invalid."
+    mime, encoded = data_uri.split(",", 1)
+    if not any(kind in mime.lower() for kind in ("image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp")):
+        return False, "Unsupported CAPTCHA image format."
+    try:
+        raw = base64.b64decode(encoded, validate=True)
+    except (ValueError, binascii.Error):
+        return False, "CAPTCHA image data is corrupt."
+    if len(raw) < 64:
+        return False, "CAPTCHA image is empty or incomplete."
+    signatures = (b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"GIF87a", b"GIF89a", b"RIFF")
+    if not raw.startswith(signatures):
+        return False, "CAPTCHA payload is not a recognized image."
+    try:
+        from PIL import Image
+        with Image.open(io.BytesIO(raw)) as image:
+            image.load()
+            if image.width < 20 or image.height < 10:
+                return False, "CAPTCHA image dimensions are too small."
+            extrema = image.convert("L").getextrema()
+            if extrema[0] == extrema[1]:
+                return False, "CAPTCHA image is blank."
+    except ImportError:
+        pass
+    except Exception:
+        return False, "CAPTCHA image cannot be decoded."
+    return True, ""
+
+
+def capture_loaded_captcha(driver, element, timeout=5.0):
+    """Capture only a loaded image in this browser; validate each fallback."""
+    from selenium.webdriver.support.ui import WebDriverWait
+    try:
+        WebDriverWait(driver, timeout).until(lambda d: d.execute_script(
+            "return arguments[0].complete === true && arguments[0].naturalWidth > 0 && arguments[0].naturalHeight > 0;",
+            element,
+        ) is True)
+    except Exception:
+        return "", "CAPTCHA image did not load in the worker browser. Restart workers created with image blocking enabled."
+    error = "CAPTCHA image capture failed."
+    for capture in (
+        lambda: "data:image/png;base64," + element.screenshot_as_base64,
+        lambda: driver.execute_script("""
+            const img = arguments[0];
+            const canvas = document.createElement('canvas');
+            canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+            canvas.getContext('2d').drawImage(img, 0, 0);
+            return canvas.toDataURL('image/png');
+        """, element),
+        lambda: element.get_attribute("src"),
+    ):
+        try:
+            candidate = capture()
+            valid, error = validate_captcha_image(candidate)
+            if valid:
+                return candidate, ""
+        except Exception:
+            continue
+    return "", error
+
+
+@dataclass
+class ManualCaptchaChallenge:
+    challenge_id: str
+    job_id: str
+    search_run_id: str
+    job_index: int
+    worker_id: int
+    platform: str
+    job_title: str
+    employer: str
+    source_url: str
+    challenge_type: str  # image_text | recaptcha | turnstile | login_required | unknown
+    captcha_image_base64: str  # data:image/png;base64,...
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    expires_at: str = field(default_factory=lambda: (datetime.now() + timedelta(minutes=10)).isoformat())
+    status: str = "pending"  # "pending", "solved", "failed", "expired", "dismissed"
+    attempts: int = 0
+    max_attempts: int = 5
+    last_error: str = ""
+    image_valid: bool = False
+    image_error: str = ""
+    resolved_at: Optional[str] = None
+    
+    # Internal sync hooks (not serialized to json)
+    completion_event: threading.Event = field(default_factory=threading.Event, repr=False)
+    submit_handler: Optional[Callable[[str], Tuple[bool, str]]] = field(default=None, repr=False)
+    verify_interactive_handler: Optional[Callable[[], Tuple[bool, str]]] = field(default=None, repr=False)
+    driver_ref: Optional[Any] = field(default=None, repr=False)
+
+    def is_expired(self) -> bool:
+        if self.status != "pending":
+            return False
+        try:
+            exp = datetime.fromisoformat(self.expires_at)
+            return datetime.now() > exp
+        except Exception:
+            return False
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "challenge_id": self.challenge_id,
+            "job_id": self.job_id,
+            "search_run_id": self.search_run_id,
+            "job_index": self.job_index,
+            "worker_id": self.worker_id,
+            "platform": self.platform,
+            "job_title": self.job_title,
+            "employer": self.employer,
+            "source_url": self.source_url,
+            "challenge_type": self.challenge_type,
+            "captcha_image_base64": self.captcha_image_base64,
+            "image_valid": self.image_valid,
+            "image_error": self.image_error,
+            "created_at": self.created_at,
+            "expires_at": self.expires_at,
+            "status": "expired" if self.is_expired() else self.status,
+            "attempts": self.attempts,
+            "max_attempts": self.max_attempts,
+            "last_error": self.last_error,
+            "can_retry": self.attempts < self.max_attempts and self.status in ("pending", "failed"),
+            "resolved_at": self.resolved_at,
+        }
+
+    def wait_for_resolution(self, timeout: float = 300.0) -> str:
+        """Called by the worker thread to wait for human review."""
+        start = time.time()
+        while time.time() - start < timeout:
+            if self.completion_event.wait(timeout=1.0):
+                return self.status
+            if self.is_expired():
+                self.status = "expired"
+                return "expired"
+        self.status = "expired"
+        return "expired"
+
+    def refresh_image(self) -> str:
+        """Attempts to re-capture or extract a higher quality captcha image from live driver."""
+        if not self.driver_ref:
+            return self.captcha_image_base64
+        try:
+            from selenium.webdriver.common.by import By
+            selectors = [
+                "//*[@id='kontaktdaten-captcha-image']",
+                "//div[contains(@class,'captcha-container-image')]//img",
+                "//img[contains(@src, 'captcha')]",
+                "//img[contains(@alt, 'captcha')]",
+                "//img[contains(@id, 'captcha')]",
+                "//img[contains(@class, 'captcha')]",
+                "//div[contains(@class, 'captcha')]//img",
+            ]
+            img_el = None
+            # Ask the authenticated Arbeitsagentur session for a fresh image;
+            # never fetch a new challenge outside the worker's browser.
+            try:
+                reload_buttons = self.driver_ref.find_elements(By.CSS_SELECTOR, "#kontaktdaten-captcha-reload-button")
+                if reload_buttons:
+                    reload_buttons[0].click()
+                    time.sleep(0.4)
+            except Exception:
+                pass
+            for sel in selectors:
+                try:
+                    els = self.driver_ref.find_elements(By.XPATH, sel)
+                    if els:
+                        img_el = els[0]
+                        break
+                except Exception:
+                    continue
+
+            if img_el is None:
+                new_b64, error = "", "CAPTCHA image element is missing."
+            else:
+                new_b64, error = capture_loaded_captcha(self.driver_ref, img_el)
+            self.captcha_image_base64 = new_b64
+            self.image_valid = bool(new_b64)
+            self.image_error = error
+        except Exception as exc:
+            logger.debug("[ManualCaptcha] Failed refreshing image for challenge %s: %s", self.challenge_id, exc)
+
+        return self.captcha_image_base64
+
+
+class ManualCaptchaManager:
+    """Thread-safe manager for manual CAPTCHA review challenges."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._challenges: Dict[str, ManualCaptchaChallenge] = {}
+
+    def create_challenge(
+        self,
+        job_id: str,
+        search_run_id: str,
+        job_index: int,
+        worker_id: int,
+        platform: str,
+        job_title: str,
+        employer: str,
+        source_url: str,
+        challenge_type: str,
+        captcha_image_base64: str,
+        submit_handler: Optional[Callable[[str], Tuple[bool, str]]] = None,
+        verify_interactive_handler: Optional[Callable[[], Tuple[bool, str]]] = None,
+        driver_ref: Optional[Any] = None,
+        timeout_seconds: float = 600.0,
+    ) -> ManualCaptchaChallenge:
+        with self._lock:
+            ch_id = f"mch_{job_id[:8]}_{int(time.time()*1000)%100000}_w{worker_id}"
+            exp_time = (datetime.now() + timedelta(seconds=timeout_seconds)).isoformat()
+            challenge = ManualCaptchaChallenge(
+                challenge_id=ch_id,
+                job_id=job_id,
+                search_run_id=search_run_id,
+                job_index=job_index,
+                worker_id=worker_id,
+                platform=platform or "Unknown",
+                job_title=job_title or "Apprenticeship Position",
+                employer=employer or "Employer",
+                source_url=source_url or "",
+                challenge_type=challenge_type if challenge_type in CHALLENGE_TYPES else "unknown",
+                captcha_image_base64=captcha_image_base64 or "",
+                expires_at=exp_time,
+                submit_handler=submit_handler,
+                verify_interactive_handler=verify_interactive_handler,
+                driver_ref=driver_ref,
+            )
+            challenge.image_valid, challenge.image_error = validate_captcha_image(challenge.captcha_image_base64)
+            if not challenge.image_valid:
+                challenge.captcha_image_base64 = ""
+            self._challenges[ch_id] = challenge
+            logger.info(
+                "[ManualCaptcha] Created %s challenge %s for Job %s on Worker %s (%s)",
+                challenge_type, ch_id, job_id[:8], worker_id, platform
+            )
+            return challenge
+
+    def get_challenge(self, challenge_id: str) -> Optional[ManualCaptchaChallenge]:
+        with self._lock:
+            ch = self._challenges.get(challenge_id)
+            if ch and ch.is_expired():
+                ch.status = "expired"
+            return ch
+
+    def get_challenges_for_job(self, job_id: str, active_only: bool = False) -> List[Dict[str, Any]]:
+        with self._lock:
+            results = []
+            for ch in self._challenges.values():
+                if ch.job_id == job_id:
+                    if ch.is_expired():
+                        ch.status = "expired"
+                    if active_only and ch.status not in ("pending", "failed", "expired"):
+                        continue
+                    results.append(ch.to_dict())
+            return sorted(results, key=lambda x: x["created_at"], reverse=True)
+
+    def submit_solution(self, challenge_id: str, solution_text: str) -> Tuple[bool, str]:
+        """
+        Submits human-entered solution text to the website through the worker's active session.
+        Returns (success, message).
+        """
+        ch = self.get_challenge(challenge_id)
+        if not ch:
+            return False, "Challenge not found."
+        if ch.status == "solved":
+            return True, "Challenge already solved."
+        if ch.challenge_type != "image_text" or not ch.image_valid:
+            return False, ch.image_error or "This challenge does not accept a text code."
+        if ch.is_expired():
+            ch.status = "expired"
+            ch.completion_event.set()
+            return False, "Challenge has expired."
+
+        ch.attempts += 1
+        clean_code = (solution_text or "").strip()
+        if not clean_code:
+            ch.last_error = "Please enter the CAPTCHA code."
+            return False, ch.last_error
+
+        if not ch.submit_handler:
+            ch.last_error = "No active submission handler available for this session."
+            return False, ch.last_error
+
+        try:
+            success, msg = ch.submit_handler(clean_code)
+            if success:
+                ch.status = "solved"
+                ch.resolved_at = datetime.now().isoformat()
+                ch.last_error = ""
+                ch.completion_event.set()
+                logger.info("[ManualCaptcha] Challenge %s verified successfully!", challenge_id)
+                return True, msg or "Verification successful."
+            else:
+                ch.status = "failed" if ch.attempts >= ch.max_attempts else "pending"
+                ch.last_error = msg or "Verification failed. Target website rejected the code."
+                if ch.status == "failed":
+                    ch.completion_event.set()
+                return False, ch.last_error
+        except Exception as exc:
+            ch.last_error = f"Error during verification: {exc}"
+            logger.error("[ManualCaptcha] Exception submitting solution for %s: %s", challenge_id, exc)
+            return False, ch.last_error
+
+    def verify_interactive(self, challenge_id: str) -> Tuple[bool, str]:
+        """
+        Verifies whether an interactive challenge (reCAPTCHA, Cloudflare) has been completed in the browser.
+        Returns (success, message).
+        """
+        ch = self.get_challenge(challenge_id)
+        if not ch:
+            return False, "Challenge not found."
+        if ch.status == "solved":
+            return True, "Challenge already verified."
+        if ch.is_expired():
+            ch.status = "expired"
+            ch.completion_event.set()
+            return False, "Challenge has expired."
+
+        if not ch.verify_interactive_handler:
+            return False, "No interactive verification handler registered."
+
+        try:
+            unblocked, msg = ch.verify_interactive_handler()
+            if unblocked:
+                ch.status = "solved"
+                ch.resolved_at = datetime.now().isoformat()
+                ch.last_error = ""
+                ch.completion_event.set()
+                logger.info("[ManualCaptcha] Interactive challenge %s verified unblocked!", challenge_id)
+                return True, msg or "Website verification confirmed."
+            else:
+                ch.last_error = msg or "Website remains blocked. Please complete the verification in browser."
+                return False, ch.last_error
+        except Exception as exc:
+            ch.last_error = f"Verification error: {exc}"
+            return False, ch.last_error
+
+    def skip_or_mark_manual(self, challenge_id: str, reason: str = "Skipped by user") -> bool:
+        """User chose to skip the challenge and mark the job as Manual Required."""
+        ch = self.get_challenge(challenge_id)
+        if not ch:
+            return False
+        ch.status = "dismissed"
+        ch.last_error = reason
+        ch.resolved_at = datetime.now().isoformat()
+        ch.completion_event.set()
+        logger.info("[ManualCaptcha] Challenge %s marked as manual required / skipped", challenge_id)
+        return True
+
+    def open_in_system_browser(self, challenge_id: str) -> Tuple[bool, str]:
+        """Opens the challenge URL in the user's desktop browser."""
+        ch = self.get_challenge(challenge_id)
+        if not ch or not ch.source_url:
+            return False, "Challenge or source URL not found."
+        try:
+            webbrowser.open(ch.source_url)
+            return True, ch.source_url
+        except Exception as exc:
+            return False, str(exc)
+
+    def refresh_challenge_image(self, challenge_id: str) -> Tuple[bool, str]:
+        """Requests a refreshed image for the specified challenge from the live browser session."""
+        ch = self.get_challenge(challenge_id)
+        if not ch:
+            return False, "Challenge nicht gefunden."
+        if ch.status == "expired":
+            # A refresh is a new attempt in the same authenticated worker
+            # session; preserve all job/session identity while resetting only
+            # the challenge attempt state.
+            if not ch.driver_ref:
+                return False, "Challenge expired; no authenticated browser session is available for refresh."
+            ch.status = "pending"
+            ch.attempts = 0
+            ch.expires_at = (datetime.now() + timedelta(minutes=5)).isoformat()
+        if ch.challenge_type != "image_text":
+            return False, "This challenge has no refreshable image."
+        img_b64 = ch.refresh_image()
+        return ch.image_valid, img_b64 if ch.image_valid else ch.image_error
+
+    def cancel_all_for_job(self, job_id: str) -> None:
+        """Unblocks all waiting workers if a task is cancelled, paused, or stopped."""
+        with self._lock:
+            for ch in self._challenges.values():
+                if ch.job_id == job_id and ch.status == "pending":
+                    ch.status = "dismissed"
+                    ch.completion_event.set()
+
+
+# Global Singleton
+_global_captcha_manager = ManualCaptchaManager()
+
+
+def get_manual_captcha_manager() -> ManualCaptchaManager:
+    return _global_captcha_manager
+

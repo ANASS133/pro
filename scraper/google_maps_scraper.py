@@ -747,77 +747,34 @@ class GoogleMapsBusinessScraper:
         return list(all_emails)
 
     def _fetch_page(self, url: str, retries: int = 2) -> Optional[str]:
-        """Fetch a web page using requests with anti-bot headers and retry.
+        """Fetch a web page using requests with anti-bot headers, 429 protection and retry.
 
-        Many business websites block default Python requests. We mimic a
-        real Chrome browser and retry once on failure.
+        Uses safe_http_get which provides:
+          • Idea A: Honors Retry-After & Exponential Jitter Backoff on HTTP 429
+          • Idea B: Domain Circuit Breaker (pauses offending domain for 60s)
+          • Idea C: Request micro-jitter (0.15-0.45s) & per-domain concurrency throttling
+          • Idea D: Realistic User-Agent & Client Hints browser header rotation
         """
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Accept-Encoding": "gzip, deflate, br",
-            "Cache-Control": "no-cache",
-            "Pragma": "no-cache",
-            "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
-            "Sec-Ch-Ua-Mobile": "?0",
-            "Sec-Ch-Ua-Platform": '"Windows"',
-            "Sec-Fetch-Dest": "document",
-            "Sec-Fetch-Mode": "navigate",
-            "Sec-Fetch-Site": "none",
-            "Sec-Fetch-User": "?1",
-            "Upgrade-Insecure-Requests": "1",
-            "Connection": "keep-alive",
-        }
+        try:
+            from .rate_limiter import safe_http_get
+            resp = safe_http_get(
+                self.http_session,
+                url,
+                retries=retries,
+                timeout=CRAWL_TIMEOUT,
+                verify=False,
+            )
+            if resp is not None and resp.status_code == 200:
+                content_type = resp.headers.get("Content-Type", "")
+                if "text/html" in content_type or not content_type:
+                    return resp.text
+                return resp.text[:500000]
+            elif resp is not None and resp.status_code == 429:
+                logger.warning("HTTP 429 received for %s - domain circuit breaker engaged.", url)
+                return None
+        except Exception as exc:
+            logger.debug("Failed to fetch %s via safe_http_get: %s", url, exc)
 
-        for attempt in range(retries + 1):
-            try:
-                resp = self.http_session.get(
-                    url,
-                    headers=headers,
-                    timeout=CRAWL_TIMEOUT,
-                    allow_redirects=True,
-                    verify=False,  # Skip SSL verification for flaky business sites
-                )
-                if resp.status_code == 200:
-                    content_type = resp.headers.get("Content-Type", "")
-                    if "text/html" in content_type or not content_type:
-                        return resp.text
-                    # If it's not HTML, try extracting text anyway
-                    return resp.text[:500000]  # Cap at 500KB
-                elif resp.status_code in (403, 429, 503):
-                    logger.debug("Fetch %s -> %d (attempt %d)", url, resp.status_code, attempt + 1)
-                    if attempt < retries:
-                        time.sleep(2 * (attempt + 1))  # Exponential backoff
-                        continue
-                else:
-                    logger.debug("Fetch %s -> %d", url, resp.status_code)
-                    break
-            except requests.exceptions.SSLError:
-                # Retry without verify
-                try:
-                    resp = self.http_session.get(
-                        url, headers=headers, timeout=CRAWL_TIMEOUT,
-                        allow_redirects=True, verify=False,
-                    )
-                    if resp.status_code == 200:
-                        return resp.text
-                except Exception:
-                    pass
-            except requests.exceptions.Timeout:
-                logger.debug("Timeout fetching %s (attempt %d)", url, attempt + 1)
-                if attempt < retries:
-                    time.sleep(3)
-                    continue
-            except Exception as exc:
-                logger.debug("Failed to fetch %s: %s", url, exc)
-                if attempt < retries:
-                    time.sleep(2)
-                    continue
         return None
 
     def process_business(

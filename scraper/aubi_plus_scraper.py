@@ -23,6 +23,14 @@ class AubiPlusScraper:
         self.session = session or requests.Session()
         self.setup_headers()
         self.total_jobs_fetched = 0
+        self.last_search_meta = {
+            "original_location": "",
+            "normalized_location": "",
+            "fallback_triggered": False,
+            "fallback_results": 0,
+            "rejected_by_location": 0,
+            "final_accepted_results": 0,
+        }
 
     def setup_headers(self):
         self.session.headers.update(
@@ -45,32 +53,207 @@ class AubiPlusScraper:
         max_jobs: int = 40,
     ) -> List[Dict]:
         """
-        Fetches apprenticeship positions from AUBI-plus.
-        Supports pagination via parameter p.
+        Fetches apprenticeship positions from AUBI-plus with strict location filtering
+        and controlled nationwide discovery fallback.
         """
-        all_jobs: List[Dict] = []
-        seen_refs = set()
-        page = 1
         search_kw = str(keyword or "").strip()
         search_loc = str(location or "").strip()
 
-        logger.info(
-            "AUBI-plus fetch start: keyword='%s', location='%s', max_jobs=%s",
+        # 1. Normalize: strip stop-word prefixes ("Ausbildung als", "Ausbildung zum/zur", etc.)
+        # AUBI-plus mSuggest uses literal matching and positions never start with "Ausbildung als"
+        clean_kw = re.sub(
+            r"^(?:ausbildung\s+(?:als\s+|zum\s+|zur\s+|f[üu]r\s+)?|lehre\s+als\s+|duales\s+studium\s+(?:in\s+|f[üu]r\s+)?)\s*",
+            "",
             search_kw,
+            flags=re.IGNORECASE,
+        ).strip()
+        if not clean_kw:
+            clean_kw = search_kw
+
+        # 2. Normalize generic locations to empty string (AUBI-plus treats non-city names as literal 0-match queries)
+        clean_loc = search_loc
+        if clean_loc.lower() in {
+            "bundesweit",
+            "deutschlandweit",
+            "ganz deutschland",
+            "deutschland",
+            "alle",
+            "all",
+            "remote",
+            "germany",
+            "homeoffice",
+            "überall",
+            "uberall",
+        }:
+            clean_loc = ""
+
+        is_nationwide = not clean_loc
+        fallback_triggered = False
+        fallback_results_count = 0
+        rejected_by_location_count = 0
+
+        logger.info(
+            "AUBI-plus fetch start: original_location='%s', normalized_location='%s', "
+            "keyword='%s' (clean='%s'), max_jobs=%s",
             search_loc,
+            clean_loc,
+            search_kw,
+            clean_kw,
             max_jobs,
         )
 
-        while len(all_jobs) < max_jobs:
+        # 3. Initial Search (with aSuggest if location provided, or nationwide if empty)
+        initial_jobs = self._fetch_pages(clean_kw, clean_loc, max_jobs)
+
+        accepted_jobs: List[Dict] = []
+        if is_nationwide:
+            accepted_jobs = list(initial_jobs)
+        else:
+            for job in initial_jobs:
+                if self._is_location_match(job, search_loc):
+                    accepted_jobs.append(job)
+                else:
+                    rejected_by_location_count += 1
+
+        # 4. Controlled Fallback: If 0 local results, try nationwide discovery but strictly filter by original location
+        if not accepted_jobs and not is_nationwide:
+            fallback_triggered = True
+            logger.info(
+                "AUBI-plus: 0 valid listings found for '%s' in '%s'. "
+                "Triggering controlled nationwide discovery fallback...",
+                clean_kw,
+                search_loc,
+            )
+            fallback_raw = self._fetch_pages(clean_kw, "", max_jobs)
+            fallback_results_count = len(fallback_raw)
+
+            for job in fallback_raw:
+                if self._is_location_match(job, search_loc):
+                    accepted_jobs.append(job)
+                else:
+                    rejected_by_location_count += 1
+
+        self.total_jobs_fetched = len(accepted_jobs)
+        self.last_search_meta = {
+            "original_location": search_loc,
+            "normalized_location": clean_loc,
+            "fallback_triggered": fallback_triggered,
+            "fallback_results": fallback_results_count,
+            "rejected_by_location": rejected_by_location_count,
+            "final_accepted_results": self.total_jobs_fetched,
+        }
+
+        # 5. Logging & Transparency
+        logger.info(
+            "AUBI-plus search summary: "
+            "original_location='%s', "
+            "normalized_location='%s', "
+            "fallback_triggered=%s, "
+            "fallback_results=%d, "
+            "rejected_by_location=%d, "
+            "final_accepted_results=%d",
+            search_loc,
+            clean_loc,
+            fallback_triggered,
+            fallback_results_count,
+            rejected_by_location_count,
+            self.total_jobs_fetched,
+        )
+        return accepted_jobs
+
+    def _is_location_match(self, job: Dict, search_location: str) -> bool:
+        """
+        Validates whether a job satisfies the searched location.
+        - Nationwide searches accept all jobs.
+        - Explicit location searches check city, postal code, and commuter radius.
+        - Non-matching jobs or generic 'Deutschland' / 'k. A.' locations are rejected.
+        """
+        search_loc = str(search_location or "").strip()
+        if not search_loc:
+            return True
+
+        if search_loc.lower() in {
+            "bundesweit",
+            "deutschlandweit",
+            "ganz deutschland",
+            "deutschland",
+            "alle",
+            "all",
+            "remote",
+            "germany",
+            "homeoffice",
+            "überall",
+            "uberall",
+        }:
+            return True
+
+        job_loc = str(job.get("location") or "").strip()
+        job_city = str(job.get("city") or "").strip()
+        job_plz = str(job.get("postal_code") or "").strip()
+
+        # Reject jobs with generic Deutschland / k. A. when user asked for a specific location
+        if job_city.lower() in {"deutschland", "k. a.", "n/a", ""} and job_loc.lower() in {"deutschland", "k. a.", "n/a", ""}:
+            return False
+
+        # 1. Use search_filter_engine's is_location_relevant
+        try:
+            from .search_filter_engine import is_location_relevant
+            if is_location_relevant(job_loc, job_city, job_plz, search_loc):
+                return True
+        except Exception as exc:
+            logger.debug("is_location_relevant error: %s", exc)
+
+        # 2. Enhanced check for umlaut normalizations and PLZ match
+        s_norm = search_loc.lower().strip()
+        s_base = (
+            s_norm.replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+            .replace("ae", "a").replace("oe", "o").replace("ue", "u")
+        )
+
+        # 2a. Postal code check
+        plz_match = re.search(r"\b(\d{5})\b", search_loc)
+        if plz_match:
+            search_plz = plz_match.group(1)
+            if job_plz and job_plz != "N/A":
+                return job_plz == search_plz or job_plz[:2] == search_plz[:2]
+            return False
+
+        # 2b. City check
+        city_norm = job_city.lower().strip()
+        city_base = (
+            city_norm.replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+            .replace("ae", "a").replace("oe", "o").replace("ue", "u")
+        )
+        if city_base and (city_base in s_base or s_base in city_base):
+            return True
+
+        # 2c. Full location check
+        loc_norm = job_loc.lower().strip()
+        loc_base = (
+            loc_norm.replace("ä", "ae").replace("ö", "oe").replace("ü", "ue").replace("ß", "ss")
+            .replace("ae", "a").replace("oe", "o").replace("ue", "u")
+        )
+        if loc_base and (s_base in loc_base):
+            return True
+
+        return False
+
+    def _fetch_pages(self, query_kw: str, query_loc: str, max_jobs: int) -> List[Dict]:
+        """Internal paginated fetching loop for AUBI-plus."""
+        jobs: List[Dict] = []
+        seen_refs = set()
+        page = 1
+
+        while len(jobs) < max_jobs:
             params = {
-                "mSuggest": search_kw,
+                "mSuggest": query_kw,
                 "p": page,
             }
-            if search_loc:
-                params["aSuggest"] = search_loc
+            if query_loc:
+                params["aSuggest"] = query_loc
 
             try:
-                logger.info("Fetching AUBI-plus page %s", page)
+                logger.info("Fetching AUBI-plus page %s (kw='%s', loc='%s')", page, query_kw, query_loc)
                 resp = self.session.get(self.BASE_URL, params=params, timeout=12)
                 resp.encoding = "utf-8"
                 if resp.status_code != 200:
@@ -87,7 +270,7 @@ class AubiPlusScraper:
                     logger.info("No more cards found on AUBI-plus page %s", page)
                     break
 
-                page_jobs = self._parse_cards(cards, search_keyword=search_kw)
+                page_jobs = self._parse_cards(cards, search_keyword=query_kw)
                 new_jobs_count = 0
 
                 for job in page_jobs:
@@ -95,18 +278,17 @@ class AubiPlusScraper:
                     if not ref or ref in seen_refs:
                         continue
                     seen_refs.add(ref)
-                    all_jobs.append(job)
+                    jobs.append(job)
                     new_jobs_count += 1
-                    if len(all_jobs) >= max_jobs:
+                    if len(jobs) >= max_jobs:
                         break
-
 
                 logger.info(
                     "AUBI-plus page %s: found %s cards, added %s new (total=%s)",
                     page,
                     len(cards),
                     new_jobs_count,
-                    len(all_jobs),
+                    len(jobs),
                 )
 
                 if new_jobs_count == 0 or len(cards) < 5:
@@ -119,9 +301,7 @@ class AubiPlusScraper:
                 logger.warning("Error fetching AUBI-plus page %s: %s", page, exc)
                 break
 
-        self.total_jobs_fetched = len(all_jobs)
-        logger.info("AUBI-plus fetch complete. Total: %s", self.total_jobs_fetched)
-        return all_jobs
+        return jobs
 
     def _parse_cards(self, cards: List[bs4.Tag], search_keyword: str = "") -> List[Dict]:
         """Parses AUBI-plus DOM cards into standard job dictionaries."""

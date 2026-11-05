@@ -854,36 +854,236 @@
                             <span>Automatisch extrahieren</span>
                         </button>
                     </div>
-                    <section id="progress_panel_1" class="progress-panel">
-                        <h4 class="progress-title">Fortschritt Auto-Extraktion</h4>
-                        <div class="progress-stats">
-                            <div class="progress-stat"><span id="processed_1" class="value">0</span><span class="label">Verarbeitet</span></div>
-                            <div class="progress-stat"><span id="emails_1" class="value">0</span><span class="label">E-Mails</span></div>
-                            <div class="progress-stat"><span id="captcha_1" class="value">0</span><span class="label">CAPTCHAs</span></div>
-                            <div class="progress-stat"><span id="failed_1" class="value">0</span><span class="label">Fehler</span></div>
-                        </div>
-                        <div class="progress-track"><div id="progress_fill_1" class="progress-fill">0%</div></div>
-                        <div id="progress_status_1" class="progress-status">Leerlauf</div>
-                        <div id="progress_error_1" class="progress-error"></div>
-                        <div class="progress-actions">
-                            <button id="stop_btn_1" type="button" class="progress-btn stop" style="display:none;">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
-                                <span>Stoppen + Ergebnis herunterladen</span>
-                            </button>
-                            <button data-auto-continue id="continue_btn_1" type="button" class="progress-btn continue" style="display:none;">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                                <span>Fortsetzen</span>
-                            </button>
-                            <button id="download_btn_1" type="button" class="progress-btn download" style="display:none;">
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                                <span>Ergebnis herunterladen</span>
-                            </button>
-                            <button id="anschreiben_btn_1" type="button" class="progress-btn primary-action" style="display:none;">
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
-                                <span>Zu Anschreiben</span>
-                            </button>
-                        </div>
-                    </section>
+                    <section id="progress_panel_1" class="progress-panel modern-extraction-dashboard">
+                                    <div class="dash-topbar">
+                                        <div class="dash-title-group">
+                                            <h4 class="progress-title">Auto-Extraction Progress</h4>
+                                            <span id="extraction_status_badge_1" class="dash-badge status-idle">Idle</span>
+                                            <span id="active_workers_badge_1" class="dash-badge workers-idle">
+                                                <span class="pulse-dot"></span> <span class="workers-text">Workers Idle</span>
+                                            </span>
+                                        </div>
+                                        <div class="dash-meta-pills">
+                                            <span id="progress_eta_1" class="dash-pill eta-pill" title="Estimated remaining time">ETA: --</span>
+                                            <span id="progress_speed_1" class="dash-pill speed-pill" title="Extraction throughput">-- s/job</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Primary Metrics (4 Prominent Cards) -->
+                                    <div class="dash-primary-grid">
+                                        <div class="dash-primary-card">
+                                            <div class="primary-card-icon">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7.5" r="4"></circle><polyline points="17 11 19 13 23 9"></polyline></svg>
+                                            </div>
+                                            <div class="primary-card-content">
+                                                <div class="primary-card-value">
+                                                    <span id="processed_1" class="val-current">0</span>
+                                                    <span class="val-sep">/</span>
+                                                    <span id="total_1" class="val-total">0</span>
+                                                </div>
+                                                <div class="primary-card-label">Processed Jobs</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="dash-primary-card">
+                                            <div class="primary-card-icon">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                                            </div>
+                                            <div class="primary-card-content">
+                                                <div class="primary-card-value">
+                                                    <span id="emails_1" class="val-current">0</span>
+                                                </div>
+                                                <div class="primary-card-label">Emails Found</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="dash-primary-card">
+                                            <div class="primary-card-icon">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                            </div>
+                                            <div class="primary-card-content">
+                                                <div class="primary-card-value">
+                                                    <span id="forms_1" class="val-current">0</span>
+                                                </div>
+                                                <div class="primary-card-label">Forms Found</div>
+                                            </div>
+                                        </div>
+
+                                        <div class="dash-primary-card">
+                                            <div class="primary-card-icon">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                            </div>
+                                            <div class="primary-card-content">
+                                                <div class="primary-card-value">
+                                                    <span id="percent_num_1" class="val-current">0%</span>
+                                                </div>
+                                                <div class="primary-card-label">Extraction Progress</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Progress Bar & Status Text -->
+                                    <div class="dash-track-section">
+                                        <div class="progress-track"><div id="progress_fill_1" class="progress-fill">0%</div></div>
+                                        <div class="dash-status-row">
+                                            <div id="progress_status_1" class="progress-status">Idle</div>
+                                        </div>
+                                    </div>
+                                    <div id="progress_error_1" class="progress-error"></div>
+
+                                    <!-- Secondary Metrics Grid -->
+                                    <div class="dash-secondary-grid">
+                                        <div class="dash-sec-item" title="Verified direct recruitment / HR email addresses">
+                                            <span class="sec-label">Recruitment Emails</span>
+                                            <span id="recruitment_emails_1" class="sec-value">0</span>
+                                        </div>
+                                        <div class="dash-sec-item" title="External career portal & ATS apply links">
+                                            <span class="sec-label">External Apply Links</span>
+                                            <span id="external_links_1" class="sec-value">0</span>
+                                        </div>
+                                        <div class="dash-sec-item" title="Fast HTTP extraction without browser overhead">
+                                            <span class="sec-label">HTTP Fast-Path Hits</span>
+                                            <span id="fast_path_1" class="sec-value">0</span>
+                                        </div>
+                                        <div class="dash-sec-item" title="Full browser extraction for complex JavaScript pages">
+                                            <span class="sec-label">Selenium Fallbacks</span>
+                                            <span id="selenium_fallbacks_1" class="sec-value">0</span>
+                                        </div>
+                                        <div class="dash-sec-item" title="HTTP 429 rate limit events automatically handled">
+                                            <span class="sec-label">Rate Limited (429)</span>
+                                            <span id="rate_limited_1" class="sec-value">0</span>
+                                        </div>
+                                        <div class="dash-sec-item" title="Average duration per position">
+                                            <span class="sec-label">Average Time / Job</span>
+                                            <span id="avg_time_1" class="sec-value">0.0s</span>
+                                        </div>
+                                        <div class="dash-sec-item" title="Failed extraction attempts">
+                                            <span class="sec-label">Failed Jobs</span>
+                                            <span id="failed_1" class="sec-value">0</span>
+                                        </div>
+                                        <div class="dash-sec-item" title="Positions remaining in the queue">
+                                            <span class="sec-label">Pending Jobs</span>
+                                            <span id="pending_1" class="sec-value">0</span>
+                                        </div>
+                                        <div class="dash-sec-item" title="CAPTCHAs encountered or solved">
+                                            <span class="sec-label">CAPTCHAs</span>
+                                            <span id="captcha_1" class="sec-value">0</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Parallel Workers & Live Activity Details -->
+                                    <div class="dash-split-row">
+                                        <div class="dash-workers-column">
+                                            <div class="dash-subheading">
+                                                <span>Parallel Workers (4 Max)</span>
+                                            </div>
+                                            <div id="workers_grid_1" class="dash-workers-grid">
+                                                <div class="worker-card worker-idle" data-worker="1">
+                                                    <div class="worker-card-head">
+                                                        <span class="worker-name"><span class="w-dot"></span>Worker 1</span>
+                                                        <span class="worker-tag">Idle</span>
+                                                    </div>
+                                                    <div class="worker-task">Waiting for task...</div>
+                                                    <div class="worker-meta"><span class="w-method">-</span><span class="w-count">0 done</span></div>
+                                                </div>
+                                                <div class="worker-card worker-idle" data-worker="2">
+                                                    <div class="worker-card-head">
+                                                        <span class="worker-name"><span class="w-dot"></span>Worker 2</span>
+                                                        <span class="worker-tag">Idle</span>
+                                                    </div>
+                                                    <div class="worker-task">Waiting for task...</div>
+                                                    <div class="worker-meta"><span class="w-method">-</span><span class="w-count">0 done</span></div>
+                                                </div>
+                                                <div class="worker-card worker-idle" data-worker="3">
+                                                    <div class="worker-card-head">
+                                                        <span class="worker-name"><span class="w-dot"></span>Worker 3</span>
+                                                        <span class="worker-tag">Idle</span>
+                                                    </div>
+                                                    <div class="worker-task">Waiting for task...</div>
+                                                    <div class="worker-meta"><span class="w-method">-</span><span class="w-count">0 done</span></div>
+                                                </div>
+                                                <div class="worker-card worker-idle" data-worker="4">
+                                                    <div class="worker-card-head">
+                                                        <span class="worker-name"><span class="w-dot"></span>Worker 4</span>
+                                                        <span class="worker-tag">Idle</span>
+                                                    </div>
+                                                    <div class="worker-task">Waiting for task...</div>
+                                                    <div class="worker-meta"><span class="w-method">-</span><span class="w-count">0 done</span></div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div class="dash-feed-column">
+                                            <div class="dash-subheading">
+                                                <span>Live Activity Feed</span>
+                                                <span id="feed_counter_1" class="feed-count-badge">0 events</span>
+                                            </div>
+                                            <div id="activity_feed_list_1" class="dash-feed-list">
+                                                <div class="feed-empty-state">Waiting for extraction events...</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Manual CAPTCHA Review Panel -->
+                                    <div class="dash-manual-captcha-section" id="manual_captcha_section_1" style="display: none;">
+                                        <div class="dash-captcha-banner">
+                                            <div class="dash-captcha-banner-head">
+                                                <div class="dash-captcha-title-group">
+                                                    <span class="dash-captcha-pulse"></span>
+                                                    <span class="dash-captcha-title">Manuelle CAPTCHA-Überprüfung</span>
+                                                    <span class="dash-captcha-count-pill" id="manual_captcha_badge_1">0 Prüfungen</span>
+                                                </div>
+                                                <span class="dash-captcha-desc">Ein Worker wartet auf Ihre Bestätigung, um die Extraktion auf der Zielseite fortzusetzen. Andere Worker arbeiten unterbrechungsfrei weiter.</span>
+                                            </div>
+                                            <div id="manual_captcha_cards_1" class="manual-captcha-cards-grid">
+                                                <!-- Dynamic challenge cards inserted by search.js -->
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Action Buttons -->
+                                    <div class="progress-actions">
+                                        <button id="pause_btn_1" type="button" class="progress-btn pause" style="display:none; background:#fef3c7; color:#b45309; border:1px solid #f59e0b;">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                                            <span>Pause</span>
+                                        </button>
+                                        <button id="stop_btn_1" type="button" class="progress-btn stop" style="display:none;">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
+                                            <span>Stop &amp; Download Results</span>
+                                        </button>
+                                        <button data-auto-continue id="continue_btn_1" type="button" class="progress-btn continue" style="display:none;">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                            <span>Continue</span>
+                                        </button>
+                                        <button id="download_btn_1" type="button" class="progress-btn download" style="display:none;">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                            <span>Download Results</span>
+                                        </button>
+                                        <button id="anschreiben_btn_1" type="button" class="progress-btn primary-action" style="display:none;">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+                                            <span>Go to Cover Letters</span>
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                        </button>
+                                    </div>
+                                </section>
+
+                                <!-- Previous Tasks Section -->
+                                <section id="previous_tasks_section_1" class="previous-tasks-section" style="display: none;">
+                                    <div class="previous-tasks-header" id="previous_tasks_toggle_area_1">
+                                        <div class="previous-tasks-title-group">
+                                            <span class="previous-tasks-icon-badge">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                            </span>
+                                            <h4 class="previous-tasks-title">Previous Tasks</h4>
+                                            <span class="previous-tasks-count-pill" id="previous_tasks_count_1">0</span>
+                                        </div>
+                                        <button type="button" id="toggle_previous_tasks_btn_1" class="previous-tasks-toggle-btn">
+                                            Hide Tasks ▴
+                                        </button>
+                                    </div>
+                                    <div id="previous_tasks_list_1" class="previous-tasks-list">
+                                    </div>
+                                </section>
                     <div id="results_error_1" class="results-error" style="display:none;"></div>
                 </div>
             </div>
@@ -1237,6 +1437,19 @@
             if (ui.downloadBtn) ui.downloadBtn.style.display = (canDownload && !data.is_running) ? 'inline-flex' : 'none';
             const canGoToAnschreiben = Boolean(!data.is_running && !data.paused && Number(data.current_index || 0) > 0);
             if (ui.anschreibenBtn) ui.anschreibenBtn.style.display = canGoToAnschreiben ? 'inline-flex' : 'none';
+
+            if (ui.autoBtn) {
+                if (data.is_running) {
+                    ui.autoBtn.disabled = true;
+                    ui.autoBtn.textContent = 'Extrahiere (' + (data.current_index || 0) + '/' + (data.total_jobs || 0) + ')...';
+                } else if (data.paused) {
+                    ui.autoBtn.disabled = true;
+                    ui.autoBtn.textContent = 'Pausiert (' + (data.current_index || 0) + '/' + (data.total_jobs || 0) + ')';
+                } else {
+                    ui.autoBtn.disabled = false;
+                    ui.autoBtn.textContent = 'Automatisch extrahieren';
+                }
+            }
         }
 
         async function pollAutoProgress(ui) {
@@ -1333,11 +1546,52 @@
             }
         }
 
+        async function triggerAutoJobDownload(jobId) {
+            const downloadUrl = `/api/inline/auto-jobs/download/${encodeURIComponent(jobId)}`;
+            const resp = await fetch(downloadUrl);
+            if (!resp.ok) {
+                let errMessage = 'Download fehlgeschlagen';
+                try {
+                    const errData = await resp.json();
+                    errMessage = errData.message || errMessage;
+                } catch (_) {}
+                throw new Error(errMessage);
+            }
+            const blob = await resp.blob();
+            let filename = `auto_extraction_${jobId.slice(0, 8)}.xlsx`;
+            const disposition = resp.headers.get('Content-Disposition');
+            if (disposition && disposition.includes('filename=')) {
+                const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                if (match && match[1]) {
+                    filename = match[1].replace(/['"]/g, '').trim();
+                }
+            }
+            const blobUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.style.display = 'none';
+            link.href = blobUrl;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            setTimeout(() => {
+                URL.revokeObjectURL(blobUrl);
+                link.remove();
+            }, 1500);
+        }
+
         async function stopAndDownloadAuto(ui) {
             if (!ui.autoJobId) {
                 ui.progressError.textContent = 'Kein aktiver Job auf dieser Seite.';
                 ui.progressError.style.display = 'block';
                 return;
+            }
+            const origStopBtnHtml = ui.stopBtn ? ui.stopBtn.innerHTML : '';
+            if (ui.stopBtn) {
+                ui.stopBtn.disabled = true;
+                ui.stopBtn.innerHTML = '<span class="btn-spinner"></span><span>Stoppe & erstelle Download...</span>';
+            }
+            if (ui.progressStatus) {
+                ui.progressStatus.textContent = 'Stoppe Extraktion und erstelle Excel-Download...';
             }
             try {
                 const response = await fetch(`/api/inline/auto-jobs/stop/${encodeURIComponent(ui.autoJobId)}`, { method: 'POST' });
@@ -1345,12 +1599,25 @@
                 if (!response.ok || !data.success) {
                     throw new Error(data.message || 'Stoppen fehlgeschlagen');
                 }
-                setTimeout(() => {
-                    window.location.href = `/api/inline/auto-jobs/download/${encodeURIComponent(ui.autoJobId)}`;
-                }, 1200);
+                if (ui.pollTimer) {
+                    clearInterval(ui.pollTimer);
+                    ui.pollTimer = null;
+                }
+                await triggerAutoJobDownload(ui.autoJobId);
+                setAutoBtnIdle(ui.autoBtn);
+                if (ui.progressStatus) {
+                    ui.progressStatus.textContent = 'Extraktion gestoppt. Download abgeschlossen.';
+                }
+                if (ui.downloadBtn) ui.downloadBtn.style.display = 'inline-block';
+                if (ui.anschreibenBtn) ui.anschreibenBtn.style.display = 'inline-block';
+                if (ui.stopBtn) ui.stopBtn.style.display = 'none';
             } catch (error) {
-                ui.progressError.textContent = error.message || 'Stoppen fehlgeschlagen';
+                ui.progressError.textContent = error.message || 'Stoppen oder Download fehlgeschlagen';
                 ui.progressError.style.display = 'block';
+                if (ui.stopBtn) {
+                    ui.stopBtn.disabled = false;
+                    ui.stopBtn.innerHTML = origStopBtnHtml;
+                }
             }
         }
 

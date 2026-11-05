@@ -568,13 +568,15 @@
                 });
             }
 
-            // 5. Google Maps Live Crawler
+            // 5. Google Maps Live Crawler (Nationwide & Regional)
             if (progressData.google_maps_metrics) {
                 const gm = progressData.google_maps_metrics;
                 const gmCard = document.getElementById("mon_gmaps_monitor");
                 if (gmCard) gmCard.style.display = "block";
                 const cityEl = document.getElementById("mon_gmaps_city");
                 if (cityEl) cityEl.textContent = gm.city || "-";
+                const regCurEl = document.getElementById("mon_gmaps_current_region");
+                if (regCurEl) regCurEl.textContent = gm.current_region || gm.city || "-";
                 const catEl = document.getElementById("mon_gmaps_category");
                 if (catEl) catEl.textContent = gm.category || "-";
                 const compEl = document.getElementById("mon_gmaps_companies");
@@ -587,6 +589,23 @@
                 if (vacEl) vacEl.textContent = String(gm.verified_vacancies || 0);
                 const potEl = document.getElementById("mon_gmaps_potential");
                 if (potEl) potEl.textContent = String(gm.potential_employers || 0);
+
+                const regEl = document.getElementById("mon_gmaps_regions");
+                if (regEl) regEl.textContent = `${gm.regions_scanned || 0} / ${gm.regions_total || 16}`;
+                const munEl = document.getElementById("mon_gmaps_municipalities");
+                if (munEl) munEl.textContent = String(gm.municipalities_covered || 0);
+                const statEl = document.getElementById("mon_gmaps_resume_status");
+                if (statEl) {
+                    const statusText = gm.resume_status || (gm.is_completed ? "Completed" : "Active");
+                    statEl.textContent = statusText;
+                    if (statusText === "completed" || statusText === "Completed") {
+                        statEl.className = "mon-chip-sm mon-text-success";
+                    } else if (statusText === "paused") {
+                        statEl.className = "mon-chip-sm mon-text-warning";
+                    } else {
+                        statEl.className = "mon-chip-sm";
+                    }
+                }
             }
 
             // 6. Ingest New Logs
@@ -903,7 +922,7 @@
             const activeFilter = ui.activeFilter || "all";
             if (exportBtn) {
                 exportBtn.style.display = "inline-flex";
-                exportBtn.href = `/api/search/download?filter=${encodeURIComponent(activeFilter)}`;
+                exportBtn.href = `/api/search/download?filter=${encodeURIComponent(activeFilter)}&search_run_id=${encodeURIComponent(ui.currentSearchRunId || "")}`;
             }
 
             const filteredJobs = ui.lastJobs.filter((job) => {
@@ -1037,17 +1056,728 @@
             ui.errorEl.style.display = "block";
         }
 
+        function renderWorkers(container, workers, isRunning) {
+            if (!container) return;
+            const workerList = [1, 2, 3, 4].map(id => {
+                const w = (workers && workers[`worker_${id}`]) || {
+                    worker_id: id,
+                    status: isRunning ? "active" : "idle",
+                    connection_status: "direct",
+                    network_profile: "Direct",
+                    public_ip: "—",
+                    current_platform: "No active platform",
+                    current_job_title: "",
+                    current_employer: "",
+                    current_stage: "Idle",
+                    current_company: "",
+                    current_job: "",
+                    completed_count: 0,
+                    extraction_method: "",
+                };
+                return w;
+            });
+
+            container.innerHTML = workerList.map(w => {
+                const status = (w.status || (isRunning ? "active" : "idle")).toLowerCase();
+                const connStatus = (w.connection_status || "direct").toLowerCase();
+
+                let statusClass = "worker-idle";
+                let statusTag = "Idle";
+                if (status === "paused") {
+                    statusClass = "worker-paused";
+                    statusTag = "Paused";
+                } else if (status === "blocked" || status === "failed" || connStatus === "failed") {
+                    statusClass = "worker-failed";
+                    statusTag = status === "blocked" ? "Blocked" : "Failed";
+                } else if (status === "manual_required") {
+                    statusClass = "worker-rate-limited";
+                    statusTag = "Manual Required";
+                } else if (status === "waiting") {
+                    statusClass = "worker-idle";
+                    statusTag = "Waiting";
+                } else if (status === "rate_limited") {
+                    statusClass = "worker-rate-limited";
+                    statusTag = "Rate Limited";
+                } else if (status === "active" || status === "processing" || status === "working") {
+                    statusClass = "worker-active";
+                    statusTag = status === "working" ? "Working" : "Active";
+                }
+
+                let connClass = "conn-direct";
+                let connLabel = "Direct";
+                if (connStatus === "connected") {
+                    connClass = "conn-connected";
+                    connLabel = "Connected";
+                } else if (connStatus === "degraded") {
+                    connClass = "conn-degraded";
+                    connLabel = "Degraded";
+                } else if (connStatus === "failed") {
+                    connClass = "conn-failed";
+                    connLabel = "Offline";
+                }
+
+                // Platform identification & badge styling
+                const isIdleState = (status === "idle" || (!isRunning && status !== "paused"));
+                let rawPlatform = (w.current_platform || "").trim();
+                let platform = rawPlatform;
+                if (isIdleState && (!rawPlatform || rawPlatform === "—" || rawPlatform === "Paused")) {
+                    platform = "No active platform";
+                } else if (!rawPlatform) {
+                    platform = status === "paused" ? (w.current_platform || "No active platform") : "No active platform";
+                }
+
+                let platformClass = "platform-none";
+                const pLower = platform.toLowerCase();
+                if (pLower.includes("arbeitsagentur")) {
+                    platformClass = "platform-arbeitsagentur";
+                } else if (pLower.includes("ausbildung.de") || pLower.includes("ausbildung_de")) {
+                    platformClass = "platform-ausbildung-de";
+                } else if (pLower.includes("azubiyo")) {
+                    platformClass = "platform-azubiyo";
+                } else if (pLower.includes("aubi")) {
+                    platformClass = "platform-aubi-plus";
+                } else if (pLower.includes("ihk")) {
+                    platformClass = "platform-ihk";
+                } else if (pLower.includes("maps")) {
+                    platformClass = "platform-google-maps";
+                }
+
+                // Job Title and Employer details
+                let jobTitle = (w.current_job_title || "").trim();
+                let employer = (w.current_employer || w.current_company || w.company || "").trim();
+
+                if (!jobTitle && !employer) {
+                    if (status === "paused") {
+                        jobTitle = "Paused";
+                        employer = "";
+                    } else if (isIdleState) {
+                        jobTitle = "Waiting for task...";
+                        employer = "—";
+                    } else {
+                        jobTitle = (w.current_job || "Processing position...").trim();
+                        employer = "";
+                    }
+                } else if (!jobTitle) {
+                    jobTitle = (w.current_job || "Apprenticeship Position").trim();
+                }
+
+                // Processing Stage
+                let stage = (w.current_stage || w.method || w.extraction_method || "").trim();
+                if (status === "paused") {
+                    stage = "Paused";
+                } else if (isIdleState && (!stage || stage === "—")) {
+                    stage = "Idle";
+                } else if (!stage || stage === "—") {
+                    stage = status === "working" ? "HTTP Fast-Path" : "Waiting";
+                }
+
+                let stageClass = "stage-default";
+                const stLower = stage.toLowerCase();
+                if (stLower.includes("fast-http") || stLower.includes("fast_http") || stLower.includes("fast-path")) {
+                    stageClass = "stage-fast-http";
+                } else if (stLower.includes("selenium")) {
+                    stageClass = "stage-selenium";
+                } else if (stLower.includes("form")) {
+                    stageClass = "stage-form";
+                } else if (stLower.includes("email")) {
+                    stageClass = "stage-email";
+                } else if (stLower.includes("manual")) {
+                    stageClass = "stage-manual";
+                } else if (stLower.includes("paused")) {
+                    stageClass = "stage-paused";
+                }
+
+                const doneCount = Number(w.completed_count || 0);
+                const profile = escapeHtml(w.network_profile || "Direct");
+                const ip = escapeHtml(w.public_ip || "—");
+                const safePlatform = escapeHtml(platform);
+                const safeTitle = escapeHtml(jobTitle);
+                const safeEmployer = escapeHtml(employer);
+                const safeStage = escapeHtml(stage);
+                const tooltip = safeEmployer ? `${safeTitle} (${safeEmployer})` : safeTitle;
+
+                return `<div class="worker-card ${statusClass}" data-worker="${w.worker_id}">
+                    <div class="worker-card-head">
+                        <span class="worker-name"><span class="w-dot"></span>Worker ${w.worker_id}</span>
+                        <div class="worker-badges">
+                            <span class="worker-conn-badge ${connClass}" title="Route Status">${connLabel}</span>
+                            <span class="worker-tag">${statusTag}</span>
+                        </div>
+                    </div>
+                    <div class="worker-route-info" title="Route: ${profile} | IP: ${ip}">
+                        <span class="w-profile">${profile}</span>
+                        <span class="w-sep">&bull;</span>
+                        <span class="w-ip">${ip}</span>
+                    </div>
+                    <div class="worker-platform-row">
+                        <span class="worker-platform-badge ${platformClass}" title="Source Platform: ${safePlatform}">
+                            <span class="w-platform-dot"></span>
+                            <span class="w-platform-name">${safePlatform}</span>
+                        </span>
+                    </div>
+                    <div class="worker-job-block" title="${tooltip}">
+                        <div class="worker-job-title" title="${safeTitle}">${safeTitle}</div>
+                        <div class="worker-employer" title="${safeEmployer}">${safeEmployer || "&nbsp;"}</div>
+                    </div>
+                    <div class="worker-meta">
+                        <span class="w-stage ${stageClass}" title="Current Stage: ${safeStage}">${safeStage}</span>
+                        <span class="w-count">${doneCount} done</span>
+                    </div>
+                </div>`;
+            }).join("");
+        }
+
+        function renderActivityFeed(container, counterEl, feedItems) {
+            if (!container) return;
+            if (!feedItems || feedItems.length === 0) {
+                container.innerHTML = `<div class="feed-empty-state">Waiting for extraction events...</div>`;
+                if (counterEl) counterEl.textContent = "0 events";
+                return;
+            }
+
+            if (counterEl) counterEl.textContent = `${feedItems.length} events`;
+
+            const recent = feedItems.slice(-20).reverse();
+            container.innerHTML = recent.map(item => {
+                const time = escapeHtml(item.time || "");
+                const text = escapeHtml(item.text || "");
+                const type = escapeHtml(item.type || "info");
+                const company = item.company ? `<span class="feed-company">(${escapeHtml(item.company)})</span>` : "";
+
+                let iconSvg = "";
+                let typeClass = `feed-item-${type}`;
+                if (type === "email" || type === "recruitment") {
+                    iconSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>`;
+                } else if (type === "form") {
+                    iconSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`;
+                } else if (type === "fast_path") {
+                    iconSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>`;
+                } else if (type === "selenium") {
+                    iconSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>`;
+                } else if (type === "rate_limit") {
+                    iconSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>`;
+                } else if (type === "error") {
+                    iconSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>`;
+                } else {
+                    iconSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>`;
+                }
+
+                const fullFeedText = item.company ? `${text} (${item.company})` : text;
+                return `<div class="dash-feed-item ${typeClass}">
+                    <span class="feed-time">${time}</span>
+                    <span class="feed-icon">${iconSvg}</span>
+                    <span class="feed-text" title="${escapeHtml(fullFeedText)}">${text} ${company}</span>
+                </div>`;
+            }).join("");
+        }
+
+        function renderCaptchaDiagnostics(container, events) {
+            if (!container) return;
+            if (!events || events.length === 0) {
+                container.innerHTML = '<tr><td colspan="6" class="diag-empty">No security challenges recorded yet.</td></tr>';
+                return;
+            }
+
+            const badgeClasses = {
+                detected: "diag-type-detected",
+                service_request: "diag-type-request",
+                service_response: "diag-type-response",
+                website_confirmed: "diag-type-verified",
+                manual_required: "diag-type-manual",
+            };
+
+            const typeLabels = {
+                detected: "Detected",
+                service_request: "API Request",
+                service_response: "API Response",
+                website_confirmed: "Website Verified",
+                manual_required: "Manual Required",
+            };
+
+            container.innerHTML = events.slice(-30).reverse().map(evt => {
+                const time = escapeHtml(evt.timestamp || "");
+                const worker = `Worker ${escapeHtml(String(evt.worker_id || 1))}`;
+                const domain = escapeHtml(evt.domain || "unknown");
+                const typeKey = evt.event_type || "detected";
+                const typeBadge = `<span class="diag-type-badge ${badgeClasses[typeKey] || "diag-type-detected"}">${escapeHtml(typeLabels[typeKey] || typeKey)}</span>`;
+                const status = escapeHtml(evt.status || "OK");
+                const corrId = `<span class="diag-corr-id">${escapeHtml(evt.correlation_id || "")}</span>`;
+
+                return `<tr>
+                    <td>${time}</td>
+                    <td><strong>${worker}</strong></td>
+                    <td>${domain}</td>
+                    <td>${typeBadge}</td>
+                    <td>${status}</td>
+                    <td>${corrId}</td>
+                </tr>`;
+            }).join("");
+        }
+
+        function renderManualCaptchaChallenges(ui, challenges) {
+            if (!ui || !ui.manualCaptchaSection || !ui.manualCaptchaCards) return;
+            const active = Array.isArray(challenges) ? challenges.filter(c => c && (c.status === "pending" || c.status === "failed")) : [];
+            if (active.length === 0) {
+                ui.manualCaptchaSection.style.display = "none";
+                ui.manualCaptchaCards.innerHTML = "";
+                return;
+            }
+
+            ui.manualCaptchaSection.style.display = "block";
+            if (ui.manualCaptchaBadge) {
+                ui.manualCaptchaBadge.textContent = `${active.length} ${active.length === 1 ? "Prüfung aktiv" : "Prüfungen aktiv"}`;
+            }
+
+            // Preserve typing state if user is entering code
+            const activeInput = ui.manualCaptchaCards.querySelector("input.mch-code-input:focus");
+            const activeChallengeId = activeInput ? activeInput.getAttribute("data-challenge-id") : null;
+            const activeInputValue = activeInput ? activeInput.value : "";
+
+            ui.manualCaptchaCards.innerHTML = active.map(ch => {
+                const chId = escapeHtml(ch.challenge_id || "");
+                const workerId = escapeHtml(String(ch.worker_id || 1));
+                const platform = escapeHtml(ch.platform || "Platform");
+                const title = escapeHtml(ch.job_title || "Stellenangebot");
+                const employer = escapeHtml(ch.employer || "Arbeitgeber");
+                const type = ch.challenge_type || "unknown";
+                const isImageCaptcha = type === "image_text";
+                const isInteractive = !isImageCaptcha;
+                const hasImg = Boolean(ch.image_valid && ch.captcha_image_base64);
+                const imageError = escapeHtml(ch.status === "expired"
+                    ? "This CAPTCHA expired. Request a fresh image from the authenticated session."
+                    : (ch.image_error || "CAPTCHA image is missing or could not be loaded."));
+                const typeLabels = {
+                    image_text: "Sicherheits-Code",
+                    recaptcha: "reCAPTCHA",
+                    turnstile: "Cloudflare Turnstile",
+                    login_required: "Login required",
+                    unknown: "Unknown security challenge",
+                };
+                const typeLabel = typeLabels[type] || typeLabels.unknown;
+                const lastErr = ch.last_error ? escapeHtml(ch.last_error) : "";
+                const sourceUrl = escapeHtml(ch.source_url || "");
+
+                return `
+                    <div class="manual-captcha-card ${isInteractive ? 'interactive-card' : ''}" data-challenge-id="${chId}">
+                        <div class="mch-header">
+                            <div class="mch-badges">
+                                <span class="mch-worker-tag"><span class="mch-dot"></span>Worker ${workerId}</span>
+                                <span class="mch-platform-tag">${platform}</span>
+                                <span class="mch-type-tag ${isInteractive ? 'interactive' : 'image'}">
+                                    ${escapeHtml(typeLabel)}
+                                </span>
+                            </div>
+                            <span class="mch-created">${escapeHtml(ch.created_at ? new Date(ch.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : '')}</span>
+                        </div>
+
+                        <div class="mch-job-meta">
+                            <strong class="mch-job-title" title="${title}">${title}</strong>
+                            <span class="mch-job-employer" title="${employer}">— ${employer}</span>
+                        </div>
+
+                        ${isInteractive ? `
+                            <div class="mch-interactive-desc">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                                <span>Diese Seite verlangt eine interaktive Sicherheitsüberprüfung (z.B. reCAPTCHA oder Cloudflare). Öffnen Sie die Seite im Browser und bestätigen Sie die Prüfung, um diesen Worker fortzusetzen.</span>
+                            </div>
+                            ${hasImg ? `
+                                <div class="mch-screenshot-preview">
+                                    <img src="${ch.captcha_image_base64}" alt="Sicherheitsabfrage" class="mch-screenshot-img" />
+                                </div>
+                            ` : ''}
+                            <div class="mch-actions-row">
+                                <button type="button" class="mch-btn mch-btn-browser btn-open-captcha-browser" data-challenge-id="${chId}" data-url="${sourceUrl}" title="Zielseite im Standardbrowser öffnen">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                                    <span>Im Browser öffnen</span>
+                                </button>
+                                <button type="button" class="mch-btn mch-btn-verify btn-verify-interactive-captcha" data-challenge-id="${chId}" title="Überprüfung auf der Webseite bestätigen">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                    <span>Überprüfung abgeschlossen</span>
+                                </button>
+                                <button type="button" class="mch-btn mch-btn-skip btn-skip-captcha" data-challenge-id="${chId}" title="Als Manuell markieren und mit nächster Stelle fortfahren">
+                                    <span>Überspringen</span>
+                                </button>
+                            </div>
+                        ` : `
+                            <div class="mch-image-area">
+                                <div class="mch-img-box-wrapper">
+                                    <div class="mch-img-box" data-challenge-id="${chId}" title="Klicken zum Vergrößern">
+                                        ${hasImg ? `
+                                            <img src="${ch.captcha_image_base64}" alt="CAPTCHA Sicherheits-Code" class="mch-captcha-img" />
+                                        ` : `
+                                            <div class="mch-img-fallback mch-img-error" role="alert">
+                                                <span>${imageError}</span>
+                                            </div>
+                                        `}
+                                    </div>
+                                    <button type="button" class="mch-btn-icon btn-refresh-captcha-img" data-challenge-id="${chId}" title="Bild jetzt neu laden">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                                    </button>
+                                </div>
+                                ${hasImg ? `<div class="mch-input-group">
+                                    <input type="text" class="mch-code-input" placeholder="7-stelligen Code eingeben..." maxlength="7" minlength="7" inputmode="text" autocomplete="off" data-challenge-id="${chId}" />
+                                    <button type="button" class="mch-btn mch-btn-primary btn-submit-captcha-code" data-challenge-id="${chId}">
+                                        <span>Bestätigen</span>
+                                    </button>
+                                    <button type="button" class="mch-btn mch-btn-browser btn-open-captcha-browser" data-challenge-id="${chId}" data-url="${sourceUrl}" title="Zielseite im Browser öffnen, um den Code dort einzusehen">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                                        <span>Im Browser öffnen</span>
+                                    </button>
+                                    <button type="button" class="mch-btn mch-btn-skip btn-skip-captcha" data-challenge-id="${chId}" title="Als Manuell markieren">
+                                        <span>Überspringen</span>
+                                    </button>
+                                </div>` : `<div class="mch-actions-row">
+                                    <button type="button" class="mch-btn mch-btn-browser btn-open-captcha-browser" data-challenge-id="${chId}" data-url="${sourceUrl}"><span>Originalseite öffnen</span></button>
+                                    <button type="button" class="mch-btn mch-btn-skip btn-skip-captcha" data-challenge-id="${chId}"><span>Überspringen</span></button>
+                                </div>`}
+                            </div>
+                        `}
+
+                        ${lastErr ? `
+                            <div class="mch-error-message">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                                <span>${lastErr}</span>
+                            </div>
+                        ` : `
+                            <div class="mch-feedback-msg" style="display:none;"></div>
+                        `}
+                    </div>
+                `;
+            }).join("");
+
+            if (activeChallengeId && activeInputValue) {
+                const inputToRestore = ui.manualCaptchaCards.querySelector(`input.mch-code-input[data-challenge-id="${activeChallengeId}"]`);
+                if (inputToRestore) {
+                    inputToRestore.value = activeInputValue;
+                    inputToRestore.focus();
+                }
+            }
+        }
+
+        function setupManualCaptchaListeners(ui) {
+            if (!ui || !ui.manualCaptchaCards) return;
+            ui.manualCaptchaCards.addEventListener("click", async (e) => {
+                const target = e.target;
+
+                // 1. Submit Code
+                const submitBtn = target.closest(".btn-submit-captcha-code");
+                if (submitBtn) {
+                    const card = submitBtn.closest(".manual-captcha-card");
+                    const chId = submitBtn.dataset.challengeId || card?.getAttribute("data-challenge-id");
+                    const input = card?.querySelector(".mch-code-input");
+                    const solution = (input?.value || "").trim();
+                    const feedbackEl = card?.querySelector(".mch-feedback-msg");
+                    const errEl = card?.querySelector(".mch-error-message");
+
+                    if (!solution) {
+                        if (input) {
+                            input.focus();
+                            input.classList.add("input-error");
+                            setTimeout(() => input.classList.remove("input-error"), 2000);
+                        }
+                        return;
+                    }
+
+                    submitBtn.disabled = true;
+                    const origHtml = submitBtn.innerHTML;
+                    submitBtn.innerHTML = `<span>Prüfe...</span>`;
+                    if (feedbackEl) {
+                        feedbackEl.style.display = "block";
+                        feedbackEl.className = "mch-feedback-msg info";
+                        feedbackEl.textContent = "Code wird an die Original-Webseite übermittelt...";
+                    }
+
+                    try {
+                        const resp = await fetch("/api/inline/auto-jobs/challenges/solve", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ challenge_id: chId, solution_text: solution }),
+                        });
+                        const resData = await resp.json().catch(() => ({}));
+                        if (resp.ok && resData.success) {
+                            if (feedbackEl) {
+                                feedbackEl.className = "mch-feedback-msg success";
+                                feedbackEl.textContent = "Website verifiziert! Worker setzt Extraktion fort...";
+                            }
+                            setTimeout(() => {
+                                pollAutoProgress(ui);
+                            }, 1000);
+                        } else {
+                            if (errEl) {
+                                errEl.style.display = "flex";
+                                const span = errEl.querySelector("span");
+                                if (span) span.textContent = resData.message || "Code von Website abgelehnt.";
+                            } else if (feedbackEl) {
+                                feedbackEl.className = "mch-feedback-msg error";
+                                feedbackEl.textContent = resData.message || "Code von Website abgelehnt. Erneuter Versuch möglich.";
+                            }
+                            if (input) {
+                                input.value = "";
+                                input.focus();
+                            }
+                        }
+                    } catch (err) {
+                        if (feedbackEl) {
+                            feedbackEl.className = "mch-feedback-msg error";
+                            feedbackEl.textContent = "Netzwerkfehler beim Senden des Codes.";
+                        }
+                    } finally {
+                        submitBtn.disabled = false;
+                        submitBtn.innerHTML = origHtml;
+                    }
+                    return;
+                }
+
+                // 2. Open in Browser
+                const browserBtn = target.closest(".btn-open-captcha-browser");
+                if (browserBtn) {
+                    const chId = browserBtn.dataset.challengeId;
+                    const sourceUrl = browserBtn.dataset.url;
+                    if (sourceUrl) {
+                        window.open(sourceUrl, "_blank", "noopener,noreferrer");
+                    }
+                    try {
+                        await fetch("/api/inline/auto-jobs/challenges/open-browser", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ challenge_id: chId }),
+                        });
+                    } catch (_) {}
+                    return;
+                }
+
+                // 2b. Refresh Captcha Image
+                const refreshBtn = target.closest(".btn-refresh-captcha-img");
+                if (refreshBtn) {
+                    const card = refreshBtn.closest(".manual-captcha-card");
+                    const chId = refreshBtn.dataset.challengeId || card?.getAttribute("data-challenge-id");
+                    const imgBox = card?.querySelector(".mch-img-box");
+                    const origSvg = refreshBtn.innerHTML;
+                    refreshBtn.disabled = true;
+                    refreshBtn.innerHTML = `<span class="btn-spinner" style="width:12px; height:12px; border-top-color:#2563eb;"></span>`;
+
+                    try {
+                        const resp = await fetch("/api/inline/auto-jobs/challenges/refresh-image", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ challenge_id: chId }),
+                        });
+                        const data = await resp.json().catch(() => ({}));
+                        if (resp.ok && data.success && data.captcha_image_base64 && imgBox) {
+                            imgBox.innerHTML = `<img src="${data.captcha_image_base64}" alt="CAPTCHA Sicherheits-Code" class="mch-captcha-img" />`;
+                            await pollAutoProgress(ui);
+                        } else if (imgBox) {
+                            imgBox.innerHTML = `<div class="mch-img-fallback mch-img-error" role="alert"><span>${escapeHtml(data.message || "CAPTCHA image is unavailable or expired.")}</span></div>`;
+                        }
+                    } catch (_) {
+                        if (imgBox) imgBox.innerHTML = `<div class="mch-img-fallback mch-img-error" role="alert"><span>CAPTCHA image refresh failed.</span></div>`;
+                    } finally {
+                        refreshBtn.disabled = false;
+                        refreshBtn.innerHTML = origSvg;
+                    }
+                    return;
+                }
+
+                // 2c. Zoom / Enlarge Captcha Image on Click
+                const imgClick = target.closest(".mch-captcha-img");
+                if (imgClick) {
+                    imgClick.classList.toggle("zoomed");
+                    return;
+                }
+
+                // 3. Verify Interactive
+                const verifyBtn = target.closest(".btn-verify-interactive-captcha");
+                if (verifyBtn) {
+                    const card = verifyBtn.closest(".manual-captcha-card");
+                    const chId = verifyBtn.dataset.challengeId || card?.getAttribute("data-challenge-id");
+                    const feedbackEl = card?.querySelector(".mch-feedback-msg");
+                    const errEl = card?.querySelector(".mch-error-message");
+
+                    verifyBtn.disabled = true;
+                    const origHtml = verifyBtn.innerHTML;
+                    verifyBtn.innerHTML = `<span>Prüfe Status...</span>`;
+                    try {
+                        const resp = await fetch("/api/inline/auto-jobs/challenges/verify-interactive", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ challenge_id: chId }),
+                        });
+                        const resData = await resp.json().catch(() => ({}));
+                        if (resp.ok && resData.success) {
+                            if (feedbackEl) {
+                                feedbackEl.style.display = "block";
+                                feedbackEl.className = "mch-feedback-msg success";
+                                feedbackEl.textContent = "Website verifiziert! Worker setzt Extraktion fort...";
+                            }
+                            setTimeout(() => {
+                                pollAutoProgress(ui);
+                            }, 1000);
+                        } else {
+                            if (errEl) {
+                                errEl.style.display = "flex";
+                                const span = errEl.querySelector("span");
+                                if (span) span.textContent = resData.message || "Seite ist weiterhin blockiert.";
+                            } else if (feedbackEl) {
+                                feedbackEl.style.display = "block";
+                                feedbackEl.className = "mch-feedback-msg error";
+                                feedbackEl.textContent = resData.message || "Seite ist weiterhin blockiert. Bitte führen Sie die Prüfung im Browser zu Ende.";
+                            }
+                        }
+                    } catch (_) {
+                    } finally {
+                        verifyBtn.disabled = false;
+                        verifyBtn.innerHTML = origHtml;
+                    }
+                    return;
+                }
+
+                // 4. Skip / Mark Manual
+                const skipBtn = target.closest(".btn-skip-captcha");
+                if (skipBtn) {
+                    const card = skipBtn.closest(".manual-captcha-card");
+                    const chId = skipBtn.dataset.challengeId || card?.getAttribute("data-challenge-id");
+                    skipBtn.disabled = true;
+                    try {
+                        await fetch("/api/inline/auto-jobs/challenges/skip", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ challenge_id: chId }),
+                        });
+                        await pollAutoProgress(ui);
+                    } catch (_) {}
+                    return;
+                }
+            });
+
+            // Enter key submits code
+            ui.manualCaptchaCards.addEventListener("keydown", (e) => {
+                if (e.key === "Enter" && e.target.classList.contains("mch-code-input")) {
+                    e.preventDefault();
+                    const card = e.target.closest(".manual-captcha-card");
+                    const btn = card?.querySelector(".btn-submit-captcha-code");
+                    if (btn) btn.click();
+                }
+            });
+        }
+
         function renderAutoProgress(ui, data) {
             ui.progressPanel.classList.add("visible");
-            ui.processedEl.textContent = String(data.current_index || 0);
-            ui.emailsEl.textContent = String(data.emails_found || 0);
-            ui.captchaEl.textContent = String(data.captchas_solved || 0);
-            ui.failedEl.textContent = String(data.failed || 0);
 
-            const pct = window.SPAUtils.clampPercent(data.percentage || 0);
-            ui.progressFill.style.width = `${pct}%`;
-            ui.progressFill.textContent = `${Math.round(pct)}%`;
+            const total = Number(data.total_jobs || 0);
+            const processed = Number(data.current_index || 0);
+            const pending = Math.max(0, total - processed);
 
+            // Primary Metrics
+            if (ui.processedEl) ui.processedEl.textContent = String(processed);
+            if (ui.totalEl) ui.totalEl.textContent = String(total);
+            if (ui.emailsEl) ui.emailsEl.textContent = String(data.emails_found || 0);
+            if (ui.formsEl) ui.formsEl.textContent = String(data.forms_found || 0);
+            if (ui.captchaEl) ui.captchaEl.textContent = String(data.captchas_solved || 0);
+            const cm = data.captcha_metrics || {};
+            if (ui.captchaUniqueEl) ui.captchaUniqueEl.textContent = String(cm.unique_challenges || 0);
+            if (ui.captchaRequestsEl) ui.captchaRequestsEl.textContent = String(cm.service_requests || 0);
+            if (ui.captchaVerifiedEl) ui.captchaVerifiedEl.textContent = String(cm.website_verifications_confirmed || 0);
+            if (ui.captchaManualEl) ui.captchaManualEl.textContent = String(cm.manual_verification_required || 0);
+            const eventCount = (cm.recent_events && cm.recent_events.length) || 0;
+            if (ui.captchaDiagPill) ui.captchaDiagPill.textContent = `${eventCount} events`;
+            if (ui.captchaDiagTbody) {
+                renderCaptchaDiagnostics(ui.captchaDiagTbody, cm.recent_events);
+            }
+            renderManualCaptchaChallenges(ui, data.active_challenges);
+            if (ui.failedEl) ui.failedEl.textContent = String(data.failed || 0);
+
+            const pct = window.SPAUtils ? window.SPAUtils.clampPercent(data.percentage || 0) : Math.min(100, Math.max(0, data.percentage || 0));
+            const roundedPct = Math.round(pct);
+            if (ui.progressFill) {
+                ui.progressFill.style.width = `${pct}%`;
+                ui.progressFill.textContent = `${roundedPct}%`;
+            }
+            if (ui.percentNumEl) {
+                ui.percentNumEl.textContent = `${roundedPct}%`;
+            }
+
+            // Secondary Metrics
+            if (ui.recruitmentEmailsEl) ui.recruitmentEmailsEl.textContent = String(data.recruitment_emails || 0);
+            if (ui.externalLinksEl) ui.externalLinksEl.textContent = String(data.external_links || 0);
+            if (ui.fastPathEl) ui.fastPathEl.textContent = String(data.fast_path_hits || 0);
+            if (ui.seleniumFallbacksEl) ui.seleniumFallbacksEl.textContent = String(data.selenium_fallbacks || 0);
+            if (ui.rateLimitedEl) ui.rateLimitedEl.textContent = String(data.rate_limited_count || 0);
+            if (ui.pendingEl) ui.pendingEl.textContent = String(pending);
+
+            const avgTime = Number(data.avg_time_per_job || 0);
+            if (ui.avgTimeEl) {
+                ui.avgTimeEl.textContent = avgTime > 0 ? `${avgTime.toFixed(1)}s` : "--";
+            }
+            if (ui.speedEl) {
+                ui.speedEl.textContent = avgTime > 0 ? `${avgTime.toFixed(1)}s/job` : "-- s/job";
+            }
+
+            // Status Badge & Completion calculation
+            const isCompleted = !data.is_running && !data.paused && !data.stop_requested && processed >= total && total > 0 && pending === 0;
+
+            // Dynamic Throughput & ETA
+            if (ui.etaEl) {
+                const remainingSec = Number(data.estimated_remaining_seconds || 0);
+                if (data.stalled) {
+                    ui.etaEl.textContent = "Stalled";
+                } else if (data.paused) {
+                    ui.etaEl.textContent = "Pausiert";
+                } else if (!data.is_running) {
+                    ui.etaEl.textContent = isCompleted ? "Done" : (data.stop_requested ? "Gestoppt" : "ETA: --");
+                } else if (remainingSec <= 0) {
+                    ui.etaEl.textContent = "ETA: calculating...";
+                } else if (remainingSec < 60) {
+                    ui.etaEl.textContent = `ETA: ~${Math.round(remainingSec)}s`;
+                } else {
+                    const mins = Math.floor(remainingSec / 60);
+                    const secs = Math.round(remainingSec % 60);
+                    ui.etaEl.textContent = `ETA: ~${mins}m ${secs}s`;
+                }
+            }
+
+            // Status Badge styling
+            let badgeClass = "status-idle";
+            let badgeText = "Idle";
+            if (isCompleted) {
+                badgeClass = "status-completed";
+                badgeText = "Completed";
+            } else if (data.stop_requested) {
+                badgeClass = "status-stopping";
+                badgeText = "Stopping...";
+            } else if (data.paused) {
+                badgeClass = "status-paused";
+                badgeText = data.last_error ? "Paused - Error" : "Paused";
+            } else if (data.is_running) {
+                if (Number(data.rate_limited_count || 0) > 0 && data.status_label === "Rate Limited") {
+                    badgeClass = "status-rate-limited";
+                    badgeText = "Rate Limited (Cooling down)";
+                } else {
+                    badgeClass = "status-running";
+                    badgeText = "Running";
+                }
+            } else if (Number(data.failed || 0) > 0 && processed === 0) {
+                badgeClass = "status-failed";
+                badgeText = "Failed";
+            }
+
+            if (ui.statusBadgeEl) {
+                ui.statusBadgeEl.className = `dash-badge ${badgeClass}`;
+                ui.statusBadgeEl.textContent = badgeText;
+            }
+
+            // Active Workers Badge
+            const activeWorkers = Number(data.active_workers || (data.is_running ? 4 : 0));
+            if (ui.activeWorkersBadgeEl) {
+                if (data.is_running) {
+                    ui.activeWorkersBadgeEl.className = "dash-badge workers-active";
+                    ui.activeWorkersBadgeEl.innerHTML = `<span class="pulse-dot"></span> <span class="workers-text">${activeWorkers} Active Workers</span>`;
+                } else {
+                    ui.activeWorkersBadgeEl.className = "dash-badge workers-idle";
+                    ui.activeWorkersBadgeEl.innerHTML = `<span class="pulse-dot"></span> <span class="workers-text">Workers Idle</span>`;
+                }
+            }
+
+            // Error display
             if (data.last_error) {
                 ui.progressError.textContent = data.last_error;
                 ui.progressError.style.display = "block";
@@ -1056,22 +1786,46 @@
                 ui.progressError.style.display = "none";
             }
 
+            // Status text
             let status = "Idle";
-            const isCompleted = !data.is_running && Number(data.current_index || 0) >= Number(data.total_jobs || 0) && Number(data.total_jobs || 0) > 0;
             if (isCompleted) {
-                status = "Extraction completed";
+                status = `Extraction completed (${processed}/${total} processed)`;
             } else if (data.stop_requested) {
-                status = "Stopped";
+                status = "Stopping extraction and compiling results...";
             } else if (data.paused) {
-                status = data.last_error ? "Paused - Error" : "Paused";
+                status = data.last_error ? `Paused - Error: ${data.last_error}` : "Paused";
             } else if (data.is_running) {
-                status = `Processing position ${data.current_index}/${data.total_jobs}...`;
+                status = `Processing position ${processed}/${total}...`;
             }
-            ui.progressStatus.textContent = status;
+            if (ui.progressStatus) {
+                ui.progressStatus.textContent = status;
+            }
 
-            // Stop button: ONLY visible while actively running or paused; hidden when extraction is finished or stopped
+            // Workers Grid
+            if (ui.workersGridEl) {
+                renderWorkers(ui.workersGridEl, data.workers, data.is_running);
+            }
+
+            // Activity Feed
+            if (ui.activityFeedListEl) {
+                renderActivityFeed(ui.activityFeedListEl, ui.feedCounterEl, data.activity_feed);
+            }
+
+            // Stop button: visible while actively running, paused, or stopping
             if (ui.stopBtn) {
-                ui.stopBtn.style.display = (data.is_running || data.paused) ? "inline-flex" : "none";
+                if (data.stop_requested) {
+                    ui.stopBtn.disabled = true;
+                    ui.stopBtn.innerHTML = `<span class="btn-spinner"></span><span>Stoppe...</span>`;
+                    ui.stopBtn.style.display = "inline-flex";
+                } else {
+                    ui.stopBtn.disabled = false;
+                    ui.stopBtn.style.display = (data.is_running || data.paused) ? "inline-flex" : "none";
+                }
+            }
+
+            // Pause button: ONLY visible when actively running
+            if (ui.pauseBtn) {
+                ui.pauseBtn.style.display = (data.is_running && !data.paused) ? "inline-flex" : "none";
             }
 
             // Continue button: ONLY visible when paused
@@ -1083,16 +1837,29 @@
             const canDownload = Boolean(
                 isCompleted ||
                 data.stop_requested ||
-                (!data.is_running && Number(data.current_index || 0) > 0)
+                (!data.is_running && processed > 0)
             );
             if (ui.downloadBtn) {
                 ui.downloadBtn.style.display = (canDownload && !data.is_running) ? "inline-flex" : "none";
             }
 
             // Go to Cover Letters button: visible when completed or stopped with collected results
-            const canGoToAnschreiben = Boolean(!data.is_running && !data.paused && Number(data.current_index || 0) > 0);
+            const canGoToAnschreiben = Boolean(!data.is_running && !data.paused && processed > 0);
             if (ui.anschreibenBtn) {
                 ui.anschreibenBtn.style.display = canGoToAnschreiben ? "inline-flex" : "none";
+            }
+
+            // Keep Auto-Extract Button in sync with live extraction state
+            if (ui.autoBtn) {
+                if (data.is_running) {
+                    ui.autoBtn.disabled = true;
+                    ui.autoBtn.innerHTML = `<span class="btn-spinner"></span><span>Extrahiere (${processed}/${total})...</span>`;
+                } else if (data.paused) {
+                    ui.autoBtn.disabled = false;
+                    ui.autoBtn.innerHTML = `<span>▶ Fortsetzen (${processed}/${total})</span>`;
+                } else {
+                    setAutoBtnIdle(ui.autoBtn);
+                }
             }
         }
 
@@ -1121,6 +1888,20 @@
                     throw new Error(data.message || "Status der Auto-Extraktion konnte nicht geladen werden");
                 }
 
+                // Isolation check: if this job belongs to a different search run, decouple it from current search UI
+                if (data.job.search_run_id && ui.currentSearchRunId && data.job.search_run_id !== ui.currentSearchRunId) {
+                    if (ui.pollTimer) {
+                        clearInterval(ui.pollTimer);
+                        ui.pollTimer = null;
+                    }
+                    ui.autoJobId = null;
+                    if (ui.progressPanel) ui.progressPanel.classList.remove("visible");
+                    setAutoBtnIdle(ui.autoBtn);
+                    loadPreviousTasks(ui);
+                    return;
+                }
+
+                ui.pollFailures = 0;
                 renderAutoProgress(ui, data.job);
 
                 if (!data.job.is_running && !data.job.paused) {
@@ -1129,10 +1910,19 @@
                         ui.pollTimer = null;
                     }
                     setAutoBtnIdle(ui.autoBtn);
+                    loadPreviousTasks(ui);
                 }
             } catch (error) {
+                ui.pollFailures = (ui.pollFailures || 0) + 1;
                 ui.progressError.textContent = error.message || "Statusfehler";
                 ui.progressError.style.display = "block";
+                if (ui.pollFailures >= 5) {
+                    if (ui.pollTimer) {
+                        clearInterval(ui.pollTimer);
+                        ui.pollTimer = null;
+                    }
+                    setAutoBtnIdle(ui.autoBtn);
+                }
             }
         }
 
@@ -1145,14 +1935,19 @@
             setAutoBtnLoading(ui.autoBtn, "Starte...");
 
             try {
+                const kw = (ui.keywordEl && ui.keywordEl.value) ? ui.keywordEl.value.trim() : "";
+                const loc = (ui.locationEl && ui.locationEl.value) ? ui.locationEl.value.trim() : "";
+                const pub = (ui.publishedSinceEl && ui.publishedSinceEl.value) ? ui.publishedSinceEl.value : "all";
+
                 const response = await fetch("/api/inline/auto-jobs/start", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         jobs: ui.lastJobs,
-                        keyword: ui.keywordEl.value.trim(),
-                        location: ui.locationEl.value.trim(),
-                        published_since: ui.publishedSinceEl.value,
+                        keyword: kw,
+                        location: loc,
+                        published_since: pub,
+                        search_run_id: ui.currentSearchRunId || "",
                     }),
                 });
                 const data = await response.json();
@@ -1165,18 +1960,50 @@
                 if (!ui.autoJobId) {
                     throw new Error("Keine Job-ID erhalten");
                 }
+                if (data.search_run_id) {
+                    ui.currentSearchRunId = data.search_run_id;
+                }
+                try {
+                    localStorage.setItem("jobscout_active_auto_job_id_" + (ui.currentSearchRunId || "default"), ui.autoJobId);
+                } catch (_) {}
 
                 ui.progressPanel.classList.add("visible");
+                if (typeof ui.progressPanel.scrollIntoView === "function") {
+                    ui.progressPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                }
+
                 if (ui.pollTimer) {
                     clearInterval(ui.pollTimer);
                 }
+                ui.pollFailures = 0;
                 ui.pollTimer = setInterval(() => {
                     pollAutoProgress(ui);
                 }, 1500);
                 await pollAutoProgress(ui);
+                loadPreviousTasks(ui);
             } catch (error) {
                 setAutoBtnIdle(ui.autoBtn);
                 showError(ui, error.message || "Auto-Extraktion konnte nicht gestartet werden");
+            }
+        }
+
+        async function pauseAutoExtraction(ui) {
+            let jobId = ui.autoJobId;
+            if (!jobId) return;
+
+            try {
+                const response = await fetch(`/api/inline/auto-jobs/pause/${encodeURIComponent(jobId)}`, { method: "POST" });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok || !data.success) {
+                    throw new Error(data.message || "Pausieren fehlgeschlagen");
+                }
+                await pollAutoProgress(ui);
+                loadPreviousTasks(ui);
+            } catch (err) {
+                if (ui.progressError) {
+                    ui.progressError.textContent = err.message || "Pausieren fehlgeschlagen";
+                    ui.progressError.style.display = "block";
+                }
             }
         }
 
@@ -1201,34 +2028,279 @@
                     pollAutoProgress(ui);
                 }, 1500);
                 await pollAutoProgress(ui);
+                loadPreviousTasks(ui);
             } catch (error) {
                 ui.progressError.textContent = error.message || "Fortsetzen fehlgeschlagen";
                 ui.progressError.style.display = "block";
             }
         }
 
+        async function loadPreviousTasks(ui) {
+            if (!ui || !ui.previousTasksList) return;
+            try {
+                const resp = await fetch("/api/inline/auto-jobs/history");
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok || !data.success || !Array.isArray(data.tasks)) return;
+
+                const tasks = data.tasks;
+                if (ui.previousTasksCount) {
+                    ui.previousTasksCount.textContent = String(tasks.length);
+                }
+
+                if (tasks.length === 0) {
+                    if (ui.previousTasksSection) ui.previousTasksSection.style.display = "none";
+                    return;
+                }
+
+                if (ui.previousTasksSection) {
+                    ui.previousTasksSection.style.display = "block";
+                }
+
+                ui.previousTasksList.innerHTML = tasks.map(task => {
+                    const isCurrentRun = Boolean(task.search_run_id && task.search_run_id === ui.currentSearchRunId);
+                    const total = task.total_jobs || 0;
+                    const proc = task.processed_jobs || 0;
+                    const pct = total ? Math.min(100, Math.round((proc / total) * 100)) : 0;
+
+                    let badgeClass = "status-idle";
+                    let statusText = task.status_label || "Idle";
+                    if (task.is_running) {
+                        badgeClass = "status-running";
+                        statusText = "Running";
+                    } else if (task.paused) {
+                        badgeClass = "status-warning";
+                        statusText = "Paused";
+                    } else if (task.stop_requested || String(statusText).toLowerCase() === "stopped") {
+                        badgeClass = "status-stopped";
+                        statusText = "Stopped";
+                    } else if (proc >= total && total > 0) {
+                        badgeClass = "status-completed";
+                        statusText = "Completed";
+                    }
+
+                    const kw = escapeHtml(task.keyword || "Stellen-Suche");
+                    const loc = task.location ? ` in ${escapeHtml(task.location)}` : " (Bundesweit)";
+                    const runShort = escapeHtml(task.search_run_id ? task.search_run_id.replace(/^run_/, '').slice(0, 8) : task.job_id.slice(0, 8));
+
+                    return `
+                        <div class="previous-task-card ${isCurrentRun ? 'current-task-highlight' : ''}" data-job-id="${escapeHtml(task.job_id)}" data-run-id="${escapeHtml(task.search_run_id)}">
+                            <div class="ptask-header-row">
+                                <div class="ptask-title-wrap">
+                                    <span class="ptask-job-title">${kw}${loc}</span>
+                                    <span class="ptask-run-tag">Run #${runShort}</span>
+                                    ${isCurrentRun ? '<span class="ptask-active-tag">Aktuelle Suche</span>' : ''}
+                                </div>
+                                <div class="ptask-status-wrap">
+                                    <span class="dash-badge ${badgeClass}">${statusText}</span>
+                                    <span class="ptask-progress-summary"><strong class="ptask-progress-pct">${pct}%</strong> (${proc}/${total})</span>
+                                </div>
+                            </div>
+
+                            <div class="ptask-progress-track">
+                                <div class="ptask-progress-bar ${badgeClass}" style="width: ${pct}%;"></div>
+                            </div>
+
+                            <div class="ptask-footer-row">
+                                <div class="ptask-stats-group">
+                                    <span class="ptask-stat-badge emails">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                                        <strong>${task.emails_found || 0}</strong> E-Mails
+                                    </span>
+                                    <span class="ptask-stat-badge forms">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                                        <strong>${task.forms_found || 0}</strong> Formulare
+                                    </span>
+                                </div>
+                                <div class="ptask-action-group">
+                                    <button type="button" class="ptask-action-btn ptask-btn-reopen btn-reopen-task" data-job-id="${escapeHtml(task.job_id)}" data-run-id="${escapeHtml(task.search_run_id)}" title="Öffne das Live-Dashboard dieser Extraktion">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                        <span>Dashboard öffnen</span>
+                                    </button>
+                                    ${task.is_running ? `
+                                        <button type="button" class="ptask-action-btn ptask-btn-pause btn-pause-task" data-job-id="${escapeHtml(task.job_id)}" title="Extraktion pausieren">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                                            <span>Pause</span>
+                                        </button>
+                                        <button type="button" class="ptask-action-btn ptask-btn-stop btn-stop-task" data-job-id="${escapeHtml(task.job_id)}" title="Extraktion stoppen">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
+                                            <span>Stopp</span>
+                                        </button>
+                                    ` : task.paused ? `
+                                        <button type="button" class="ptask-action-btn ptask-btn-resume btn-resume-task" data-job-id="${escapeHtml(task.job_id)}" title="Extraktion fortsetzen">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                            <span>Fortsetzen</span>
+                                        </button>
+                                        <button type="button" class="ptask-action-btn ptask-btn-stop btn-stop-task" data-job-id="${escapeHtml(task.job_id)}" title="Extraktion stoppen">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>
+                                            <span>Stopp</span>
+                                        </button>
+                                    ` : ''}
+                                    <button type="button" class="ptask-action-btn ptask-btn-download btn-download-task" data-job-id="${escapeHtml(task.job_id)}" title="Ergebnisse als Excel (.xlsx) herunterladen">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                        <span>Excel (.xlsx)</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join("");
+            } catch (_) {}
+        }
+
+        async function reopenPreviousTask(ui, jobId, runId) {
+            if (!jobId) return;
+            ui.autoJobId = jobId;
+            if (runId) {
+                ui.currentSearchRunId = runId;
+            }
+            if (ui.progressPanel) {
+                ui.progressPanel.classList.add("visible");
+                if (typeof ui.progressPanel.scrollIntoView === "function") {
+                    ui.progressPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                }
+            }
+            await pollAutoProgress(ui);
+            if (ui.pollTimer) clearInterval(ui.pollTimer);
+            ui.pollTimer = setInterval(() => { pollAutoProgress(ui); }, 1500);
+
+            // Fetch and display this task's job opportunities in results table
+            try {
+                const jResp = await fetch(`/api/inline/auto-jobs/jobs/${encodeURIComponent(jobId)}`);
+                const jData = await jResp.json();
+                if (jData.success && Array.isArray(jData.jobs) && jData.jobs.length) {
+                    renderResults(ui, { jobs: jData.jobs, total: jData.total });
+                }
+            } catch (_) {}
+            loadPreviousTasks(ui);
+        }
+
+        async function triggerAutoJobDownload(jobId, filterMode = "all") {
+            const filterParam = encodeURIComponent(filterMode || "all");
+            const downloadUrl = `/api/inline/auto-jobs/download/${encodeURIComponent(jobId)}?filter=${filterParam}`;
+            const resp = await fetch(downloadUrl);
+            if (!resp.ok) {
+                let errMessage = "Download fehlgeschlagen";
+                try {
+                    const errData = await resp.json();
+                    errMessage = errData.message || errMessage;
+                } catch (_) {}
+                throw new Error(errMessage);
+            }
+            const blob = await resp.blob();
+            let filename = `auto_extraction_${jobId.slice(0, 8)}.xlsx`;
+            const disposition = resp.headers.get("Content-Disposition");
+            if (disposition && disposition.includes("filename=")) {
+                const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                if (match && match[1]) {
+                    filename = match[1].replace(/['"]/g, "").trim();
+                }
+            }
+            const blobUrl = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.style.display = "none";
+            link.href = blobUrl;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            setTimeout(() => {
+                URL.revokeObjectURL(blobUrl);
+                link.remove();
+            }, 1500);
+        }
+
         async function stopAndDownloadAuto(ui) {
-            if (!ui.autoJobId) {
+            let jobId = ui.autoJobId;
+            if (!jobId) {
+                try {
+                    jobId = localStorage.getItem("jobscout_active_auto_job_id") || "";
+                } catch (_) {}
+            }
+            if (!jobId) {
+                try {
+                    const actResp = await fetch("/api/inline/auto-jobs/active");
+                    const actData = await actResp.json();
+                    if (actData.has_active && actData.job_id) {
+                        jobId = actData.job_id;
+                        ui.autoJobId = jobId;
+                    }
+                } catch (_) {}
+            }
+
+            if (!jobId) {
                 ui.progressError.textContent = "Kein aktiver Job auf dieser Seite.";
                 ui.progressError.style.display = "block";
                 return;
             }
 
+            const origStopBtnHtml = ui.stopBtn ? ui.stopBtn.innerHTML : "";
+            if (ui.stopBtn) {
+                ui.stopBtn.disabled = true;
+                ui.stopBtn.innerHTML = `<span class="btn-spinner"></span><span>Stoppe &amp; erstelle Download...</span>`;
+            }
+            if (ui.progressStatus) {
+                ui.progressStatus.textContent = "Stoppe Extraktion und erstelle Excel-Download...";
+            }
+            if (ui.progressError) {
+                ui.progressError.style.display = "none";
+            }
+
             try {
-                const response = await fetch(`/api/inline/auto-jobs/stop/${encodeURIComponent(ui.autoJobId)}`, { method: "POST" });
+                // 1. Send stop command to server
+                const response = await fetch(`/api/inline/auto-jobs/stop/${encodeURIComponent(jobId)}`, { method: "POST" });
                 const data = await response.json().catch(() => ({}));
 
                 if (!response.ok || !data.success) {
                     throw new Error(data.message || "Stoppen fehlgeschlagen");
                 }
 
-                setTimeout(() => {
-                    const filterParam = encodeURIComponent(ui.activeFilter || "all");
-                    window.location.href = `/api/inline/auto-jobs/download/${encodeURIComponent(ui.autoJobId)}?filter=${filterParam}`;
-                }, 1200);
+                // 2. Stop frontend polling loop
+                if (ui.pollTimer) {
+                    clearInterval(ui.pollTimer);
+                    ui.pollTimer = null;
+                }
+
+                // 3. Robust download via Blob (never blocked by popup/download blockers)
+                await triggerAutoJobDownload(jobId, ui.activeFilter || "all");
+
+                // 4. Fetch the latest enriched jobs to update the results table on page
+                try {
+                    const jobsResp = await fetch(`/api/inline/auto-jobs/jobs/${encodeURIComponent(jobId)}`);
+                    const jobsData = await jobsResp.json();
+                    if (jobsData.success && Array.isArray(jobsData.jobs) && jobsData.jobs.length) {
+                        ui.lastJobs = jobsData.jobs;
+                        renderResults(ui, {
+                            jobs: ui.lastJobs,
+                            total: ui.lastJobs.length,
+                            published_since: ui.publishedSinceEl ? ui.publishedSinceEl.value : "all",
+                        });
+                    }
+                } catch (rErr) {
+                    console.debug("Could not refresh results table after stop:", rErr);
+                }
+
+                // 5. Update UI states
+                setAutoBtnIdle(ui.autoBtn);
+                if (ui.progressStatus) {
+                    ui.progressStatus.textContent = "Extraktion gestoppt. Download abgeschlossen.";
+                }
+                if (ui.downloadBtn) {
+                    ui.downloadBtn.style.display = "inline-flex";
+                }
+                if (ui.anschreibenBtn) {
+                    ui.anschreibenBtn.style.display = "inline-flex";
+                }
+                if (ui.stopBtn) {
+                    ui.stopBtn.style.display = "none";
+                }
             } catch (error) {
-                ui.progressError.textContent = error.message || "Stoppen fehlgeschlagen";
-                ui.progressError.style.display = "block";
+                if (ui.progressError) {
+                    ui.progressError.textContent = error.message || "Stoppen oder Download fehlgeschlagen";
+                    ui.progressError.style.display = "block";
+                }
+                if (ui.stopBtn) {
+                    ui.stopBtn.disabled = false;
+                    ui.stopBtn.innerHTML = origStopBtnHtml;
+                }
             }
         }
 
@@ -1307,6 +2379,20 @@
             }
             const currentGen = (ui.searchGeneration = (ui.searchGeneration || 0) + 1);
 
+            // Search Session Isolation: decouple previous extraction task from the new search run
+            if (ui.pollTimer) {
+                clearInterval(ui.pollTimer);
+                ui.pollTimer = null;
+            }
+            ui.autoJobId = null;
+            if (ui.progressPanel) {
+                ui.progressPanel.classList.remove("visible");
+            }
+            setAutoBtnIdle(ui.autoBtn);
+
+            const searchRunId = "run_" + Date.now() + "_" + Math.random().toString(36).substring(2, 9);
+            ui.currentSearchRunId = searchRunId;
+
             saveIndexState();
             setLoading(ui, true);
 
@@ -1317,6 +2403,7 @@
             const customCategories = customCategoriesEl ? customCategoriesEl.value : "";
 
             const params = new URLSearchParams({
+                search_run_id: searchRunId,
                 keyword,
                 location,
                 published_since: publishedSince,
@@ -1377,6 +2464,9 @@
                             const data = JSON.parse(e.data);
                             evtSource.close();
                             if (ui.currentEventSource === evtSource) ui.currentEventSource = null;
+                            if (data.search_run_id) {
+                                ui.currentSearchRunId = data.search_run_id;
+                            }
                             searchCompleted = true;
                             setSearchProgress(ui, {
                                 percent: 100,
@@ -1384,6 +2474,7 @@
                                 found: data.total || 0,
                             });
                             renderResults(ui, data);
+                            loadPreviousTasks(ui);
                             resolve();
                         } catch (err) {
                             evtSource.close();
@@ -1437,6 +2528,9 @@
                             throw new Error(data.message || "Suche fehlgeschlagen");
                         }
 
+                        if (data.search_run_id) {
+                            ui.currentSearchRunId = data.search_run_id;
+                        }
                         searchCompleted = true;
                         setSearchProgress(ui, {
                             percent: 100,
@@ -1444,6 +2538,7 @@
                             found: data.total || 0,
                         });
                         renderResults(ui, data);
+                        loadPreviousTasks(ui);
                     } catch (fallbackError) {
                         clearInterval(simInterval);
                         if (ui.searchGeneration === currentGen) {
@@ -1491,21 +2586,57 @@
             autoBtn: document.getElementById("auto_btn_1"),
             progressPanel: document.getElementById("progress_panel_1"),
             processedEl: document.getElementById("processed_1"),
+            totalEl: document.getElementById("total_1"),
             emailsEl: document.getElementById("emails_1"),
+            formsEl: document.getElementById("forms_1"),
+            percentNumEl: document.getElementById("percent_num_1"),
+            statusBadgeEl: document.getElementById("extraction_status_badge_1"),
+            activeWorkersBadgeEl: document.getElementById("active_workers_badge_1"),
+            etaEl: document.getElementById("progress_eta_1"),
+            speedEl: document.getElementById("progress_speed_1"),
+            recruitmentEmailsEl: document.getElementById("recruitment_emails_1"),
+            externalLinksEl: document.getElementById("external_links_1"),
+            fastPathEl: document.getElementById("fast_path_1"),
+            seleniumFallbacksEl: document.getElementById("selenium_fallbacks_1"),
+            rateLimitedEl: document.getElementById("rate_limited_1"),
+            avgTimeEl: document.getElementById("avg_time_1"),
+            pendingEl: document.getElementById("pending_1"),
             captchaEl: document.getElementById("captcha_1"),
+            captchaUniqueEl: document.getElementById("captcha_unique_1"),
+            captchaRequestsEl: document.getElementById("captcha_requests_1"),
+            captchaVerifiedEl: document.getElementById("captcha_verified_1"),
+            captchaManualEl: document.getElementById("captcha_manual_1"),
+            captchaDiagBtn: document.getElementById("captcha_diag_btn_1"),
+            captchaDiagPanel: document.getElementById("captcha_diag_panel_1"),
+            captchaDiagArrow: document.getElementById("captcha_diag_arrow_1"),
+            captchaDiagPill: document.getElementById("captcha_diag_pill_1"),
+            captchaDiagTbody: document.getElementById("captcha_diag_tbody_1"),
             failedEl: document.getElementById("failed_1"),
+            manualCaptchaSection: document.getElementById("manual_captcha_section_1"),
+            manualCaptchaBadge: document.getElementById("manual_captcha_badge_1"),
+            manualCaptchaCards: document.getElementById("manual_captcha_cards_1"),
+            workersGridEl: document.getElementById("workers_grid_1"),
+            activityFeedListEl: document.getElementById("activity_feed_list_1"),
+            feedCounterEl: document.getElementById("feed_counter_1"),
             progressFill: document.getElementById("progress_fill_1"),
             progressStatus: document.getElementById("progress_status_1"),
             progressError: document.getElementById("progress_error_1"),
             stopBtn: document.getElementById("stop_btn_1"),
+            pauseBtn: document.getElementById("pause_btn_1"),
             continueBtn: document.getElementById("continue_btn_1"),
             downloadBtn: document.getElementById("download_btn_1"),
             anschreibenBtn: document.getElementById("anschreiben_btn_1"),
             generateCoverLettersBtn: document.getElementById("btn_generate_cover_letters_1"),
             filterBar: document.getElementById("results_filter_bar_1"),
+            previousTasksSection: document.getElementById("previous_tasks_section_1"),
+            previousTasksList: document.getElementById("previous_tasks_list_1"),
+            previousTasksCount: document.getElementById("previous_tasks_count_1"),
+            togglePreviousTasksBtn: document.getElementById("toggle_previous_tasks_btn_1"),
+            previousTasksToggleArea: document.getElementById("previous_tasks_toggle_area_1"),
             activeFilter: "all",
             lastJobs: [],
             autoJobId: "",
+            currentSearchRunId: "",
             pollTimer: null,
         };
 
@@ -1536,6 +2667,9 @@
             emailsEl: document.getElementById("emails_2"),
             captchaEl: document.getElementById("captcha_2"),
             failedEl: document.getElementById("failed_2"),
+            manualCaptchaSection: document.getElementById("manual_captcha_section_2"),
+            manualCaptchaBadge: document.getElementById("manual_captcha_badge_2"),
+            manualCaptchaCards: document.getElementById("manual_captcha_cards_2"),
             progressFill: document.getElementById("progress_fill_2"),
             progressStatus: document.getElementById("progress_status_2"),
             progressError: document.getElementById("progress_error_2"),
@@ -1569,6 +2703,16 @@
             });
         }
         bindFilterEvents(searchUi1);
+        if (searchUi1.captchaDiagBtn && searchUi1.captchaDiagPanel) {
+            searchUi1.captchaDiagBtn.addEventListener("click", () => {
+                const isHidden = searchUi1.captchaDiagPanel.style.display === "none";
+                searchUi1.captchaDiagPanel.style.display = isHidden ? "block" : "none";
+                searchUi1.captchaDiagBtn.setAttribute("aria-expanded", isHidden ? "true" : "false");
+                if (searchUi1.captchaDiagArrow) {
+                    searchUi1.captchaDiagArrow.classList.toggle("is-open", isHidden);
+                }
+            });
+        }
         // Console Clear & Toggle Listeners
         if (searchUi1.consoleClear && searchUi1.consoleTerminal) {
             searchUi1.consoleClear.addEventListener("click", () => {
@@ -1591,8 +2735,18 @@
         });
 
         searchUi1.autoBtn.addEventListener("click", async () => {
-            await startAutoExtraction(searchUi1);
+            if (searchUi1.autoJobId && searchUi1.continueBtn && searchUi1.continueBtn.style.display !== "none") {
+                await continueAutoExtraction(searchUi1);
+            } else {
+                await startAutoExtraction(searchUi1);
+            }
         });
+
+        if (searchUi1.pauseBtn) {
+            searchUi1.pauseBtn.addEventListener("click", async () => {
+                await pauseAutoExtraction(searchUi1);
+            });
+        }
 
         searchUi1.continueBtn.addEventListener("click", async () => {
             await continueAutoExtraction(searchUi1);
@@ -1602,12 +2756,109 @@
             await stopAndDownloadAuto(searchUi1);
         });
 
-        searchUi1.downloadBtn.addEventListener("click", () => {
-            if (!searchUi1.autoJobId) {
-                return;
+        setupManualCaptchaListeners(searchUi1);
+        if (searchUi2) {
+            setupManualCaptchaListeners(searchUi2);
+        }
+
+        // Previous tasks section toggle
+        if (searchUi1.togglePreviousTasksBtn && searchUi1.previousTasksList) {
+            const toggleTasks = () => {
+                const isHidden = (searchUi1.previousTasksList.style.display === "none");
+                searchUi1.previousTasksList.style.display = isHidden ? "flex" : "none";
+                searchUi1.togglePreviousTasksBtn.textContent = isHidden ? "Hide Tasks ▴" : "Show Tasks ▾";
+            };
+            searchUi1.togglePreviousTasksBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                toggleTasks();
+            });
+            if (searchUi1.previousTasksToggleArea) {
+                searchUi1.previousTasksToggleArea.addEventListener("click", toggleTasks);
             }
-            const filterParam = encodeURIComponent(searchUi1.activeFilter || "all");
-            window.location.href = `/api/inline/auto-jobs/download/${encodeURIComponent(searchUi1.autoJobId)}?filter=${filterParam}`;
+        }
+
+        // Delegated clicks for previous tasks cards
+        if (searchUi1.previousTasksList) {
+            searchUi1.previousTasksList.addEventListener("click", async (e) => {
+                const target = e.target;
+                const reopenBtn = target.closest(".btn-reopen-task");
+                if (reopenBtn) {
+                    const jobId = reopenBtn.dataset.jobId;
+                    const runId = reopenBtn.dataset.runId;
+                    await reopenPreviousTask(searchUi1, jobId, runId);
+                    return;
+                }
+                const pauseBtn = target.closest(".btn-pause-task");
+                if (pauseBtn) {
+                    const jobId = pauseBtn.dataset.jobId;
+                    try {
+                        await fetch(`/api/inline/auto-jobs/pause/${encodeURIComponent(jobId)}`, { method: "POST" });
+                        if (searchUi1.autoJobId === jobId) {
+                            await pollAutoProgress(searchUi1);
+                        }
+                        loadPreviousTasks(searchUi1);
+                    } catch (_) {}
+                    return;
+                }
+                const resumeBtn = target.closest(".btn-resume-task");
+                if (resumeBtn) {
+                    const jobId = resumeBtn.dataset.jobId;
+                    try {
+                        await fetch(`/api/inline/auto-jobs/continue/${encodeURIComponent(jobId)}`, { method: "POST" });
+                        if (searchUi1.autoJobId === jobId) {
+                            if (searchUi1.pollTimer) clearInterval(searchUi1.pollTimer);
+                            searchUi1.pollTimer = setInterval(() => { pollAutoProgress(searchUi1); }, 1500);
+                            await pollAutoProgress(searchUi1);
+                        }
+                        loadPreviousTasks(searchUi1);
+                    } catch (_) {}
+                    return;
+                }
+                const stopBtn = target.closest(".btn-stop-task");
+                if (stopBtn) {
+                    const jobId = stopBtn.dataset.jobId;
+                    try {
+                        await fetch(`/api/inline/auto-jobs/stop/${encodeURIComponent(jobId)}`, { method: "POST" });
+                        if (searchUi1.autoJobId === jobId) {
+                            await pollAutoProgress(searchUi1);
+                        }
+                        loadPreviousTasks(searchUi1);
+                    } catch (_) {}
+                    return;
+                }
+                const dlBtn = target.closest(".btn-download-task");
+                if (dlBtn) {
+                    const jobId = dlBtn.dataset.jobId;
+                    try {
+                        await triggerAutoJobDownload(jobId, "all");
+                    } catch (_) {}
+                    return;
+                }
+            });
+        }
+
+        searchUi1.downloadBtn.addEventListener("click", async () => {
+            let jobId = searchUi1.autoJobId;
+            if (!jobId) {
+                try {
+                    jobId = localStorage.getItem("jobscout_active_auto_job_id") || "";
+                } catch (_) {}
+            }
+            if (!jobId) return;
+            const origHtml = searchUi1.downloadBtn.innerHTML;
+            searchUi1.downloadBtn.disabled = true;
+            searchUi1.downloadBtn.innerHTML = `<span class="btn-spinner"></span><span>Lade herunter...</span>`;
+            try {
+                await triggerAutoJobDownload(jobId, searchUi1.activeFilter || "all");
+            } catch (err) {
+                if (searchUi1.progressError) {
+                    searchUi1.progressError.textContent = err.message || "Download fehlgeschlagen";
+                    searchUi1.progressError.style.display = "block";
+                }
+            } finally {
+                searchUi1.downloadBtn.disabled = false;
+                searchUi1.downloadBtn.innerHTML = origHtml;
+            }
         });
 
         searchUi1.anschreibenBtn.addEventListener("click", async () => {
@@ -1659,12 +2910,28 @@
                 await stopAndDownloadAuto(searchUi2);
             });
 
-            searchUi2.downloadBtn.addEventListener("click", () => {
-                if (!searchUi2.autoJobId) {
-                    return;
+            searchUi2.downloadBtn.addEventListener("click", async () => {
+                let jobId = searchUi2.autoJobId;
+                if (!jobId) {
+                    try {
+                        jobId = localStorage.getItem("jobscout_active_auto_job_id") || "";
+                    } catch (_) {}
                 }
-                const filterParam = encodeURIComponent(searchUi2.activeFilter || "all");
-                window.location.href = `/api/inline/auto-jobs/download/${encodeURIComponent(searchUi2.autoJobId)}?filter=${filterParam}`;
+                if (!jobId) return;
+                const origHtml = searchUi2.downloadBtn.innerHTML;
+                searchUi2.downloadBtn.disabled = true;
+                searchUi2.downloadBtn.innerHTML = `<span class="btn-spinner"></span><span>Lade herunter...</span>`;
+                try {
+                    await triggerAutoJobDownload(jobId, searchUi2.activeFilter || "all");
+                } catch (err) {
+                    if (searchUi2.progressError) {
+                        searchUi2.progressError.textContent = err.message || "Download fehlgeschlagen";
+                        searchUi2.progressError.style.display = "block";
+                    }
+                } finally {
+                    searchUi2.downloadBtn.disabled = false;
+                    searchUi2.downloadBtn.innerHTML = origHtml;
+                }
             });
 
             searchUi2.anschreibenBtn.addEventListener("click", async () => {
@@ -2196,6 +3463,57 @@
         restoreIndexState();
         bindIndexStatePersistence();
         handleSearchSourceChange();
+
+        // Auto-reconnect to active/paused auto-extraction job and load previous tasks
+        (async function reconnectActiveAutoJob() {
+            try {
+                loadPreviousTasks(searchUi1);
+                // Periodically refresh previous tasks list in background
+                setInterval(() => {
+                    loadPreviousTasks(searchUi1);
+                }, 6000);
+
+                let activeId = "";
+                let activeRunId = "";
+                if (searchUi1.currentSearchRunId) {
+                    try {
+                        activeId = localStorage.getItem("jobscout_active_auto_job_id_" + searchUi1.currentSearchRunId) || "";
+                    } catch (_) {}
+                }
+                if (!activeId) {
+                    const actUrl = searchUi1.currentSearchRunId
+                        ? `/api/inline/auto-jobs/active?search_run_id=${encodeURIComponent(searchUi1.currentSearchRunId)}`
+                        : "/api/inline/auto-jobs/active";
+                    const actResp = await fetch(actUrl);
+                    const actData = await actResp.json();
+                    if (actData.has_active && actData.job_id && actData.status === "running") {
+                        activeId = actData.job_id;
+                        activeRunId = actData.search_run_id || "";
+                    }
+                }
+                if (!activeId) return;
+
+                // Session Isolation: Do not attach active extraction task to a different search run
+                if (activeRunId && searchUi1.currentSearchRunId && activeRunId !== searchUi1.currentSearchRunId) {
+                    return;
+                }
+
+                const stResp = await fetch(`/api/inline/auto-jobs/status/${encodeURIComponent(activeId)}`);
+                const stData = await stResp.json();
+                if (stData.success && stData.job && (stData.job.is_running || stData.job.current_index > 0)) {
+                    if (stData.job.search_run_id && searchUi1.currentSearchRunId && stData.job.search_run_id !== searchUi1.currentSearchRunId) {
+                        return;
+                    }
+                    searchUi1.autoJobId = activeId;
+                    searchUi1.progressPanel.classList.add("visible");
+                    renderAutoProgress(searchUi1, stData.job);
+                    if (stData.job.is_running) {
+                        if (searchUi1.pollTimer) clearInterval(searchUi1.pollTimer);
+                        searchUi1.pollTimer = setInterval(() => { pollAutoProgress(searchUi1); }, 1500);
+                    }
+                }
+            } catch (_) {}
+        })();
 
         const srcElInit = document.getElementById("search_source_1");
         if (srcElInit) {

@@ -1013,6 +1013,7 @@ class ProfessionIntelligence:
         self.lock = threading.RLock()
         self._cache: Dict[str, Any] = {}
         self._load_cache()
+        self._init_global_category_index()
 
     def _load_cache(self):
         if CACHE_FILE.exists():
@@ -1336,6 +1337,168 @@ class ProfessionIntelligence:
                 tags.add(t)
 
         return list(tags) if tags else ["node['office']", "node['craft']"]
+
+
+    def _init_global_category_index(self):
+        """Builds an exhaustive category-to-OSM index across all taxonomy entries."""
+        self._global_category_tag_map: Dict[str, List[str]] = {}
+        for _prof, _pdata in PROFESSION_TAXONOMY.items():
+            for _cat_entry in _pdata.get("employer_categories", []):
+                _cname = str(_cat_entry.get("category") or "").strip().lower()
+                _sterm = str(_cat_entry.get("search_term") or "").strip().lower()
+                _tags = list(_cat_entry.get("osm_tags") or [])
+                if _tags:
+                    if _cname:
+                        if _cname not in self._global_category_tag_map:
+                            self._global_category_tag_map[_cname] = []
+                        for _t in _tags:
+                            if _t not in self._global_category_tag_map[_cname]:
+                                self._global_category_tag_map[_cname].append(_t)
+                    if _sterm:
+                        if _sterm not in self._global_category_tag_map:
+                            self._global_category_tag_map[_sterm] = []
+                        for _t in _tags:
+                            if _t not in self._global_category_tag_map[_sterm]:
+                                self._global_category_tag_map[_sterm].append(_t)
+
+    def _match_custom_category_keywords(self, name_lower: str) -> List[str]:
+        """Rules-based keyword matcher for custom or user-added employer categories."""
+        custom_rules = [
+            (r"\b(?:hotel|wellnesshotel|resort|tagungshotel|ferienhotel)\b", ["node['tourism'='hotel']", "way['tourism'='hotel']"]),
+            (r"\b(?:hostel|jugendherberge)\b", ["node['tourism'='hostel']"]),
+            (r"\b(?:pension|gasthof|g[äa]stehaus)\b", ["node['tourism'='guest_house']"]),
+            (r"\b(?:restaurant|gastst[äa]tte|gasthaus|bistro|caf[eé]|pizzeria)\b", ["node['amenity'='restaurant']", "way['amenity'='restaurant']"]),
+            (r"\b(?:event|eventlocation|tagungszentrum|veranstaltung)\b", ["node['amenity'='events_venue']"]),
+            (r"\b(?:software|saas|it|systemhaus|webagentur|edv)\b", ["node['office'='it']", "node['office'='software']", "way['office'='it']"]),
+            (r"\b(?:zahnarzt|kieferorthop[äa]d)\b", ["node['amenity'='dentist']", "way['amenity'='dentist']"]),
+            (r"\b(?:krankenhaus|klinik|hospital)\b", ["node['amenity'='hospital']", "way['amenity'='hospital']"]),
+            (r"\b(?:pflege|seniorenheim|altenheim|pflegeheim)\b", ["node['amenity'='nursing_home']", "way['amenity'='nursing_home']"]),
+            (r"\b(?:apotheke)\b", ["node['amenity'='pharmacy']"]),
+            (r"\b(?:autohaus|kfz|werkstatt|autowerkstatt|reparatur)\b", ["node['shop'='car']", "node['shop'='car_repair']"]),
+            (r"\b(?:elektro|elektriker|installation)\b", ["node['craft'='electrician']", "way['craft'='electrician']"]),
+            (r"\b(?:tierarzt|tierklinik)\b", ["node['amenity'='veterinary']"]),
+            (r"\b(?:architekt|architektur)\b", ["node['office'='architect']"]),
+            (r"\b(?:steuerberater|steuerberatung)\b", ["node['office'='tax_advisor']", "node['office'='accountant']"]),
+            (r"\b(?:anwalt|rechtsanwalt|kanzlei)\b", ["node['office'='lawyer']"]),
+            (r"\b(?:bank|sparkasse|volksbank)\b", ["node['amenity'='bank']"]),
+            (r"\b(?:b[äa]cker|b[äa]ckerei)\b", ["node['shop'='bakery']"]),
+            (r"\b(?:metzger|metzgerei|fleischer)\b", ["node['shop'='butcher']"]),
+            (r"\b(?:supermarkt|einzelhandel)\b", ["node['shop'='supermarket']"]),
+            (r"\b(?:rechenzentrum|data\s*center)\b", ["node['telecom'='data_center']"]),
+            (r"\b(?:bau|bauunternehmen|hochbau|tiefbau)\b", ["node['craft'='builder']", "node['office'='construction_company']"]),
+        ]
+        for pattern, tags in custom_rules:
+            if re.search(pattern, name_lower, re.IGNORECASE):
+                return list(tags)
+        return []
+
+    def get_osm_tags_for_category(
+        self,
+        category_name: str,
+        profession_context: Optional[Union[Dict[str, Any], str]] = None,
+    ) -> List[str]:
+        """
+        Resolves a single employer category name into its designated OpenStreetMap tags.
+        Reuses existing profession taxonomy and precomputed employer-category OSM tags.
+        Never reclassifies category names as professions.
+        Returns [] if category cannot be resolved (no dangerous generic fallbacks).
+        """
+        clean_name = str(category_name or "").strip()
+        if not clean_name:
+            return []
+        name_lower = clean_name.lower()
+
+        # 1. Context-aware lookup: check specific profession's employer_categories first
+        if profession_context:
+            target_categories = []
+            if isinstance(profession_context, dict):
+                target_categories = profession_context.get("employer_categories", [])
+            elif isinstance(profession_context, str):
+                canonical = self.correct_spelling_and_typos(self.normalize_input(profession_context))
+                if canonical in PROFESSION_TAXONOMY:
+                    target_categories = PROFESSION_TAXONOMY[canonical].get("employer_categories", [])
+
+            for cat_entry in target_categories:
+                cat_title = str(cat_entry.get("category") or "").strip().lower()
+                cat_sterm = str(cat_entry.get("search_term") or "").strip().lower()
+                matched = False
+                if name_lower == cat_title or name_lower == cat_sterm:
+                    matched = True
+                elif len(name_lower) <= 3:
+                    if re.search(rf"\b{re.escape(name_lower)}\b", cat_title) or re.search(rf"\b{re.escape(name_lower)}\b", cat_sterm):
+                        matched = True
+                elif name_lower in cat_title or cat_title in name_lower:
+                    matched = True
+                if matched:
+                    tags = list(cat_entry.get("osm_tags") or [])
+                    if tags:
+                        return tags
+
+        # 2. Check Global Taxonomy Category Map (indexed across all 95 taxonomy professions)
+        if hasattr(self, "_global_category_tag_map") and self._global_category_tag_map:
+            if name_lower in self._global_category_tag_map:
+                return list(self._global_category_tag_map[name_lower])
+            norm_name = re.sub(r"[^a-z0-9äöüß]+", " ", name_lower).strip()
+            for key, tags in self._global_category_tag_map.items():
+                if norm_name == key:
+                    return list(tags)
+                if len(norm_name) <= 3:
+                    if re.search(rf"\b{re.escape(norm_name)}\b", key):
+                        return list(tags)
+                elif len(key) <= 3:
+                    if re.search(rf"\b{re.escape(key)}\b", norm_name):
+                        return list(tags)
+                elif norm_name in key or key in norm_name:
+                    return list(tags)
+
+        # 3. Domain Keyword Matcher for Custom Categories
+        custom_tags = self._match_custom_category_keywords(name_lower)
+        if custom_tags:
+            return custom_tags
+
+        return []
+
+    def resolve_osm_tags_for_categories(
+        self,
+        categories: List[str],
+        profession_context: Optional[Union[Dict[str, Any], str]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Resolves a list of employer category names into deduplicated OpenStreetMap tags.
+        Supports all selected categories without arbitrary truncation.
+        Returns:
+            {
+                "resolved_tags": List[str],
+                "category_mappings": Dict[str, List[str]],
+                "unresolved_categories": List[str],
+            }
+        """
+        resolved_tags: List[str] = []
+        category_mappings: Dict[str, List[str]] = {}
+        unresolved_categories: List[str] = []
+
+        seen_tags = set()
+        for cat in categories:
+            cat_clean = str(cat or "").strip()
+            if not cat_clean:
+                continue
+
+            tags = self.get_osm_tags_for_category(cat_clean, profession_context=profession_context)
+            if tags:
+                category_mappings[cat_clean] = tags
+                for t in tags:
+                    if t not in seen_tags:
+                        seen_tags.add(t)
+                        resolved_tags.append(t)
+            else:
+                unresolved_categories.append(cat_clean)
+                category_mappings[cat_clean] = []
+
+        return {
+            "resolved_tags": resolved_tags,
+            "category_mappings": category_mappings,
+            "unresolved_categories": unresolved_categories,
+        }
 
 
 # Global singleton instance

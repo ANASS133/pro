@@ -2139,6 +2139,10 @@
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                                         <span>Excel (.xlsx)</span>
                                     </button>
+                                    <button type="button" class="ptask-action-btn ptask-btn-delete btn-delete-task" data-job-id="${escapeHtml(task.job_id)}" title="Aufgabe löschen">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                                        <span>Löschen</span>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -2631,6 +2635,7 @@
             previousTasksSection: document.getElementById("previous_tasks_section_1"),
             previousTasksList: document.getElementById("previous_tasks_list_1"),
             previousTasksCount: document.getElementById("previous_tasks_count_1"),
+            clearPreviousTasksBtn: document.getElementById("btn_clear_previous_tasks_1"),
             togglePreviousTasksBtn: document.getElementById("toggle_previous_tasks_btn_1"),
             previousTasksToggleArea: document.getElementById("previous_tasks_toggle_area_1"),
             activeFilter: "all",
@@ -2833,6 +2838,66 @@
                         await triggerAutoJobDownload(jobId, "all");
                     } catch (_) {}
                     return;
+                }
+                const deleteBtn = target.closest(".btn-delete-task");
+                if (deleteBtn) {
+                    const jobId = deleteBtn.dataset.jobId;
+                    if (!jobId) return;
+                    if (!confirm("Möchten Sie diese Aufgabe wirklich löschen?")) return;
+                    try {
+                        deleteBtn.disabled = true;
+                        const resp = await fetch(`/api/inline/auto-jobs/delete/${encodeURIComponent(jobId)}`, { method: "POST" });
+                        const res = await resp.json().catch(() => ({}));
+                        if (res && res.success) {
+                            if (searchUi1.autoJobId === jobId) {
+                                searchUi1.autoJobId = "";
+                                if (searchUi1.progressPanel) {
+                                    searchUi1.progressPanel.classList.remove("visible");
+                                }
+                                if (searchUi1.pollTimer) {
+                                    clearInterval(searchUi1.pollTimer);
+                                    searchUi1.pollTimer = null;
+                                }
+                            }
+                            await loadPreviousTasks(searchUi1);
+                        } else {
+                            alert(res.message || "Löschen fehlgeschlagen");
+                        }
+                    } catch (err) {
+                        alert("Fehler beim Löschen: " + (err.message || err));
+                    } finally {
+                        deleteBtn.disabled = false;
+                    }
+                    return;
+                }
+            });
+        }
+
+        if (searchUi1.clearPreviousTasksBtn) {
+            searchUi1.clearPreviousTasksBtn.addEventListener("click", async (e) => {
+                e.stopPropagation();
+                if (!confirm("Möchten Sie wirklich alle vorherigen Aufgaben löschen?")) return;
+                try {
+                    searchUi1.clearPreviousTasksBtn.disabled = true;
+                    const resp = await fetch("/api/inline/auto-jobs/clear?all=1", { method: "POST" });
+                    const res = await resp.json().catch(() => ({}));
+                    if (res && res.success) {
+                        searchUi1.autoJobId = "";
+                        if (searchUi1.progressPanel) {
+                            searchUi1.progressPanel.classList.remove("visible");
+                        }
+                        if (searchUi1.pollTimer) {
+                            clearInterval(searchUi1.pollTimer);
+                            searchUi1.pollTimer = null;
+                        }
+                        await loadPreviousTasks(searchUi1);
+                    } else {
+                        alert(res.message || "Löschen fehlgeschlagen");
+                    }
+                } catch (err) {
+                    alert("Fehler beim Löschen: " + (err.message || err));
+                } finally {
+                    searchUi1.clearPreviousTasksBtn.disabled = false;
                 }
             });
         }

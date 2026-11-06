@@ -21990,6 +21990,85 @@ button.ptask-btn-reopen:hover,
     color: #020617 !important;
 }
 
+/* Delete Task Button on Card */
+.ptask-btn-delete,
+button.ptask-btn-delete,
+.btn-delete-task {
+    background: #ffffff !important;
+    color: #64748b !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03) !important;
+    transition: all 0.15s ease !important;
+}
+
+.ptask-btn-delete *,
+button.ptask-btn-delete *,
+.btn-delete-task * {
+    color: #64748b !important;
+    font-weight: 600 !important;
+}
+
+.ptask-btn-delete svg,
+button.ptask-btn-delete svg,
+.btn-delete-task svg {
+    color: #94a3b8 !important;
+    stroke: #94a3b8 !important;
+}
+
+.ptask-btn-delete:hover,
+button.ptask-btn-delete:hover,
+.btn-delete-task:hover {
+    background: #fef2f2 !important;
+    border-color: #fecaca !important;
+    color: #dc2626 !important;
+}
+
+.ptask-btn-delete:hover *,
+button.ptask-btn-delete:hover *,
+.btn-delete-task:hover * {
+    color: #dc2626 !important;
+}
+
+.ptask-btn-delete:hover svg,
+button.ptask-btn-delete:hover svg,
+.btn-delete-task:hover svg {
+    color: #dc2626 !important;
+    stroke: #dc2626 !important;
+}
+
+/* Header Clear All & Toggle Actions */
+.previous-tasks-header-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.previous-tasks-clear-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 4px 10px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.previous-tasks-clear-btn:hover {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #dc2626;
+}
+
+.previous-tasks-clear-btn:hover svg {
+    color: #dc2626;
+    stroke: #dc2626;
+}
+
 /* ==========================================================================
    Manual CAPTCHA Review Dashboard Section & Cards
    ========================================================================== */

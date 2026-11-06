@@ -8368,6 +8368,104 @@ def api_inline_stop_auto_job(job_id: str):
     return jsonify({"success": True, "message": "Stop der Auto-Extraktion angefordert"})
 
 
+@app.route("/api/inline/auto-jobs/<job_id>", methods=["DELETE"])
+@app.route("/api/inline/auto-jobs/delete/<job_id>", methods=["POST", "DELETE"])
+def api_inline_delete_auto_job(job_id: str):
+    """Deletes an auto-extraction task from history, memory, and disk."""
+    from services.manual_captcha_service import get_manual_captcha_manager
+    get_manual_captcha_manager().cancel_all_for_job(job_id)
+
+    deleted = False
+    run_id = None
+    with auto_extraction_jobs_lock:
+        job = auto_extraction_jobs.get(job_id)
+        if not job:
+            job = _recover_auto_job_from_progress(job_id)
+        if job:
+            deleted = True
+            run_id = str(job.get("search_run_id") or "")
+            job["is_running"] = False
+            job["stop_requested"] = True
+            auto_extraction_jobs.pop(job_id, None)
+            _save_auto_extraction_jobs_to_disk()
+
+    # Clean up associated progress file
+    try:
+        p_file = Path("data") / "progress" / f"auto_extraction_progress_{job_id}.json"
+        if p_file.exists():
+            p_file.unlink()
+    except Exception as exc:
+        logger.debug("Failed deleting progress file for %s: %s", job_id, exc)
+
+    # Disassociate from search runs if linked
+    if run_id:
+        try:
+            with search_runs_lock:
+                s_run = search_runs.get(run_id)
+                if s_run and isinstance(s_run, dict) and s_run.get("auto_job_id") == job_id:
+                    s_run["auto_job_id"] = None
+                    _save_search_runs_to_disk()
+        except Exception:
+            pass
+
+    with status_lock:
+        if auto_extraction_status.get("job_id") == job_id:
+            auto_extraction_status["job_id"] = None
+            auto_extraction_status["is_running"] = False
+            auto_extraction_status["stop_requested"] = False
+            auto_extraction_status["paused"] = False
+
+    if not deleted:
+        return jsonify({"success": False, "message": "Aufgabe nicht gefunden"}), 404
+
+    return jsonify({"success": True, "message": "Aufgabe erfolgreich gelöscht", "job_id": job_id})
+
+
+@app.route("/api/inline/auto-jobs/clear", methods=["POST", "DELETE"])
+def api_inline_clear_auto_jobs():
+    """Deletes all completed/stopped tasks (or all tasks if requested)."""
+    from services.manual_captcha_service import get_manual_captcha_manager
+    include_running = request.args.get("all", "false").lower() in ("1", "true", "yes")
+    data = request.get_json(silent=True) or {}
+    if data.get("all"):
+        include_running = True
+
+    deleted_count = 0
+    deleted_ids = []
+    with auto_extraction_jobs_lock:
+        to_delete = []
+        for jid, job in list(auto_extraction_jobs.items()):
+            if not isinstance(job, dict):
+                to_delete.append(jid)
+                continue
+            if include_running or not job.get("is_running"):
+                to_delete.append(jid)
+
+        for jid in to_delete:
+            get_manual_captcha_manager().cancel_all_for_job(jid)
+            job = auto_extraction_jobs.pop(jid, None)
+            if job and job.get("is_running"):
+                job["stop_requested"] = True
+                job["is_running"] = False
+            try:
+                p_file = Path("data") / "progress" / f"auto_extraction_progress_{jid}.json"
+                if p_file.exists():
+                    p_file.unlink()
+            except Exception:
+                pass
+            deleted_count += 1
+            deleted_ids.append(jid)
+
+        _save_auto_extraction_jobs_to_disk()
+
+    with status_lock:
+        if auto_extraction_status.get("job_id") in deleted_ids:
+            auto_extraction_status["job_id"] = None
+            auto_extraction_status["is_running"] = False
+
+    return jsonify({"success": True, "message": f"{deleted_count} Aufgaben gelöscht", "deleted_count": deleted_count})
+
+
 @app.route("/api/inline/auto-jobs/download/<job_id>", methods=["GET"])
 def api_inline_download_auto_job(job_id: str):
     with auto_extraction_jobs_lock:

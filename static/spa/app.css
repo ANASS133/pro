@@ -21696,6 +21696,16 @@ button.ptask-btn-delete:hover svg,
     background: #1d4ed8;
 }
 
+.mch-btn-truecaptcha {
+    background: #0f766e;
+    color: #ffffff;
+    border-color: #0f766e;
+}
+.mch-btn-truecaptcha:hover {
+    background: #115e59;
+    border-color: #115e59;
+}
+
 .mch-btn-browser {
     background: #ffffff;
     color: #2563eb;

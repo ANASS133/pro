@@ -507,6 +507,7 @@ class ArbeitsagenturDetailExtractor:
         driver,
         job_url: str,
         solver=None,
+        manual_captcha_handler=None,
     ) -> Dict[str, Any]:
         """
         Reuses an existing Selenium WebDriver session to handle dynamic JavaScript rendering
@@ -560,6 +561,48 @@ class ArbeitsagenturDetailExtractor:
                     challenge_fingerprint=ch_fp,
                     details="In-page contact captcha encountered on Arbeitsagentur",
                 )
+
+                manual_handoff_recorded = [False]
+
+                def route_to_live_manual_review(reason: str) -> bool:
+                    """Keep this browser session alive while the dashboard handles the challenge."""
+                    if not callable(manual_captcha_handler):
+                        return False
+                    try:
+                        current_images = driver.find_elements(
+                            By.XPATH,
+                            "//*[@id='kontaktdaten-captcha-image'] | //img[contains(@src, 'captcha')]",
+                        )
+                        image_element = current_images[0] if current_images else captcha_imgs[0]
+                        result["logs"].append(f"Routing in-page CAPTCHA to live manual review: {reason}")
+                        resolved = bool(manual_captcha_handler(
+                            domain="arbeitsagentur.de",
+                            corr_id=corr_id,
+                            challenge_type="image_text",
+                            captcha_img_element=image_element,
+                            job_url=job_url,
+                        ))
+                        if not resolved:
+                            # The shared handler records the dismissed/expired/failed outcome.
+                            manual_handoff_recorded[0] = True
+                        return resolved
+                    except Exception as manual_err:
+                        logger.error("Live manual CAPTCHA handoff failed: %s", manual_err)
+                        result["logs"].append(f"Live manual CAPTCHA handoff failed: {manual_err}")
+                        return False
+
+                def mark_manual_required(reason: str) -> None:
+                    if not manual_handoff_recorded[0]:
+                        tracker.record_manual_verification_required(
+                            correlation_id=corr_id,
+                            worker_id=worker_id,
+                            domain="arbeitsagentur.de",
+                            reason=reason,
+                        )
+                    result["manual_review_required"] = True
+                    result["manual_review_reason"] = reason
+                    result["extraction_status"] = "manual_required"
+
                 try:
                     img_src = captcha_imgs[0].get_attribute("src") or ""
                     captcha_text = None
@@ -592,39 +635,25 @@ class ArbeitsagenturDetailExtractor:
                             result["logs"].append("Target website confirmed in-page captcha verification")
                         else:
                             reason = "Target website still presents captcha after submit"
-                            tracker.record_manual_verification_required(
-                                correlation_id=corr_id,
-                                worker_id=worker_id,
-                                domain="arbeitsagentur.de",
-                                reason=reason,
-                            )
-                            result["manual_review_required"] = True
-                            result["manual_review_reason"] = reason
-                            result["extraction_status"] = "manual_required"
-                            result["logs"].append("Target website did NOT accept captcha (manual verification required)")
+                            if route_to_live_manual_review(reason):
+                                result["logs"].append("Manual CAPTCHA verification completed in the live worker session")
+                            else:
+                                mark_manual_required(reason)
+                                result["logs"].append("Target website did NOT accept captcha (manual verification required)")
                     else:
                         reason = "No solution text returned by recognition service"
-                        tracker.record_manual_verification_required(
-                            correlation_id=corr_id,
-                            worker_id=worker_id,
-                            domain="arbeitsagentur.de",
-                            reason=reason,
-                        )
-                        result["manual_review_required"] = True
-                        result["manual_review_reason"] = reason
-                        result["extraction_status"] = "manual_required"
+                        if route_to_live_manual_review(reason):
+                            result["logs"].append("Manual CAPTCHA verification completed in the live worker session")
+                        else:
+                            mark_manual_required(reason)
                 except Exception as c_err:
                     logger.debug("Captcha solving error: %s", c_err)
-                    tracker.record_manual_verification_required(
-                        correlation_id=corr_id,
-                        worker_id=worker_id,
-                        domain="arbeitsagentur.de",
-                        reason=f"Captcha submission failed: {c_err}",
-                    )
+                    reason = f"Captcha submission failed: {c_err}"
                     result["logs"].append(f"Captcha handling failed: {c_err}")
-                    result["manual_review_required"] = True
-                    result["manual_review_reason"] = f"Captcha submission failed: {c_err}"
-                    result["extraction_status"] = "manual_required"
+                    if route_to_live_manual_review(reason):
+                        result["logs"].append("Manual CAPTCHA verification completed in the live worker session")
+                    else:
+                        mark_manual_required(reason)
 
             # Extract rendered DOM page source
             rendered_html = driver.page_source
@@ -725,6 +754,7 @@ class ArbeitsagenturDetailExtractor:
         driver=None,
         captcha_solver=None,
         on_stage_change=None,
+        manual_captcha_handler=None,
     ) -> Dict[str, Any]:
         """
         Executes the 4-stage smart extraction workflow for an Arbeitsagentur vacancy.
@@ -776,7 +806,12 @@ class ArbeitsagenturDetailExtractor:
             if on_stage_change:
                 on_stage_change("Selenium Fallback")
             logs.append("Stage 2 missing direct application channels, falling back to Stage 3 (Selenium)")
-            sel_details = self.extract_with_selenium(driver, source_url, solver=captcha_solver)
+            sel_details = self.extract_with_selenium(
+                driver,
+                source_url,
+                solver=captcha_solver,
+                manual_captcha_handler=manual_captcha_handler,
+            )
             logs.extend(sel_details.get("logs", []))
 
             # Merge Selenium results over Stage 2

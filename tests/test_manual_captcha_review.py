@@ -488,6 +488,14 @@ class ManualCaptchaEndpointsTest(unittest.TestCase):
         self.assertEqual(data["captcha_image_base64"], VALID_PNG)
         self.assertTrue(ch.image_valid)
 
+    def test_truecaptcha_auto_trigger_script_contract(self):
+        js_content = Path("static/spa/sections/search.js").read_text(encoding="utf-8")
+        self.assertIn("function cancelTrueCaptchaTimer", js_content)
+        self.assertIn("const duration = 4000;", js_content)
+        self.assertIn("btn.click()", js_content)
+        self.assertIn("Mit TrueCaptcha lösen (${remainingSec}s)", js_content)
+        self.assertIn("cancelTrueCaptchaTimer(ui, chId);", js_content)
+
 
 if __name__ == "__main__":
     unittest.main()

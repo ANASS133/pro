@@ -1,0 +1,13 @@
+{
+  "label": "BASELINE",
+  "jobs": 10,
+  "total_time_sec": 74.79,
+  "avg_time_sec": 7.48,
+  "jobs_per_min": 8.02,
+  "fast_http_count": 0,
+  "selenium_count": 10,
+  "emails_count": 4,
+  "forms_count": 8,
+  "ram_start_mb": 105.4,
+  "ram_end_mb": 120.14
+}

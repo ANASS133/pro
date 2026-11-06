@@ -4,6 +4,13 @@ import unittest
 from pathlib import Path
 import pandas as pd
 
+EXPECTED_EXCEL_COLUMNS = [
+    "title", "company", "arbeitsgeber", "city", "location", "start_date",
+    "email", "email_type", "phone", "contact_person", "anrede",
+    "job_listing_url", "employer_website", "direct_application_url",
+    "form_link", "application_method", "source", "extraction_status",
+]
+
 from app import (
     app,
     auto_extraction_jobs,
@@ -164,6 +171,7 @@ class StopAndDownloadTestCase(unittest.TestCase):
         excel_bytes = io.BytesIO(resp.data)
         df = pd.read_excel(excel_bytes)
         self.assertGreaterEqual(len(df), 1)
+        self.assertEqual(list(df.columns), EXPECTED_EXCEL_COLUMNS)
         self.assertIn("email", df.columns)
         emails = df["email"].dropna().tolist()
         self.assertIn("bewerbung@grandhotel.test", emails)

@@ -14,7 +14,7 @@ Tests:
    - Missing email -> discovers application form.
    - Missing both -> preserves opportunity.
 3. Excel Export:
-   - Sheet 1 (Ausbildungsplätze): Exactly 21 columns in exact order.
+   - Every sheet: Exactly 18 columns in the Excel-only export order.
    - Sheet 2 (Unbestätigte Betriebe (Maps)): Separately identifies unconfirmed Google Maps employers.
    - No unconfirmed Google Maps company classified as active Ausbildung provider in Sheet 1.
 """
@@ -28,10 +28,11 @@ import openpyxl
 import pandas as pd
 
 from app import (
+    EXCEL_EXPORT_COLUMNS,
     _prepare_download_jobs,
     _save_auto_extraction_export_records,
 )
-from scraper.application_form_discovery import EXCEL_COLUMNS, FormDiscoveryResult
+from scraper.application_form_discovery import FormDiscoveryResult
 from scraper.google_maps_ausbildung_verifier import GoogleMapsAusbildungVerifier
 from scraper.working_email_extractor import WorkingEmailExtractor
 
@@ -225,8 +226,8 @@ class TestGoogleMapsAusbildungException(unittest.TestCase):
                                 self.assertEqual(processed.get("form_link"), "https://residenz.softgarden.io/apply")
                                 self.assertEqual(processed.get("application_method"), "form")
 
-    def test_excel_export_multi_sheet_and_21_columns(self):
-        """Excel export writes verified vacancies into Sheet 1 (21 columns) and unconfirmed Maps in Sheet 2."""
+    def test_excel_export_multi_sheet_and_18_columns(self):
+        """Excel export writes both verified and unconfirmed sheets with the exact 18 columns."""
         verified_portal_job = {
             "title": "Ausbildung zum Koch (m/w/d)",
             "company": "Gasthof Epe",
@@ -305,11 +306,11 @@ class TestGoogleMapsAusbildungException(unittest.TestCase):
         self.assertIn("Ausbildungsplätze", sheet_names)
         self.assertIn("Unbestätigte Betriebe (Maps)", sheet_names)
 
-        # Inspect Sheet 1: Exactly 21 columns
+        # Inspect Sheet 1: exact Excel-only schema
         sheet1 = wb["Ausbildungsplätze"]
         headers1 = [cell.value for cell in sheet1[1]]
-        self.assertEqual(headers1, EXCEL_COLUMNS)
-        self.assertEqual(len(headers1), 21)
+        self.assertEqual(headers1, EXCEL_EXPORT_COLUMNS)
+        self.assertEqual(len(headers1), 18)
 
         # Sheet 1 must contain the 2 verified vacancies and NOT the unconfirmed café
         sheet1_companies = [sheet1.cell(row=r, column=2).value for r in range(2, sheet1.max_row + 1)]
@@ -319,7 +320,10 @@ class TestGoogleMapsAusbildungException(unittest.TestCase):
 
         # Sheet 2 must contain the unconfirmed Google Maps company
         sheet2 = wb["Unbestätigte Betriebe (Maps)"]
-        sheet2_companies = [sheet2.cell(row=r, column=1).value for r in range(2, sheet2.max_row + 1)]
+        headers2 = [cell.value for cell in sheet2[1]]
+        self.assertEqual(headers2, EXCEL_EXPORT_COLUMNS)
+        company_column = headers2.index("company") + 1
+        sheet2_companies = [sheet2.cell(row=r, column=company_column).value for r in range(2, sheet2.max_row + 1)]
         self.assertIn("Café Central Ahaus", sheet2_companies)
 
         wb.close()

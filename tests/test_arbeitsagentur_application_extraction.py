@@ -13,12 +13,20 @@ Covers the 8 core requirements:
 """
 
 import os
+import base64
+import io
 import tempfile
+import threading
+import time
 import unittest
 from unittest.mock import MagicMock, patch
 import pandas as pd
+from PIL import Image, ImageDraw
+from selenium.common.exceptions import ElementNotInteractableException
 
 from scraper.arbeitsagentur_extractor import ArbeitsagenturDetailExtractor, detect_ats_or_url_type
+from scraper.working_email_extractor import WorkingEmailExtractor
+from services.manual_captcha_service import ManualCaptchaManager
 from scraper.application_form_discovery import (
     EXCEL_COLUMNS,
     classify_application_method,
@@ -88,6 +96,14 @@ SSB_AG_HTML = """
 </body>
 </html>
 """
+
+
+def captcha_fixture():
+    image = Image.new("RGB", (120, 40), "white")
+    ImageDraw.Draw(image).text((5, 5), "A7K9", fill="black")
+    output = io.BytesIO()
+    image.save(output, "PNG")
+    return "data:image/png;base64," + base64.b64encode(output.getvalue()).decode("ascii")
 
 
 class TestArbeitsagenturApplicationExtraction(unittest.TestCase):
@@ -211,6 +227,140 @@ class TestArbeitsagenturApplicationExtraction(unittest.TestCase):
         self.assertIn("stellenmarkt.ssb-ag.de", parsed["direct_application_url"])
         self.assertTrue(parsed["has_form"])
         self.assertEqual(parsed["application_method"], "form")
+
+    def _assert_failed_auto_submission_becomes_live_manual_challenge(self, failure_mode):
+        manager = ManualCaptchaManager()
+        driver = MagicMock()
+        driver.current_url = "https://www.arbeitsagentur.de/jobsuche/jobdetail/captcha-001"
+        driver.page_source = "<html><body>CAPTCHA protected application details</body></html>"
+
+        image = MagicMock()
+        image.size = {"width": 120, "height": 40}
+        image.get_attribute.return_value = "https://www.arbeitsagentur.de/captcha/image.png"
+        input_el = MagicMock()
+        submit_btn = MagicMock()
+        state = {"solved": False, "submit_count": 0}
+
+        if failure_mode == "not_interactable":
+            input_el.send_keys.side_effect = [ElementNotInteractableException("hidden input"), None]
+            solve_on_submit_number = 1
+        else:
+            solve_on_submit_number = 2
+
+        def click_submit():
+            state["submit_count"] += 1
+            if state["submit_count"] >= solve_on_submit_number:
+                state["solved"] = True
+
+        submit_btn.click.side_effect = click_submit
+
+        def find_elements(_by, selector):
+            if "kontaktdaten-captcha-image" in selector or "contains(@src, 'captcha')" in selector:
+                return [] if state["solved"] else [image]
+            if "kontaktdaten-captcha-input" in selector or "contains(@name, 'captcha')" in selector:
+                return [input_el]
+            if "kontaktdaten-captcha-absenden-button" in selector or "button[@type='submit']" in selector:
+                return [submit_btn]
+            return []
+
+        driver.find_elements.side_effect = find_elements
+        solver = MagicMock()
+        solver.job_id = "job_live_manual"
+        solver.worker_id = 3
+        solver.solve_captcha.return_value = "AUTO7"
+        image_response = MagicMock(status_code=200, content=b"captcha-bytes")
+        result_holder = {}
+
+        worker = WorkingEmailExtractor.__new__(WorkingEmailExtractor)
+        worker.driver = driver
+        worker.job_id = "job_live_manual"
+        worker.worker_id = 3
+        worker.current_job = {
+            "source": "Arbeitsagentur",
+            "title": "Test-Ausbildung",
+            "company": "Testbetrieb GmbH",
+            "url": driver.current_url,
+        }
+        worker.search_run_id = "run_live_manual"
+        worker.current_job_index = 4
+        worker.on_stage_change = None
+        worker.stats = {"captchas_solved": 0}
+        worker._stats_lock = threading.Lock()
+        worker.is_blocked_page = lambda: not state["solved"]
+        worker._employer_contact_details_visible = lambda timeout=3.0: state["solved"]
+
+        def run_extraction():
+            result_holder["result"] = self.extractor.extract_with_selenium(
+                driver,
+                driver.current_url,
+                solver=solver,
+                manual_captcha_handler=worker._request_manual_captcha_review,
+            )
+
+        with patch(
+            "services.manual_captcha_service.get_manual_captcha_manager",
+            return_value=manager,
+        ), patch.object(
+            self.extractor.session,
+            "get",
+            return_value=image_response,
+        ), patch(
+            "services.manual_captcha_service.capture_loaded_captcha",
+            return_value=(captcha_fixture(), ""),
+        ), patch("scraper.arbeitsagentur_extractor.time.sleep", return_value=None):
+            thread = threading.Thread(target=run_extraction)
+            thread.start()
+
+            challenge = None
+            deadline = time.time() + 1.0
+            while time.time() < deadline:
+                active = manager.get_challenges_for_job("job_live_manual", active_only=True)
+                if active:
+                    challenge = manager.get_challenge(active[0]["challenge_id"])
+                    break
+                time.sleep(0.01)
+
+            self.assertIsNotNone(challenge, "failed automatic submission must create a live manual challenge")
+            self.assertTrue(thread.is_alive(), "worker must wait while the manual challenge is active")
+            self.assertEqual(challenge.challenge_type, "image_text")
+            self.assertTrue(challenge.image_valid)
+            self.assertIs(challenge.driver_ref, driver)
+
+            solved, message = manager.submit_solution(challenge.challenge_id, "MANUAL7")
+            self.assertTrue(solved, message)
+            thread.join(timeout=1.0)
+
+        self.assertFalse(thread.is_alive(), "worker must resume after the manual solution succeeds")
+        self.assertEqual(challenge.status, "solved")
+        self.assertIn("MANUAL7", [call.args[0] for call in input_el.send_keys.call_args_list])
+
+    def test_element_not_interactable_routes_to_live_manual_captcha(self):
+        self._assert_failed_auto_submission_becomes_live_manual_challenge("not_interactable")
+
+    def test_rejected_auto_code_routes_to_live_manual_captcha(self):
+        self._assert_failed_auto_submission_becomes_live_manual_challenge("still_present")
+
+    def test_worker_forwards_live_manual_handler_to_arbeitsagentur_extractor(self):
+        worker = WorkingEmailExtractor.__new__(WorkingEmailExtractor)
+        worker.driver = MagicMock()
+        worker.captcha_solver = MagicMock()
+        worker.aa_extractor = MagicMock()
+        worker.aa_extractor.extract_vacancy.return_value = {
+            "email": "jobs@example.de",
+            "extraction_status": "completed",
+        }
+        worker.stats = {"processed": 0, "emails_found": 0}
+        worker.known_emails = set()
+
+        result = worker.process_job({
+            "source": "Arbeitsagentur",
+            "url": "https://www.arbeitsagentur.de/jobsuche/jobdetail/forward-001",
+        })
+
+        self.assertEqual(result["email"], "jobs@example.de")
+        handler = worker.aa_extractor.extract_vacancy.call_args.kwargs["manual_captcha_handler"]
+        self.assertIs(handler.__self__, worker)
+        self.assertIs(handler.__func__, WorkingEmailExtractor._request_manual_captcha_review)
 
     # -------------------------------------------------------------------------
     # 6. Multiple application methods

@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import urlparse
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -45,7 +46,6 @@ from scraper.ihk_scraper import IhkScraper
 from scraper.google_maps_scraper import GoogleMapsBusinessScraper
 from scraper.working_email_extractor import WorkingEmailExtractor
 from scraper.application_form_discovery import (
-    EXCEL_COLUMNS,
     normalize_job_opportunity_row,
 )
 from services.manual_captcha_service import (
@@ -55,6 +55,29 @@ from services.manual_captcha_service import (
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Public Excel contract only. Backend/extraction records intentionally retain
+# their richer schema and are projected to these columns only when writing XLSX.
+EXCEL_EXPORT_COLUMNS: List[str] = [
+    "title",
+    "company",
+    "arbeitsgeber",
+    "city",
+    "location",
+    "start_date",
+    "email",
+    "email_type",
+    "phone",
+    "contact_person",
+    "anrede",
+    "job_listing_url",
+    "employer_website",
+    "direct_application_url",
+    "form_link",
+    "application_method",
+    "source",
+    "extraction_status",
+]
 
 load_dotenv()
 
@@ -508,13 +531,100 @@ def _load_spreadsheet_records(file_path: Path) -> List[Dict]:
     return rows
 
 
+def _is_valid_export_url(value: Any) -> bool:
+    candidate = str(value or "").strip()
+    if not candidate or candidate.lower() in {"nan", "none", "null", "#"}:
+        return False
+    if any(candidate.lower().startswith(prefix) for prefix in ("javascript:", "mailto:", "data:", "blob:")):
+        return False
+    try:
+        parsed = urlparse(candidate)
+    except (TypeError, ValueError):
+        return False
+    return parsed.scheme.lower() in {"http", "https"} and bool(parsed.netloc) and " " not in candidate
+
+
+def _first_valid_export_url(*values: Any) -> str:
+    for value in values:
+        candidate = str(value or "").strip()
+        if _is_valid_export_url(candidate):
+            return candidate
+    return ""
+
+
+def _neutralize_excel_formula(value: Any) -> Any:
+    """Keep untrusted export text from being interpreted as a spreadsheet formula."""
+    if not isinstance(value, str):
+        return value
+    stripped = value.lstrip()
+    if stripped.startswith(("=", "+", "-", "@")):
+        leading_space_count = len(value) - len(stripped)
+        return value[:leading_space_count] + "'" + stripped
+    return value
+
+
+def _build_excel_export_dataframe(records: Iterable[Dict]) -> pd.DataFrame:
+    """Project rich job records into the exact Excel-only 18-column contract."""
+    rows: List[Dict] = []
+    for raw_record in records or []:
+        if not isinstance(raw_record, dict):
+            continue
+        normalized = normalize_job_opportunity_row(raw_record)
+
+        normalized["job_listing_url"] = _first_valid_export_url(
+            normalized.get("job_listing_url"),
+            raw_record.get("job_listing_url"),
+            raw_record.get("url"),
+            raw_record.get("original_url"),
+        )
+        normalized["employer_website"] = _first_valid_export_url(
+            normalized.get("employer_website"),
+            raw_record.get("employer_website"),
+            raw_record.get("website"),
+            raw_record.get("company_website"),
+        )
+        normalized["form_link"] = _first_valid_export_url(
+            normalized.get("form_link"),
+            raw_record.get("form_link"),
+        )
+        normalized["direct_application_url"] = _first_valid_export_url(
+            normalized.get("direct_application_url"),
+            raw_record.get("direct_application_url"),
+            normalized.get("form_link"),
+            raw_record.get("form_link"),
+        )
+        if not normalized["direct_application_url"]:
+            excluded_destinations = {
+                normalized.get("job_listing_url"),
+                normalized.get("employer_website"),
+            }
+            for legacy_link in (raw_record.get("bewerbung_link"), raw_record.get("apply_url")):
+                candidate = _first_valid_export_url(legacy_link)
+                if candidate and candidate not in excluded_destinations:
+                    normalized["direct_application_url"] = candidate
+                    break
+        if (
+            normalized.get("direct_application_url")
+            and str(normalized.get("application_method") or "").lower() in {"", "none", "unknown"}
+        ):
+            normalized["application_method"] = "external_link"
+
+        rows.append({
+            column: _neutralize_excel_formula(normalized.get(column, ""))
+            for column in EXCEL_EXPORT_COLUMNS
+        })
+
+    return pd.DataFrame(rows, columns=EXCEL_EXPORT_COLUMNS)
+
+
 def _write_spreadsheet_records(file_path: Path, records: List[Dict]) -> None:
-    df = pd.DataFrame(records or [])
     suffix = str(file_path.suffix or "").lower()
     if suffix == ".csv":
+        df = pd.DataFrame(records or [])
         df.to_csv(file_path, index=False, encoding="utf-8")
         return
     if suffix in {".xlsx", ".xls"}:
+        df = _build_excel_export_dataframe(records)
         df.to_excel(file_path, index=False)
         return
     raise ValueError(f"Unsupported spreadsheet type: {file_path.suffix}")
@@ -2282,8 +2392,9 @@ def run_auto_extraction():
             extractor.close()
 
 
-def _save_auto_extraction_jobs_to_disk() -> None:
+def _save_auto_extraction_jobs_to_disk(immediate: bool = False) -> None:
     try:
+        from services.debounced_writer import get_debounced_writer
         AUTO_JOBS_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
         with auto_extraction_jobs_lock:
             serializable_jobs = {}
@@ -2293,10 +2404,8 @@ def _save_auto_extraction_jobs_to_disk() -> None:
                         k: v for k, v in jdata.items()
                         if not k.startswith("_") and k != "thread"
                     }
-        tmp_path = AUTO_JOBS_STORE_PATH.with_suffix(".tmp")
-        with tmp_path.open("w", encoding="utf-8") as f:
-            json.dump(serializable_jobs, f, ensure_ascii=False)
-        tmp_path.replace(AUTO_JOBS_STORE_PATH)
+        writer = get_debounced_writer(AUTO_JOBS_STORE_PATH, min_interval_seconds=1.5)
+        writer.schedule_write(serializable_jobs, immediate=immediate)
     except Exception as exc:
         logger.warning("Could not persist auto extraction jobs: %s", exc)
 
@@ -2428,9 +2537,10 @@ def normalize_job_platform(job_record: Optional[Dict]) -> str:
     return "Arbeitsagentur"
 
 
-def _persist_job_progress(job_id: str, jobs: List[Dict], current_index: int, job_meta: Optional[Dict] = None) -> None:
-    """Persists progress to disk, ensuring all jobs and stats are preserved."""
+def _persist_job_progress(job_id: str, jobs: List[Dict], current_index: int, job_meta: Optional[Dict] = None, immediate: bool = False) -> None:
+    """Persists progress to disk, ensuring all jobs and stats are preserved with debounced atomic writes."""
     try:
+        from services.debounced_writer import get_debounced_writer
         PROGRESS_DIR.mkdir(parents=True, exist_ok=True)
         stats = {
             "emails_found": job_meta.get("emails_found", 0) if job_meta else 0,
@@ -2450,12 +2560,11 @@ def _persist_job_progress(job_id: str, jobs: List[Dict], current_index: int, job
             "jobs": jobs,
             "processed_jobs": jobs[:current_index] if current_index >= 0 else [],
         }
+        is_terminal = immediate or bool(job_meta and job_meta.get("status") in ("completed", "stopped", "paused"))
         spec_path = PROGRESS_DIR / f"auto_extraction_progress_{job_id}.json"
-        with spec_path.open("w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
         gen_path = PROGRESS_DIR / "auto_extraction_progress.json"
-        with gen_path.open("w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
+        get_debounced_writer(spec_path, min_interval_seconds=1.5).schedule_write(payload, immediate=is_terminal)
+        get_debounced_writer(gen_path, min_interval_seconds=1.5).schedule_write(payload, immediate=is_terminal)
     except Exception as exc:
         logger.warning("[AutoJob %s] Could not persist progress file: %s", job_id[:8], exc)
 
@@ -3328,8 +3437,10 @@ def _run_auto_extraction_job(job_id: str):
                             w["current_job"] = "Paused"
 
         # Persist checkpoint & disk store
-        _persist_job_progress(job_id, jobs, processed_count, job)
-        _save_auto_extraction_jobs_to_disk()
+        from services.debounced_writer import flush_all_debounced_writers
+        _persist_job_progress(job_id, jobs, processed_count, job, immediate=True)
+        _save_auto_extraction_jobs_to_disk(immediate=True)
+        flush_all_debounced_writers()
     except Exception as exc:
         logger.error("Auto extraction job %s error: %s", job_id, exc)
         _set_auto_job_status(
@@ -3339,7 +3450,9 @@ def _run_auto_extraction_job(job_id: str):
             last_error=str(exc),
             finished_at=datetime.now().isoformat(),
         )
-        _save_auto_extraction_jobs_to_disk()
+        _save_auto_extraction_jobs_to_disk(immediate=True)
+        from services.debounced_writer import flush_all_debounced_writers
+        flush_all_debounced_writers()
     finally:
         with auto_extraction_threads_lock:
             auto_extraction_threads.pop(job_id, None)
@@ -6098,7 +6211,6 @@ def _save_auto_extraction_export_records(
     fallback_slug: str,
     suffix: str = "",
     unconfirmed_records: Optional[List[Dict]] = None,
-    canonical_only: bool = False,
 ) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     slug = _sanitize_export_slug(keyword, fallback=fallback_slug)
@@ -6150,25 +6262,7 @@ def _save_auto_extraction_export_records(
         else:
             confirmed_rows.append(normalize_job_opportunity_row(r))
 
-    df_confirmed = pd.DataFrame(confirmed_rows)
-    existing_cols = [c for c in EXCEL_COLUMNS if c in df_confirmed.columns]
-    if not canonical_only:
-        for extra_col in [
-            "email_type",
-            "contact_person",
-            "job_listing_url",
-            "employer_website",
-            "direct_application_url",
-            "application_url_type",
-            "required_documents",
-            "extraction_status",
-        ]:
-            if extra_col in df_confirmed.columns and extra_col not in existing_cols:
-                vals = df_confirmed[extra_col].astype(str).str.strip().replace({"nan": "", "None": "", "unverified": ""})
-                if vals.ne("").any():
-                    existing_cols.append(extra_col)
-    if existing_cols:
-        df_confirmed = df_confirmed[existing_cols]
+    df_confirmed = _build_excel_export_dataframe(confirmed_rows)
 
     with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
         df_confirmed.to_excel(writer, sheet_name="Ausbildungsplätze", index=False)
@@ -6196,7 +6290,18 @@ def _save_auto_extraction_export_records(
                         "Relevanz-Score": item.get("Relevanz-Score") or item.get("smart_relevance_score") or "",
                         "Google Maps URL": item.get("Google Maps URL") or item.get("maps_url") or "",
                     })
-            df_unconfirmed = pd.DataFrame(deduped_unconfirmed)
+            unconfirmed_export_rows = [{
+                "title": "Unbestätigter Ausbildungsbetrieb",
+                "company": item.get("Unternehmen") or "",
+                "city": item.get("Stadt") or "",
+                "location": item.get("Adresse") or "",
+                "email": item.get("E-Mail") or "",
+                "phone": item.get("Telefon") or "",
+                "employer_website": item.get("Website") or "",
+                "source": item.get("Quelle") or "Google Maps",
+                "extraction_status": item.get("Status") or "unconfirmed",
+            } for item in deduped_unconfirmed]
+            df_unconfirmed = _build_excel_export_dataframe(unconfirmed_export_rows)
             df_unconfirmed.to_excel(writer, sheet_name="Unbestätigte Betriebe (Maps)", index=False)
 
     return file_path
@@ -6518,7 +6623,7 @@ def _run_parallel_task_auto_extraction(job_id: str, task_id: str):
             slug = _sanitize_export_slug(task.get("keyword"), fallback=f"task_{task_id[:6]}")
             file_name = f"{timestamp}_{slug}_with_emails.xlsx"
             file_path = PARALLEL_EXPORT_DIR / file_name
-            pd.DataFrame(prepared_rows).to_excel(file_path, index=False)
+            _build_excel_export_dataframe(prepared_rows).to_excel(file_path, index=False)
         else:
             file_name = ""
             file_path = ""
@@ -8490,22 +8595,7 @@ def api_inline_download_auto_job(job_id: str):
     slug = _sanitize_export_slug(keyword, fallback=f"auto_{job_id[:8]}")
     AUTO_EXTRACTION_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
     file_path = AUTO_EXTRACTION_EXPORT_DIR / f"{timestamp}_{slug}_{job_id[:8]}.xlsx"
-    df = pd.DataFrame(prepared_jobs)
-    existing_cols = [c for c in EXCEL_COLUMNS if c in df.columns]
-    for extra_col in [
-        "email_type",
-        "contact_person",
-        "job_listing_url",
-        "employer_website",
-        "direct_application_url",
-        "application_url_type",
-        "required_documents",
-        "extraction_status",
-    ]:
-        if extra_col in df.columns and extra_col not in existing_cols:
-            existing_cols.append(extra_col)
-    if existing_cols:
-        df = df[existing_cols]
+    df = _build_excel_export_dataframe(prepared_jobs)
     df.to_excel(file_path, index=False)
     return send_file(file_path, as_attachment=True, download_name=file_path.name)
 
@@ -9710,7 +9800,6 @@ def api_search_download():
         prepared_jobs,
         keyword,
         fallback_slug="suchergebnisse",
-        canonical_only=True,
     )
     return send_file(
         temp_file,
@@ -10241,7 +10330,20 @@ def _save_google_maps_export(job_id: str, businesses: List[Dict], query: str) ->
 
     GOOGLE_MAPS_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
     rows = _build_unified_export_rows(businesses)
-    df = pd.DataFrame(rows)
+    excel_rows = [{
+        "title": row.get("Stellenbezeichnung") or "Google Maps Betrieb",
+        "company": row.get("Unternehmen") or "",
+        "location": row.get("Adresse") or "",
+        "email": row.get("E-Mails") or "",
+        "phone": row.get("Telefon") or "",
+        "job_listing_url": row.get("Google Maps URL") or "",
+        "employer_website": row.get("Website") or "",
+        "direct_application_url": row.get("Bewerbungslink") or "",
+        "application_method": row.get("Bewerbungsart") or "unknown",
+        "source": "Google Maps",
+        "extraction_status": row.get("Verifizierungsstatus") or row.get("Status") or "",
+    } for row in rows]
+    df = _build_excel_export_dataframe(excel_rows)
     safe_query = re.sub(r"[^\w\s-]", "", query)[:40].strip().replace(" ", "_")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"gmaps_{safe_query}_{timestamp}_{job_id[:8]}.xlsx"
@@ -10573,7 +10675,20 @@ def api_google_maps_export(job_id: str, fmt: str):
     # Default: xlsx
     GOOGLE_MAPS_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
     file_path = GOOGLE_MAPS_EXPORT_DIR / f"gmaps_{safe_query}_{timestamp}_{job_id[:8]}.xlsx"
-    df.to_excel(file_path, index=False)
+    excel_rows = [{
+        "title": row.get("Stellenbezeichnung") or "Google Maps Betrieb",
+        "company": row.get("Unternehmen") or "",
+        "location": row.get("Adresse") or "",
+        "email": row.get("E-Mails") or "",
+        "phone": row.get("Telefon") or "",
+        "job_listing_url": row.get("Google Maps URL") or "",
+        "employer_website": row.get("Website") or "",
+        "direct_application_url": row.get("Bewerbungslink") or "",
+        "application_method": row.get("Bewerbungsart") or "unknown",
+        "source": "Google Maps",
+        "extraction_status": row.get("Verifizierungsstatus") or row.get("Status") or "",
+    } for row in rows]
+    _build_excel_export_dataframe(excel_rows).to_excel(file_path, index=False)
     return send_file(
         str(file_path),
         as_attachment=True,

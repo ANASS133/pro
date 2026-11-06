@@ -20,6 +20,7 @@ def fixture(blank=False):
 class CaptchaBrowserImageTests(unittest.TestCase):
     def test_worker_browser_allows_real_images(self):
         extractor = WorkingEmailExtractor.__new__(WorkingEmailExtractor)
+        extractor.worker_id = 1
         extractor.network_profile = None
         options = MagicMock()
         with patch('scraper.working_email_extractor.find_browser', return_value=('chrome', 'chrome')), patch('scraper.working_email_extractor.new_options', return_value=options), patch('scraper.working_email_extractor.start_driver'):

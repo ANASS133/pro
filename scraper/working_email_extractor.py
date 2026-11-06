@@ -2,14 +2,23 @@ import threading
 import base64
 import json
 import logging
+import os
 import re
+import shutil
+import tempfile
 import time
+import urllib.parse
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set
 
 import pandas as pd
 import requests
+import urllib3
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from selenium.webdriver.common.by import By
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from .browser_driver import find_browser, new_options, start_driver
 from .true_captcha_solver import TrueCaptchaSolver
@@ -22,6 +31,7 @@ from services.worker_network_router import (
     apply_proxy_to_browser_options,
     redact_proxy_url,
 )
+from services.employer_cache import get_employer_cache
 
 logger = logging.getLogger(__name__)
 NAME_PATTERN = r"[A-ZÄÖÜ][A-Za-zÄÖÜäöüß'.-]+"
@@ -76,8 +86,22 @@ class WorkingEmailExtractor:
             pass
         self.known_emails = {self._normalize_email(e) for e in (known_emails or set()) if e}
 
-        # Isolated requests.Session for this worker
+        # High-performance requests.Session with connection pooling & retries
         self.session = requests.Session()
+        adapter = HTTPAdapter(
+            pool_connections=50,
+            pool_maxsize=50,
+            max_retries=Retry(total=2, backoff_factor=0.3, status_forcelist=[500, 502, 503, 504]),
+        )
+        self.session.mount("http://", adapter)
+        self.session.mount("https://", adapter)
+        self.session.headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Connection": "keep-alive",
+        })
+
         if self.network_profile and self.network_profile.proxy_url:
             self.session.proxies.update({
                 "http": self.network_profile.proxy_url,
@@ -103,10 +127,11 @@ class WorkingEmailExtractor:
             "captchas_solved": int(init_s.get("captchas_solved", 0)),
             "failed": int(init_s.get("failed", 0)),
         }
-        self.employer_cache: Dict[str, Dict] = {}
+        self.employer_cache = get_employer_cache()
         self._cache_lock = threading.Lock()
         self.selenium_lock = threading.Lock()
         self._stats_lock = threading.Lock()
+        self._worker_profile_dir: Optional[Path] = None
         PROGRESS_DIR.mkdir(parents=True, exist_ok=True)
 
     def _normalize_email(self, value: Optional[str]) -> str:
@@ -120,11 +145,29 @@ class WorkingEmailExtractor:
         options.binary_location = binary_path
         if headless:
             options.add_argument("--headless=new")
+        # Eager strategy returns as soon as DOM is interactive (DOMContentLoaded), saving 3-8s per page
+        options.page_load_strategy = "eager"
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
         options.add_argument("--window-size=1920,1080")
-        # CAPTCHA images must load in the original authenticated browser.
+        options.add_argument("--disable-background-networking")
+        options.add_argument("--disable-background-timer-throttling")
+        options.add_argument("--disable-backgrounding-occluded-windows")
+        options.add_argument("--disable-breakpad")
+        options.add_argument("--disable-component-update")
+        options.add_argument("--disable-domain-reliability")
+        options.add_argument("--disable-sync")
+        options.add_argument("--disable-translate")
+        options.add_argument("--mute-audio")
+        options.add_argument("--no-first-run")
+        options.add_argument("--metrics-recording-only")
+
+        # Unique worker profile dir to prevent Windows Chrome SingletonLock collision
+        worker_dir = Path(tempfile.gettempdir()) / f"jobscout_profile_w{self.worker_id}_{os.getpid()}"
+        worker_dir.mkdir(parents=True, exist_ok=True)
+        self._worker_profile_dir = worker_dir
+        options.add_argument(f"--user-data-dir={str(worker_dir)}")
 
         # Configure worker proxy if assigned
         has_auth_creds = False
@@ -148,10 +191,24 @@ class WorkingEmailExtractor:
         except Exception:
             pass
         options.add_argument(
-            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         )
 
         self.driver = start_driver(browser_name, options)
+
+        # Block fonts, media, and heavy analytics trackers via Chrome DevTools Protocol
+        try:
+            self.driver.execute_cdp_cmd("Network.setBlockedURLs", {
+                "urls": [
+                    "*.woff*", "*.ttf*", "*.otf*", "*.eot*",
+                    "*google-analytics.com*", "*googletagmanager.com*",
+                    "*doubleclick.net*", "*facebook.net*", "*hotjar.com*",
+                    "*.mp4", "*.webm", "*.avi"
+                ]
+            })
+            self.driver.execute_cdp_cmd("Network.enable", {})
+        except Exception:
+            pass
 
     def recycle_driver_if_needed(self, force: bool = False) -> None:
         """
@@ -669,19 +726,20 @@ class WorkingEmailExtractor:
         Rapid HTTP-first extraction in ~150ms.
         Bypasses Selenium completely when valid contact info is discovered in raw HTML or cache.
         """
-        company_key = self._get_cache_key(job)
-        if company_key:
-            with self._cache_lock:
-                cached = self.employer_cache.get(company_key)
-            if cached:
-                cached_res = dict(job)
-                for k, v in cached.items():
-                    if v and not cached_res.get(k):
-                        cached_res[k] = v
-                cached_res["extraction_method"] = "cache"
-                return normalize_job_opportunity_row(cached_res)
-
+        company = str(job.get("company") or job.get("firma") or "").strip()
+        city = str(job.get("city") or job.get("location") or "").strip()
         source_url = str(job.get("apply_url") or job.get("url") or "").strip()
+
+        # 0. Global thread-safe employer cache lookup
+        cached = self.employer_cache.get(company=company, city=city, url_or_domain=source_url)
+        if cached and (cached.get("email") or cached.get("has_form") or cached.get("direct_application_url")):
+            cached_res = dict(job)
+            for k, v in cached.items():
+                if v and not cached_res.get(k):
+                    cached_res[k] = v
+            cached_res["extraction_method"] = "cache"
+            return normalize_job_opportunity_row(cached_res)
+
         if not source_url or not source_url.startswith("http"):
             return None
 
@@ -692,50 +750,107 @@ class WorkingEmailExtractor:
                 res = self.aa_extractor.extract_vacancy(job, driver=None, captcha_solver=self.captcha_solver)
                 res["extraction_method"] = "fast_http"
                 if res.get("email") or res.get("has_form") or res.get("direct_application_url"):
-                    if company_key:
-                        with self._cache_lock:
-                            self.employer_cache[company_key] = {
-                                "email": res.get("email"),
-                                "phone": res.get("phone"),
-                                "contact_person": res.get("contact_person"),
-                                "direct_application_url": res.get("direct_application_url"),
-                                "has_form": res.get("has_form"),
-                                "application_method": res.get("application_method"),
-                            }
+                    self.employer_cache.put(company=company, city=city, url_or_domain=source_url, data=res)
                     return res
             except Exception as exc:
                 logger.debug("Fast HTTP aa_extractor error for %s: %s", source_url, exc)
 
         # 2. Generic portals fast HTTP fetch
         try:
-            resp = self.session.get(source_url, timeout=5)
+            resp = self.session.get(source_url, timeout=5, allow_redirects=True)
             if resp.status_code == 200 and resp.text:
                 html = resp.text
+                final_url = resp.url or source_url
                 if any(ind in html.lower() for ind in ["sicherheitsabfrage", "security check", "cf-chl-bypass"]):
                     return None
+
+                # Redirected to Arbeitsagentur detail page?
+                if "arbeitsagentur.de/jobsuche/jobdetail" in final_url:
+                    try:
+                        aa_job = dict(job)
+                        aa_job["url"] = final_url
+                        res = self.aa_extractor.extract_vacancy(aa_job, driver=None, captcha_solver=self.captcha_solver)
+                        res["extraction_method"] = "fast_http"
+                        if res.get("email") or res.get("has_form") or res.get("direct_application_url"):
+                            self.employer_cache.put(company=company, city=city, url_or_domain=final_url, data=res)
+                            return res
+                    except Exception:
+                        pass
 
                 # Safe meta-refresh redirect detection (e.g., Ausbildung.de partner/ATS redirect)
                 meta_match = re.search(r'<meta[^>]*http-equiv=["\']?refresh["\']?[^>]*content=["\']?[^"\'>]*url=([^"\'\s;>]+)', html, re.IGNORECASE)
                 if meta_match:
                     raw_target = meta_match.group(1).strip(" '\"")
-                    resolved_target = urllib.parse.urljoin(source_url, raw_target)
+                    resolved_target = urllib.parse.urljoin(final_url, raw_target)
                     parsed_target = urllib.parse.urlparse(resolved_target)
                     if parsed_target.scheme in ("http", "https") and parsed_target.netloc:
                         try:
-                            redir_resp = self.session.get(resolved_target, timeout=5)
+                            redir_resp = self.session.get(resolved_target, timeout=5, allow_redirects=True)
                             if redir_resp.status_code == 200 and redir_resp.text:
                                 html = redir_resp.text
-                                source_url = redir_resp.url
+                                final_url = redir_resp.url
                         except Exception as redir_err:
-                            logger.debug("Fast HTTP meta-refresh error for %s -> %s: %s", source_url, resolved_target, redir_err)
+                            logger.debug("Fast HTTP meta-refresh error for %s -> %s: %s", final_url, resolved_target, redir_err)
 
                 emails = re.findall(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", html)
-                clean_emails = [e.lower() for e in emails if not any(x in e.lower() for x in ["example", "wix", "sentry", "u003c"])]
-                phones = re.findall(r"(?:\+49|0049|0)\s*(?:\(0\)\s*)?[1-9][0-9\s/().\-]{5,22}[0-9]", html)
+
+                # Check for portal subpages like Azubiyo bewerben-email
+                if "azubiyo.de" in final_url:
+                    m = re.search(r'href=[\'"](/stellenanzeigen/[^\'"]+/bewerben-email/?)[\'"]', html, re.IGNORECASE)
+                    if m:
+                        try:
+                            b_url = urllib.parse.urljoin(final_url, m.group(1))
+                            b_resp = self.session.get(b_url, timeout=3)
+                            if b_resp.status_code == 200 and b_resp.text:
+                                emails.extend(re.findall(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", b_resp.text))
+                        except Exception:
+                            pass
+
+                clean_emails = [
+                    e.lower() for e in emails
+                    if not any(x in e.lower() for x in ["example", "wix", "sentry", "u003c", "azubiyo.de", "aubi-plus.de", "ausbildung.de", "funkeworks.de"])
+                ]
+
+                # Phone extraction
+                from services.data_validator import validate_phone_number, validate_contact_person
+                phones = []
+                # First check tel: links in HTML
+                tel_matches = re.findall(r'href=["\']tel:([^"\']+)["\']', html, re.IGNORECASE)
+                for t in tel_matches:
+                    ok, clean_p, _ = validate_phone_number(t)
+                    if ok and clean_p not in phones:
+                        phones.append(clean_p)
+
+                # Parse JSON-LD metadata
+                contact_person = ""
+                ld_scripts = re.findall(r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', html, re.DOTALL | re.IGNORECASE)
+                for script in ld_scripts:
+                    try:
+                        ld_raw = json.loads(script.strip())
+                        ld_list = ld_raw if isinstance(ld_raw, list) else [ld_raw]
+                        for item in ld_list:
+                            if not isinstance(item, dict):
+                                continue
+                            if item.get("@type") == "JobPosting":
+                                desc = item.get("description", "")
+                                if desc and not phones:
+                                    tel_cues = re.findall(r"(?:tel(?:efon)?\.?|fon|phone|mobil)\s*[:\-\s]\s*([+0-9\s/().\-]{7,25})", desc, re.IGNORECASE)
+                                    for cue in tel_cues:
+                                        ok, clean_p, _ = validate_phone_number(cue)
+                                        if ok and clean_p not in phones:
+                                            phones.append(clean_p)
+                                if desc and not contact_person:
+                                    anspr = re.search(r"(?:Ansprechpartner|Kontakt(?:person)?)[^<]*<[^>]+>\s*(?:<[^>]+>)*\s*([A-ZÄÖÜ][A-Za-zÄÖÜäöüß\s\.\-]{3,40})", desc, re.IGNORECASE)
+                                    if anspr:
+                                        ok, clean_cp, _ = validate_contact_person(anspr.group(1))
+                                        if ok:
+                                            contact_person = clean_cp
+                    except Exception:
+                        pass
 
                 # Check if destination is a known ATS or contains a verifiable application form
-                is_ats = ApplicationFormDiscovery.is_known_ats_url(source_url)
-                has_form, form_type, _ = ApplicationFormDiscovery.verify_form_page(html, source_url)
+                is_ats = ApplicationFormDiscovery.is_known_ats_url(final_url)
+                has_form, form_type, _ = ApplicationFormDiscovery.verify_form_page(html, final_url)
 
                 if clean_emails or has_form or is_ats:
                     norm = dict(job)
@@ -745,23 +860,19 @@ class WorkingEmailExtractor:
                         norm["email_type"] = "recruitment"
                     if phones:
                         norm["phone"] = phones[0]
+                    if contact_person:
+                        norm["contact_person"] = contact_person
+                        norm["arbeitsgeber"] = contact_person
                     if has_form or is_ats:
                         norm["has_form"] = True
-                        norm["form_link"] = source_url
-                        norm["direct_application_url"] = source_url
-                        norm["bewerbung_link"] = source_url
+                        norm["form_link"] = final_url
+                        norm["direct_application_url"] = final_url
+                        norm["bewerbung_link"] = final_url
                         norm["application_method"] = "form" if not clean_emails else "both"
                         norm["application_url_type"] = "direct_form"
+                    norm["extraction_method"] = "fast_http"
                     norm = normalize_job_opportunity_row(norm)
-                    if company_key:
-                        with self._cache_lock:
-                            self.employer_cache[company_key] = {
-                                "email": norm.get("email"),
-                                "phone": norm.get("phone"),
-                                "has_form": norm.get("has_form"),
-                                "direct_application_url": norm.get("direct_application_url"),
-                                "application_method": norm.get("application_method"),
-                            }
+                    self.employer_cache.put(company=company, city=city, url_or_domain=final_url, data=norm)
                     return norm
         except Exception as http_err:
             logger.debug("Fast HTTP generic error for %s: %s", source_url, http_err)
@@ -771,11 +882,30 @@ class WorkingEmailExtractor:
     def open_job(self, job: Dict, delay_seconds: float = 1.0) -> None:
         url = job.get("url", "")
         if url and getattr(self, "driver", None):
-            self.driver.get(url)
+            # Close stray secondary windows/popups to reclaim browser RAM immediately
+            try:
+                handles = self.driver.window_handles
+                if len(handles) > 1:
+                    for h in handles[1:]:
+                        self.driver.switch_to.window(h)
+                        self.driver.close()
+                    self.driver.switch_to.window(handles[0])
+            except Exception:
+                pass
+
+            try:
+                self.driver.get(url)
+            except Exception as get_err:
+                try:
+                    self.driver.execute_script("window.stop();")
+                except Exception:
+                    pass
+                logger.debug("WebDriver get() timed out or stopped: %s", get_err)
+
             self.accept_cookies()
-            # Smart wait: poll for content/email up to max 1.2s instead of hard 3.0s sleep
+            # Smart wait: poll for content/email up to max 1.0s instead of hard sleep
             t0 = time.time()
-            max_wait = min(delay_seconds, 1.2)
+            max_wait = min(delay_seconds, 1.0)
             while time.time() - t0 < max_wait:
                 try:
                     body = self.driver.find_element(By.TAG_NAME, "body").text
@@ -783,7 +913,7 @@ class WorkingEmailExtractor:
                         break
                 except Exception:
                     pass
-                time.sleep(0.15)
+                time.sleep(0.1)
             self.accept_cookies()
 
     def process_job(
@@ -872,6 +1002,7 @@ class WorkingEmailExtractor:
                     driver=getattr(self, "driver", None),
                     captcha_solver=self.captcha_solver,
                     on_stage_change=on_stage_change,
+                    manual_captcha_handler=self._request_manual_captcha_review,
                 )
                 self.stats["processed"] += 1
                 norm_email = self._normalize_email(enriched.get("email"))
@@ -993,6 +1124,15 @@ class WorkingEmailExtractor:
                 )
                 job = normalize_job_opportunity_row(job, discovery_result=discovery)
 
+            # Store discovered contact info in the global employer cache for cross-worker sharing
+            if job.get("email") or job.get("has_form") or job.get("direct_application_url"):
+                self.employer_cache.put(
+                    company=str(job.get("company") or job.get("firma") or ""),
+                    city=str(job.get("city") or job.get("location") or ""),
+                    url_or_domain=str(job.get("url") or job.get("job_listing_url") or ""),
+                    data=job,
+                )
+
             self.stats["processed"] += 1
             self._jobs_since_recycle += 1
             if has_valid_email:
@@ -1017,6 +1157,7 @@ class WorkingEmailExtractor:
     def save_progress(
         self, jobs: List[Dict], index: int, base_name: str = "auto_extraction_progress", custom_stats: Optional[Dict] = None
     ):
+        from services.debounced_writer import get_debounced_writer
         json_path = PROGRESS_DIR / f"{base_name}.json"
         csv_path = PROGRESS_DIR / f"{base_name}.csv"
         stats_to_save = dict(custom_stats) if custom_stats else dict(self.stats)
@@ -1028,17 +1169,23 @@ class WorkingEmailExtractor:
             "jobs": jobs,
             "processed_jobs": jobs[: index + 1] if index >= 0 else [],
         }
-        with json_path.open("w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2)
-        if index >= 0 and jobs[: index + 1]:
-            pd.DataFrame(jobs[: index + 1]).to_csv(csv_path, index=False, encoding="utf-8")
+        # Debounce progress writes to eliminate disk thrashing; force immediate flush if complete
+        is_finished = (index >= len(jobs) - 1)
+        writer = get_debounced_writer(json_path, min_interval_seconds=1.5)
+        writer.schedule_write(payload, immediate=is_finished)
 
         # Also save job-specific checkpoint file if job_id is available
         w_job_id = getattr(self, "job_id", "")
         if w_job_id:
             specific_json = PROGRESS_DIR / f"{base_name}_{w_job_id}.json"
-            with specific_json.open("w", encoding="utf-8") as f:
-                json.dump(payload, f, ensure_ascii=False, indent=2)
+            spec_writer = get_debounced_writer(specific_json, min_interval_seconds=1.5)
+            spec_writer.schedule_write(payload, immediate=is_finished)
+
+        if is_finished and index >= 0 and jobs[: index + 1]:
+            try:
+                pd.DataFrame(jobs[: index + 1]).to_csv(csv_path, index=False, encoding="utf-8")
+            except Exception:
+                pass
 
     def close(self):
         try:
@@ -1051,3 +1198,9 @@ class WorkingEmailExtractor:
                 self.session.close()
         except Exception:
             pass
+        # Clean up temporary worker profile directory
+        if self._worker_profile_dir and self._worker_profile_dir.exists():
+            try:
+                shutil.rmtree(self._worker_profile_dir, ignore_errors=True)
+            except Exception:
+                pass

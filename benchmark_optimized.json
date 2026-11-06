@@ -1,0 +1,13 @@
+{
+  "label": "OPTIMIZED",
+  "jobs": 10,
+  "total_time_sec": 16.68,
+  "avg_time_sec": 1.67,
+  "jobs_per_min": 35.97,
+  "fast_http_count": 9,
+  "selenium_count": 1,
+  "emails_count": 4,
+  "forms_count": 10,
+  "ram_start_mb": 105.57,
+  "ram_end_mb": 118.42
+}

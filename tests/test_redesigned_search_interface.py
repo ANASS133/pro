@@ -206,7 +206,7 @@ class TestRedesignedSearchInterface(unittest.TestCase):
         self.assertTrue(len(jobs) >= 1)
 
     # -------------------------------------------------------------------------
-    # Scenario F: Excel export with canonical 21 columns
+    # Scenario F: Excel export with canonical 18 columns
     # -------------------------------------------------------------------------
     def test_scenario_f_excel_export_schema(self):
         from app import search_cache
@@ -214,25 +214,22 @@ class TestRedesignedSearchInterface(unittest.TestCase):
         canonical_columns = [
             "title",
             "company",
-            "location",
-            "city",
-            "published_date",
-            "start_date",
-            "hauptberuf",
-            "email",
-            "phone",
-            "source",
             "arbeitsgeber",
-            "apply_url",
-            "form_link",
-            "has_form",
-            "application_method",
-            "bewerbung_art",
-            "bewerbung_link",
+            "city",
+            "location",
+            "start_date",
+            "email",
+            "email_type",
+            "phone",
+            "contact_person",
             "anrede",
-            "vacancies",
-            "scraped_at",
-            "salary",
+            "job_listing_url",
+            "employer_website",
+            "direct_application_url",
+            "form_link",
+            "application_method",
+            "source",
+            "extraction_status",
         ]
 
         # Seed sample job into search_cache
@@ -274,7 +271,7 @@ class TestRedesignedSearchInterface(unittest.TestCase):
         excel_data = io.BytesIO(raw_bytes)
         df = pd.read_excel(excel_data, sheet_name=0)
         exported_cols = list(df.columns)
-        self.assertEqual(exported_cols, canonical_columns, "Exported columns must match the 21 canonical columns in exact order")
+        self.assertEqual(exported_cols, canonical_columns, "Exported columns must match the 18 canonical columns in exact order")
 
     # -------------------------------------------------------------------------
     # Scenario G: Template & UI Specification Checks

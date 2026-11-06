@@ -50,13 +50,36 @@ def new_options(browser_name: str):
     return webdriver.ChromeOptions()
 
 
+import os
+import threading
+
+_driver_path_lock = threading.Lock()
+_cached_driver_paths = {}
+
+
+def get_installed_driver_path(browser_name: str) -> str:
+    """Thread-safe caching of installed webdriver binary path to eliminate redundant network checks."""
+    with _driver_path_lock:
+        if browser_name in _cached_driver_paths:
+            cached = _cached_driver_paths[browser_name]
+            if os.path.exists(cached):
+                return cached
+        if browser_name == "edge":
+            path = EdgeChromiumDriverManager().install()
+        else:
+            path = ChromeDriverManager().install()
+        _cached_driver_paths[browser_name] = path
+        return path
+
+
 def start_driver(browser_name: str, options):
+    driver_path = get_installed_driver_path(browser_name)
     if browser_name == "edge":
         return webdriver.Edge(
-            service=EdgeService(EdgeChromiumDriverManager().install()),
+            service=EdgeService(driver_path),
             options=options,
         )
     return webdriver.Chrome(
-        service=ChromeService(ChromeDriverManager().install()),
+        service=ChromeService(driver_path),
         options=options,
     )

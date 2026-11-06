@@ -71,6 +71,80 @@ def capture_loaded_captcha(driver, element, timeout=5.0):
     except Exception:
         return "", "CAPTCHA image did not load in the worker browser. Restart workers created with image blocking enabled."
     error = "CAPTCHA image capture failed."
+
+    # Strategy 1 & 2: If element has a valid src URL, capture the original unclipped raster image
+    src = None
+    try:
+        raw_src = element.get_attribute("src")
+        if isinstance(raw_src, str) and raw_src.strip():
+            src = raw_src.strip()
+    except Exception:
+        pass
+
+    if src:
+        # 1. Direct data URI
+        if src.startswith("data:image/"):
+            valid, _ = validate_captcha_image(src)
+            if valid:
+                return src, ""
+
+        # 2. In-browser async fetch (exact pixels, zero clipping, session authenticated)
+        if src.startswith("http") and hasattr(driver, "execute_async_script"):
+            try:
+                b64_uri = driver.execute_async_script("""
+                    const done = arguments[arguments.length - 1];
+                    const url = arguments[0];
+                    fetch(url, {credentials: 'include'})
+                        .then(r => {
+                            if (!r.ok) throw new Error('HTTP ' + r.status);
+                            return r.blob();
+                        })
+                        .then(blob => {
+                            const reader = new FileReader();
+                            reader.onloadend = () => done(reader.result);
+                            reader.readAsDataURL(blob);
+                        })
+                        .catch(e => done(null));
+                """, src)
+                if isinstance(b64_uri, str) and b64_uri.startswith("data:image/"):
+                    valid, _ = validate_captcha_image(b64_uri)
+                    if valid:
+                        return b64_uri, ""
+            except Exception:
+                pass
+
+        # 3. Direct HTTP GET using driver session cookies and headers
+        if src.startswith("http"):
+            try:
+                import requests
+                cookies = {}
+                try:
+                    cookies = {c["name"]: c["value"] for c in driver.get_cookies()}
+                except Exception:
+                    pass
+                user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                try:
+                    user_agent = driver.execute_script("return navigator.userAgent;") or user_agent
+                except Exception:
+                    pass
+                current_url = getattr(driver, "current_url", "") or ""
+                headers = {
+                    "User-Agent": user_agent,
+                    "Referer": current_url,
+                    "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+                }
+                resp = requests.get(src, cookies=cookies, headers=headers, timeout=5)
+                if resp.status_code == 200 and resp.content:
+                    mime = resp.headers.get("Content-Type", "image/png").split(";")[0].strip()
+                    if not mime.startswith("image/"):
+                        mime = "image/png"
+                    candidate = f"data:{mime};base64," + base64.b64encode(resp.content).decode("ascii")
+                    valid, _ = validate_captcha_image(candidate)
+                    if valid:
+                        return candidate, ""
+            except Exception:
+                pass
+
     for capture in (
         lambda: "data:image/png;base64," + element.screenshot_as_base64,
         lambda: driver.execute_script("""
@@ -80,7 +154,11 @@ def capture_loaded_captcha(driver, element, timeout=5.0):
             canvas.getContext('2d').drawImage(img, 0, 0);
             return canvas.toDataURL('image/png');
         """, element),
-        lambda: element.get_attribute("src"),
+        lambda: (
+            driver.execute_script("arguments[0].scrollIntoView({block: 'center', inline: 'center'});", element)
+            if hasattr(driver, "execute_script") else None,
+            "data:image/png;base64," + element.screenshot_as_base64
+        )[-1],
     ):
         try:
             candidate = capture()
@@ -195,16 +273,29 @@ class ManualCaptchaChallenge:
             for sel in selectors:
                 try:
                     els = self.driver_ref.find_elements(By.XPATH, sel)
-                    if els:
-                        img_el = els[0]
+                    for el in els:
+                        try:
+                            size = el.size
+                            if size and (size.get("width", 0) < 30 or size.get("height", 0) < 10):
+                                continue
+                            img_el = el
+                            break
+                        except Exception:
+                            img_el = el
+                            break
+                    if img_el:
                         break
                 except Exception:
                     continue
 
-            if img_el is None:
-                new_b64, error = "", "CAPTCHA image element is missing."
-            else:
+            if img_el is not None:
+                try:
+                    self.driver_ref.execute_script("arguments[0].scrollIntoView({block: 'center', inline: 'center'});", img_el)
+                except Exception:
+                    pass
                 new_b64, error = capture_loaded_captcha(self.driver_ref, img_el)
+            else:
+                new_b64, error = "", "CAPTCHA image element is missing."
             self.captcha_image_base64 = new_b64
             self.image_valid = bool(new_b64)
             self.image_error = error

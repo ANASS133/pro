@@ -262,6 +262,10 @@ class WorkingEmailExtractor:
         img_b64 = ""
         capture_error = ""
         if captcha_img_element is not None and challenge_type == "image_text":
+            try:
+                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center', inline: 'center'});", captcha_img_element)
+            except Exception:
+                pass
             img_b64, capture_error = capture_loaded_captcha(self.driver, captcha_img_element)
 
         curr_job = getattr(self, "current_job", {}) or {}
@@ -389,7 +393,10 @@ class WorkingEmailExtractor:
         challenge_type = self._classify_manual_challenge(captcha_img, captcha_input)
 
         # If automated solver is configured and has API credentials, try fast recognition first
-        has_auto_credentials = bool(self.captcha_solver and getattr(self.captcha_solver, "api_key", None))
+        has_auto_credentials = bool(
+            self.captcha_solver
+            and (getattr(self.captcha_solver, "apikey", None) or getattr(self.captcha_solver, "api_key", None))
+        )
         if has_auto_credentials and captcha_img and captcha_input:
             solver_ctx = {
                 "job_id": self.job_id,
@@ -476,8 +483,9 @@ class WorkingEmailExtractor:
     def _find_captcha_image(self):
         selectors = [
             "//*[@id='kontaktdaten-captcha-image']",
-            "//img[contains(@src, 'captcha')]",
-            "//img[contains(@alt, 'captcha')]",
+            "//div[contains(@class,'captcha-container-image')]//img",
+            "//img[contains(@src, 'captcha') or contains(@src, 'ct/v1/captcha') or contains(@src, 'Sicherheitsabfrage')]",
+            "//img[contains(@alt, 'Sicherheitsabfrage') or contains(@alt, 'captcha')]",
             "//img[contains(@id, 'captcha')]",
             "//img[contains(@class, 'captcha')]",
             "//div[contains(@class, 'captcha')]//img",
@@ -485,8 +493,14 @@ class WorkingEmailExtractor:
         for selector in selectors:
             try:
                 elements = self.driver.find_elements(By.XPATH, selector)
-                if elements:
-                    return elements[0]
+                for el in elements:
+                    try:
+                        size = el.size
+                        if size and (size.get("width", 0) < 30 or size.get("height", 0) < 10):
+                            continue
+                        return el
+                    except Exception:
+                        return el
             except Exception:
                 continue
         return None

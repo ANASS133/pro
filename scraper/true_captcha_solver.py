@@ -13,6 +13,7 @@ class TrueCaptchaSolver:
     def __init__(self, userid: str, apikey: str, worker_id: int = 1, job_id: str = ""):
         self.userid = str(userid or "").strip()
         self.apikey = str(apikey or "").strip()
+        self.api_key = self.apikey  # Attribute alias for compatibility
         self.worker_id = worker_id
         self.job_id = job_id
         self.api_url = "https://api.apitruecaptcha.org/one/gettext"
@@ -20,7 +21,7 @@ class TrueCaptchaSolver:
 
     def solve_captcha(
         self,
-        image_data: bytes,
+        image_data: Any,
         context: Optional[Dict[str, Any]] = None,
     ) -> Optional[str]:
         if not self.userid or not self.apikey:
@@ -42,10 +43,22 @@ class TrueCaptchaSolver:
         )
 
         try:
+            if isinstance(image_data, str):
+                clean_str = image_data.strip()
+                if clean_str.startswith("data:image"):
+                    clean_str = clean_str.split(",", 1)[1]
+                raw_bytes = base64.b64decode(clean_str)
+            else:
+                raw_bytes = bytes(image_data or b"")
+
+            if not raw_bytes:
+                logger.error("Empty image data provided to TrueCAPTCHA")
+                return None
+
             payload = {
                 "userid": self.userid,
                 "apikey": self.apikey,
-                "data": base64.b64encode(image_data).decode("utf-8"),
+                "data": base64.b64encode(raw_bytes).decode("utf-8"),
             }
 
             response = requests.post(

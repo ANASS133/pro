@@ -85,37 +85,47 @@ def detect_ats_or_url_type(url: str) -> Tuple[str, bool]:
     if not url:
         return "none", False
 
-    u_lower = url.lower()
+    u_lower = url.lower().strip()
+    if u_lower.startswith("mailto:") or "mailto:" in u_lower:
+        return "email", False
+
     for signature, ats_type in EXTENDED_ATS_SIGNATURES.items():
         if signature in u_lower:
             is_form = ats_type.startswith("ats_")
             return ats_type, is_form
 
-    # Check for known form indicators in query parameters or paths
-    form_indicators = ["/bewerb", "/apply", "form", "bewerbung", "stellenmarkt", "jobs."]
+    from services.data_validator import is_advice_or_generic_page, GENERIC_PORTAL_ROOTS
+    parsed = urlparse(u_lower)
+    netloc = parsed.netloc
+    path = parsed.path.strip("/")
+
+    # Generic job board roots or homepages are NOT application forms
+    if netloc in GENERIC_PORTAL_ROOTS or not path:
+        if any(ind in u_lower for ind in ["karriere", "career", "jobs", "stellen"]):
+            return "career_portal", False
+        return "external_link", False
+
+    if is_advice_or_generic_page(u_lower):
+        return "advice_page", False
+
+    # Check for verified form indicators in path/query (explicit application form endpoints)
+    form_indicators = ["/bewerb", "/apply", "formular", "online-bewerb", "application/form"]
     if any(ind in u_lower for ind in form_indicators):
         return "direct_form", True
 
-    if any(ind in u_lower for ind in ["karriere", "career", "jobs"]):
+    if any(ind in u_lower for ind in ["karriere", "career", "jobs", "stellen"]):
         return "career_portal", False
 
     return "external_link", False
 
 
 def normalize_phone_number(raw_phone: Optional[str]) -> str:
-    """Standardizes German phone numbers to +49 format when clean."""
+    """Standardizes German phone numbers to +49 format when clean; returns empty string if invalid."""
     if not raw_phone:
         return ""
-    cleaned = re.sub(r"[^\d+]", "", raw_phone.strip())
-    if not cleaned:
-        return ""
-    if cleaned.startswith("0049"):
-        return "+49" + cleaned[4:]
-    if cleaned.startswith("0") and len(cleaned) > 5:
-        return "+49" + cleaned[1:]
-    if cleaned.startswith("+"):
-        return cleaned
-    return raw_phone.strip()
+    from services.data_validator import validate_phone_number
+    ok, cleaned, _ = validate_phone_number(raw_phone)
+    return cleaned if ok else ""
 
 
 class ArbeitsagenturDetailExtractor:
@@ -315,9 +325,11 @@ class ArbeitsagenturDetailExtractor:
             if salut_match:
                 contact_person = salut_match.group(1).strip()
 
-        result["contact_person"] = contact_person
-        if contact_person:
-            result["logs"].append(f"Contact person detected: {contact_person}")
+        from services.data_validator import sanitize_contact_person, validate_form_link, validate_application_url, validate_job_listing_url, validate_phone_number
+        is_cp_valid, cleaned_cp, _ = sanitize_contact_person(contact_person)
+        result["contact_person"] = cleaned_cp if is_cp_valid else ""
+        if result["contact_person"]:
+            result["logs"].append(f"Contact person detected: {result['contact_person']}")
 
         # 5. Extract Postal Address
         postal_match = POSTAL_CODE_CITY_REGEX.search(combined_focused_text)
@@ -351,7 +363,17 @@ class ArbeitsagenturDetailExtractor:
         for blk in target_blocks:
             for a in blk.find_all("a", href=True):
                 href = a.get("href", "").strip()
-                if not href or href.startswith("mailto:") or href.startswith("tel:") or href.startswith("javascript:"):
+                if not href or href.startswith("tel:") or href.startswith("javascript:"):
+                    continue
+                # If mailto: link, extract email if not already present
+                if href.startswith("mailto:") or "mailto:" in href:
+                    m = re.search(r"mailto:([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})", href, re.I)
+                    if m and not result["email"]:
+                        extracted_mail = m.group(1).lower()
+                        if extracted_mail not in PORTAL_EXCLUDED_EMAILS:
+                            result["email"] = extracted_mail
+                            result["email_type"] = "recruitment"
+                            result["logs"].append(f"Email extracted from mailto link: {extracted_mail}")
                     continue
                 abs_url = urljoin(source_url, href)
                 # Filter out Arbeitsagentur internal navigation and social shares
@@ -382,12 +404,15 @@ class ArbeitsagenturDetailExtractor:
 
         # Classify candidate links
         for url in candidate_links:
-            url_type, has_form = detect_ats_or_url_type(url)
-            if has_form or url_type.startswith("ats_") or url_type == "direct_form":
-                result["direct_application_url"] = url
+            if url.startswith("mailto:") or "mailto:" in url:
+                continue
+            url_type, raw_has_form = detect_ats_or_url_type(url)
+            is_valid_form, clean_form_url, _ = validate_form_link(url, has_form=raw_has_form)
+            if is_valid_form:
+                result["direct_application_url"] = clean_form_url
                 result["application_url_type"] = url_type
                 result["has_form"] = True
-                result["logs"].append(f"ATS/Application form found: {url} ({url_type})")
+                result["logs"].append(f"ATS/Application form found: {clean_form_url} ({url_type})")
                 break
             elif not result["employer_website"]:
                 result["employer_website"] = url
@@ -395,10 +420,12 @@ class ArbeitsagenturDetailExtractor:
                 result["logs"].append(f"Employer website found: {url}")
 
         if not result["direct_application_url"] and candidate_links:
-            # If no direct ATS form, use first external candidate as employer application website
-            result["direct_application_url"] = candidate_links[0]
-            if result["application_url_type"] == "none":
-                result["application_url_type"] = "career_portal"
+            # If no direct ATS form, use first external candidate as employer application website (excluding mailto)
+            valid_cand = [c for c in candidate_links if not c.startswith("mailto:") and "mailto:" not in c]
+            if valid_cand:
+                result["direct_application_url"] = valid_cand[0]
+                if result["application_url_type"] == "none":
+                    result["application_url_type"] = "career_portal"
 
         # 8. Identify Accepted Application Methods
         methods: List[str] = []
@@ -793,23 +820,49 @@ class ArbeitsagenturDetailExtractor:
         # ---------------------------------------------------------------------
         # Consolidate and Normalize
         # ---------------------------------------------------------------------
-        # Update enriched dictionary with extracted attributes
+        from services.data_validator import (
+            validate_form_link,
+            validate_job_listing_url,
+            validate_phone_number,
+            sanitize_contact_person,
+            validate_application_url,
+        )
+
+        # Phone validation
+        raw_phone = parsed_details.get("phone") or enriched.get("phone") or ""
+        is_phone_ok, clean_phone, _ = validate_phone_number(raw_phone)
+        enriched["phone"] = clean_phone if is_phone_ok else ""
+
+        # Contact person validation
+        raw_cp = parsed_details.get("contact_person") or enriched.get("arbeitsgeber") or ""
+        is_cp_ok, clean_cp, _ = sanitize_contact_person(raw_cp)
+        enriched["contact_person"] = clean_cp if is_cp_ok else ""
+        enriched["arbeitsgeber"] = enriched["contact_person"]
+
+        # Direct application url and form link validation
+        raw_direct = str(parsed_details.get("direct_application_url") or "").strip()
+        raw_has_form = bool(parsed_details.get("has_form"))
+        is_form_ok, clean_form_link, _ = validate_form_link(raw_direct, has_form=raw_has_form)
+        enriched["has_form"] = is_form_ok
+        enriched["form_link"] = clean_form_link if is_form_ok else ""
+
+        is_app_ok, clean_app_url, _ = validate_application_url(raw_direct)
+        enriched["direct_application_url"] = clean_app_url if is_app_ok else (clean_form_link if is_form_ok else "")
+
+        # Always preserve the authentic vacancy URL
+        orig_listing = source_url or enriched.get("apply_url") or enriched.get("url") or ""
+        is_list_ok, clean_listing, _ = validate_job_listing_url(orig_listing)
+        enriched["job_listing_url"] = clean_listing or orig_listing
+        enriched["apply_url"] = clean_listing or orig_listing
+        enriched["bewerbung_link"] = enriched["direct_application_url"] or enriched["job_listing_url"]
+
         enriched["email"] = parsed_details.get("email") or enriched.get("email") or ""
         enriched["email_type"] = parsed_details.get("email_type") or ("recruitment" if enriched["email"] else "")
-        enriched["phone"] = parsed_details.get("phone") or enriched.get("phone") or ""
-        enriched["contact_person"] = parsed_details.get("contact_person") or enriched.get("arbeitsgeber") or ""
-        enriched["arbeitsgeber"] = enriched["contact_person"]
         enriched["postal_address"] = parsed_details.get("postal_address") or ""
         enriched["employer_website"] = parsed_details.get("employer_website") or ""
-        enriched["direct_application_url"] = parsed_details.get("direct_application_url") or ""
-        enriched["form_link"] = enriched["direct_application_url"] if parsed_details.get("has_form") else ""
-        enriched["has_form"] = bool(parsed_details.get("has_form"))
-        enriched["application_url_type"] = parsed_details.get("application_url_type") or "none"
+        enriched["application_url_type"] = parsed_details.get("application_url_type") or ("direct_form" if is_form_ok else "none")
         enriched["required_documents"] = parsed_details.get("required_documents") or ""
         enriched["application_methods"] = parsed_details.get("application_methods") or []
-        enriched["apply_url"] = source_url or enriched.get("apply_url") or enriched.get("url") or ""
-        enriched["job_listing_url"] = enriched["apply_url"]
-        enriched["bewerbung_link"] = enriched["direct_application_url"] or enriched["apply_url"]
 
         # Final application_method calculation
         app_method, bewerbung_art = classify_application_method(

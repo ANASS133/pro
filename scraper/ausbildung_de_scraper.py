@@ -179,9 +179,17 @@ class AusbildungDeScraper:
                 vacancies = vac_el.get_text(strip=True) if vac_el else "1 Platz"
 
                 # 6. URL & Reference
-                link_el = card.find("a", href=True)
+                from services.data_validator import is_advice_or_generic_page
+                link_el = card.find("a", href=lambda h: h and ("/stellen/" in h or "/berufe/" in h)) or card.find("a", href=True)
                 relative_url = link_el["href"] if link_el else ""
                 full_url = urllib.parse.urljoin("https://www.ausbildung.de", relative_url)
+                if is_advice_or_generic_page(full_url):
+                    for a_cand in card.find_all("a", href=True):
+                        cand_url = urllib.parse.urljoin("https://www.ausbildung.de", a_cand["href"])
+                        if not is_advice_or_generic_page(cand_url) and ("/stellen/" in cand_url or "/berufe/" in cand_url):
+                            full_url = cand_url
+                            relative_url = a_cand["href"]
+                            break
 
                 # Generate reference ID from slug or URL
                 ref = "N/A"

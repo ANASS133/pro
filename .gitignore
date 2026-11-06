@@ -26,6 +26,7 @@ htmlcov/
 Thumbs.db
 .vscode/
 .idea/
+*.vsix
 
 # Runtime outputs and debug artifacts
 *.log

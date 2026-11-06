@@ -38,10 +38,10 @@ def normalize_arbeitsgeber(value: Optional[str]) -> str:
         return ""
 
     match = ARBEITGEBER_PATTERN.search(raw)
-    if not match:
-        return raw
-
-    return re.sub(r"\s+", " ", match.group(0)).strip().lower()
+    candidate = match.group(0) if match else raw
+    from services.data_validator import sanitize_contact_person
+    ok, cleaned, _ = sanitize_contact_person(candidate)
+    return cleaned if ok else ""
 
 
 class WorkingEmailExtractor:
@@ -123,6 +123,7 @@ class WorkingEmailExtractor:
         options.add_argument("--no-sandbox")
         options.add_argument("--disable-dev-shm-usage")
         options.add_argument("--disable-gpu")
+        options.add_argument("--window-size=1920,1080")
         # CAPTCHA images must load in the original authenticated browser.
 
         # Configure worker proxy if assigned
@@ -569,16 +570,41 @@ class WorkingEmailExtractor:
         email_pattern = r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"
         emails = re.findall(email_pattern, page_text)
 
-        phone_patterns = [
-            r"\+49[-\s]?\(?0?\)?[-\s]?\d{1,4}[-\s]?\d{1,8}",
-            r"0\d{1,4}[-\s]?\d{1,8}",
-            r"\(0\d{1,4}\)[-\s]?\d{1,8}",
-        ]
+        # Phone extraction: prioritize tel: links, then labeled cues, then validate
+        from services.data_validator import validate_phone_number
         phones = []
-        for pattern in phone_patterns:
-            phones.extend(re.findall(pattern, page_text))
+        try:
+            tel_elements = self.driver.find_elements(By.XPATH, "//a[starts-with(@href, 'tel:')]")
+            for tel_el in tel_elements:
+                href = (tel_el.get_attribute("href") or "").replace("tel:", "").strip()
+                ok, clean_p, _ = validate_phone_number(href)
+                if ok and clean_p not in phones:
+                    phones.append(clean_p)
+        except Exception:
+            pass
 
-        phones = list(set(phones))
+        if not phones:
+            tel_cues = re.findall(
+                r"(?:tel(?:efon)?\.?|fon|phone|mobil|hotline)\s*[:\-\s]\s*([+0-9\s/().\-]{7,25})",
+                page_text,
+                re.IGNORECASE,
+            )
+            for cue in tel_cues:
+                ok, clean_p, _ = validate_phone_number(cue)
+                if ok and clean_p not in phones:
+                    phones.append(clean_p)
+
+        if not phones:
+            phone_patterns = [
+                r"(?:\+49|0049)(?:[-\s/().]*\d){7,13}\b",
+                r"\b0[1-9](?:[-\s/().]*\d){6,12}\b",
+            ]
+            for pattern in phone_patterns:
+                for match in re.findall(pattern, page_text):
+                    ok, clean_p, _ = validate_phone_number(match)
+                    if ok and clean_p not in phones:
+                        phones.append(clean_p)
+
         arbeitsgeber_match = ARBEITGEBER_PATTERN.search(page_text)
         arbeitsgeber = normalize_arbeitsgeber(
             arbeitsgeber_match.group(0) if arbeitsgeber_match else None
@@ -586,6 +612,7 @@ class WorkingEmailExtractor:
         return (emails[0] if emails else None, phones[0] if phones else None, arbeitsgeber)
 
     def extract_application_link(self, fallback_url: str = "") -> str:
+        from services.data_validator import is_advice_or_generic_page, validate_application_url
         try:
             links = self.driver.find_elements(
                 By.XPATH,
@@ -596,13 +623,20 @@ class WorkingEmailExtractor:
                     href = (link.get_attribute("href") or "").strip()
                     if not href or href.startswith("javascript:") or href == "#":
                         continue
+                    if is_advice_or_generic_page(href):
+                        continue
                     text = (link.text or "").strip().lower()
                     title_attr = (link.get_attribute("title") or "").strip().lower()
                     aria_label = (link.get_attribute("aria-label") or "").strip().lower()
                     haystack = f"{text} {title_attr} {aria_label} {href.lower()}"
 
+                    if any(bad in haystack for bad in ["ratgeber", "tipps", "magazin", "faq", "hilfe"]):
+                        continue
+
                     if any(kw in haystack for kw in ["bewerb", "apply", "online-bewerb", "formular"]):
-                        return href
+                        ok, clean_app_url, _ = validate_application_url(href)
+                        if ok:
+                            return clean_app_url
                 except Exception:
                     continue
         except Exception as exc:
@@ -898,14 +932,28 @@ class WorkingEmailExtractor:
                 email, phone, arbeitsgeber = self.extract_contact_info()
                 apply_url = self.extract_application_link(fallback_url=job.get("url", ""))
 
+            from services.data_validator import validate_job_listing_url, is_advice_or_generic_page
+            orig_ad_url = job.get("url") or job.get("job_listing_url") or ""
+            is_valid_list, clean_listing, _ = validate_job_listing_url(orig_ad_url)
+            job_listing_url = clean_listing or orig_ad_url
+
             normalized_email = self._normalize_email(email)
             has_valid_email = bool(normalized_email and "@" in normalized_email)
 
             job["email"] = email if has_valid_email else ""
-            job["phone"] = phone
-            job["arbeitsgeber"] = arbeitsgeber
+            job["phone"] = phone or ""
+            job["arbeitsgeber"] = arbeitsgeber or ""
+            job["contact_person"] = arbeitsgeber or ""
             job["email_extracted"] = has_valid_email
-            job["apply_url"] = apply_url or job.get("url", "")
+            job["job_listing_url"] = job_listing_url
+
+            if apply_url and apply_url != job_listing_url and not is_advice_or_generic_page(apply_url):
+                job["apply_url"] = apply_url
+                job["direct_application_url"] = apply_url
+            else:
+                job["apply_url"] = job_listing_url
+                job["direct_application_url"] = ""
+
             job.setdefault("extraction_method", "selenium")
             if captcha_blocked and not has_valid_email:
                 job["extraction_status"] = "manual_required"
@@ -933,7 +981,7 @@ class WorkingEmailExtractor:
                 # Valid email exists -> save alongside job info immediately
                 job["has_form"] = False
                 job["form_link"] = ""
-                job["bewerbung_link"] = apply_url or job.get("url", "")
+                job["bewerbung_link"] = job.get("direct_application_url") or job.get("job_listing_url") or ""
                 job = normalize_job_opportunity_row(job, discovery_result=None)
             else:
                 # If no email exists, inspect original job ad & company website for application form

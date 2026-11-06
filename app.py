@@ -8229,6 +8229,7 @@ def api_inline_auto_job_status(job_id: str):
                 "selenium_fallbacks": int(job.get("selenium_fallbacks") or 0),
                 "rate_limited_count": int(job.get("rate_limited_count") or 0),
                 "captchas_solved": int(job.get("captchas_solved") or 0),
+                "truecaptcha_configured": bool(CAPTCHA_USERID and CAPTCHA_APIKEY),
                 "active_challenges": get_manual_captcha_manager().get_challenges_for_job(job_id, active_only=True),
                 "captcha_metrics": job.get("captcha_metrics") or get_captcha_tracker(job_id).get_summary(),
                 "failed": int(job.get("failed") or 0),
@@ -8607,6 +8608,63 @@ def api_inline_auto_job_solve_challenge():
         "message": msg,
         "challenge": ch.to_dict() if ch else None,
         "can_retry": ch.to_dict()["can_retry"] if ch else False,
+    })
+
+
+@app.route("/api/inline/auto-jobs/challenges/solve-truecaptcha", methods=["POST"])
+def api_inline_auto_job_solve_with_truecaptcha():
+    """Solve an image challenge through TrueCaptcha, then submit it in the live worker session."""
+    from scraper.true_captcha_solver import TrueCaptchaSolver
+    from services.manual_captcha_service import get_manual_captcha_manager
+
+    data = request.get_json() or {}
+    ch_id = str(data.get("challenge_id") or "").strip()
+    if not ch_id:
+        return jsonify({"success": False, "message": "Missing challenge_id"}), 400
+    if not CAPTCHA_USERID or not CAPTCHA_APIKEY:
+        return jsonify({
+            "success": False,
+            "message": "TrueCaptcha ist nicht konfiguriert. Bitte TRUECAPTCHA_USERID und TRUECAPTCHA_APIKEY setzen.",
+        }), 503
+
+    manager = get_manual_captcha_manager()
+    ch = manager.get_challenge(ch_id)
+    if not ch:
+        return jsonify({"success": False, "message": "Challenge nicht gefunden."}), 404
+    if ch.challenge_type != "image_text" or not ch.image_valid or not ch.captcha_image_base64:
+        return jsonify({
+            "success": False,
+            "message": ch.image_error or "Diese Sicherheitsprüfung kann nicht mit TrueCaptcha gelöst werden.",
+        }), 400
+    if ch.is_expired():
+        return jsonify({"success": False, "message": "Challenge ist abgelaufen. Bitte das Bild neu laden."}), 410
+
+    solver = TrueCaptchaSolver(
+        userid=CAPTCHA_USERID,
+        apikey=CAPTCHA_APIKEY,
+        worker_id=ch.worker_id,
+        job_id=ch.job_id,
+    )
+    solution = solver.solve_captcha(ch.captcha_image_base64, context={
+        "job_id": ch.job_id,
+        "worker_id": ch.worker_id,
+        "domain": ch.platform,
+        "correlation_id": ch.challenge_id,
+    })
+    if not solution:
+        return jsonify({
+            "success": False,
+            "message": "TrueCaptcha konnte keinen Code erkennen. Manuelle Eingabe ist weiterhin möglich.",
+        }), 502
+
+    success, msg = manager.submit_solution(ch_id, solution)
+    updated = manager.get_challenge(ch_id)
+    return jsonify({
+        "success": success,
+        "message": msg if success else (msg or "Der von TrueCaptcha erkannte Code wurde von der Webseite abgelehnt."),
+        "challenge": updated.to_dict() if updated else None,
+        "can_retry": updated.to_dict()["can_retry"] if updated else False,
+        "provider": "TrueCaptcha",
     })
 
 

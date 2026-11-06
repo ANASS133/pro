@@ -76,6 +76,14 @@
             }
 
             updateFilterSummaryBadge();
+
+            try {
+                const url = new URL(window.location.href);
+                if (url.searchParams.get("source") !== val) {
+                    url.searchParams.set("source", val);
+                    window.history.replaceState({}, "", url);
+                }
+            } catch (_) {}
         }
 
         function saveIndexState() {
@@ -96,6 +104,14 @@
             }
             localStorage.setItem(INDEX_STATE_KEY, JSON.stringify(state));
             updateFilterSummaryBadge();
+
+            try {
+                const url = new URL(window.location.href);
+                if (url.searchParams.get("source") !== val) {
+                    url.searchParams.set("source", val);
+                    window.history.replaceState({}, "", url);
+                }
+            } catch (_) {}
         }
 
         function restoreIndexState() {
@@ -1314,7 +1330,9 @@
             }).join("");
         }
 
-        function renderManualCaptchaChallenges(ui, challenges) {
+        const trueCaptchaAutoAttempts = new Set();
+
+        function renderManualCaptchaChallenges(ui, challenges, trueCaptchaConfigured = false) {
             if (!ui || !ui.manualCaptchaSection || !ui.manualCaptchaCards) return;
             const active = Array.isArray(challenges) ? challenges.filter(c => c && (c.status === "pending" || c.status === "failed")) : [];
             if (active.length === 0) {
@@ -1419,6 +1437,7 @@
                                     <button type="button" class="mch-btn mch-btn-primary btn-submit-captcha-code" data-challenge-id="${chId}">
                                         <span>Bestätigen</span>
                                     </button>
+                                    ${trueCaptchaConfigured ? `<button type="button" class="btn-solve-truecaptcha" data-challenge-id="${chId}" hidden aria-hidden="true" tabindex="-1"></button>` : ''}
                                     <button type="button" class="mch-btn mch-btn-browser btn-open-captcha-browser" data-challenge-id="${chId}" data-url="${sourceUrl}" title="Zielseite im Browser öffnen, um den Code dort einzusehen">
                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
                                         <span>Im Browser öffnen</span>
@@ -1451,6 +1470,17 @@
                     inputToRestore.value = activeInputValue;
                     inputToRestore.focus();
                 }
+            }
+
+            // Run TrueCaptcha once for every newly displayed valid image challenge.
+            // The Set prevents the regular progress polling/re-render from charging the API repeatedly.
+            if (trueCaptchaConfigured) {
+                ui.manualCaptchaCards.querySelectorAll(".btn-solve-truecaptcha").forEach(button => {
+                    const challengeId = button.dataset.challengeId;
+                    if (!challengeId || trueCaptchaAutoAttempts.has(challengeId)) return;
+                    trueCaptchaAutoAttempts.add(challengeId);
+                    queueMicrotask(() => button.isConnected && button.click());
+                });
             }
         }
 
@@ -1528,6 +1558,51 @@
                     return;
                 }
 
+                // 1b. Automatically recognize the image, then submit the result in the live worker session.
+                const trueCaptchaBtn = target.closest(".btn-solve-truecaptcha");
+                if (trueCaptchaBtn) {
+                    const card = trueCaptchaBtn.closest(".manual-captcha-card");
+                    const chId = trueCaptchaBtn.dataset.challengeId || card?.getAttribute("data-challenge-id");
+                    const feedbackEl = card?.querySelector(".mch-feedback-msg");
+                    const errEl = card?.querySelector(".mch-error-message");
+                    trueCaptchaBtn.disabled = true;
+                    if (feedbackEl) {
+                        feedbackEl.style.display = "block";
+                        feedbackEl.className = "mch-feedback-msg info";
+                        feedbackEl.textContent = "TrueCaptcha erkennt den Code und prüft ihn auf der Original-Webseite...";
+                    }
+                    try {
+                        const resp = await fetch("/api/inline/auto-jobs/challenges/solve-truecaptcha", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ challenge_id: chId }),
+                        });
+                        const resData = await resp.json().catch(() => ({}));
+                        if (resp.ok && resData.success) {
+                            if (feedbackEl) {
+                                feedbackEl.className = "mch-feedback-msg success";
+                                feedbackEl.textContent = "TrueCaptcha-Code akzeptiert. Worker setzt die Extraktion fort...";
+                            }
+                            setTimeout(() => pollAutoProgress(ui), 800);
+                        } else if (errEl) {
+                            errEl.style.display = "flex";
+                            const span = errEl.querySelector("span");
+                            if (span) span.textContent = resData.message || "TrueCaptcha konnte die Prüfung nicht lösen.";
+                        } else if (feedbackEl) {
+                            feedbackEl.className = "mch-feedback-msg error";
+                            feedbackEl.textContent = resData.message || "TrueCaptcha konnte die Prüfung nicht lösen.";
+                        }
+                    } catch (_) {
+                        if (feedbackEl) {
+                            feedbackEl.className = "mch-feedback-msg error";
+                            feedbackEl.textContent = "TrueCaptcha ist momentan nicht erreichbar.";
+                        }
+                    } finally {
+                        trueCaptchaBtn.disabled = false;
+                    }
+                    return;
+                }
+
                 // 2. Open in Browser
                 const browserBtn = target.closest(".btn-open-captcha-browser");
                 if (browserBtn) {
@@ -1565,6 +1640,7 @@
                         const data = await resp.json().catch(() => ({}));
                         if (resp.ok && data.success && data.captcha_image_base64 && imgBox) {
                             imgBox.innerHTML = `<img src="${data.captcha_image_base64}" alt="CAPTCHA Sicherheits-Code" class="mch-captcha-img" />`;
+                            trueCaptchaAutoAttempts.delete(chId);
                             await pollAutoProgress(ui);
                         } else if (imgBox) {
                             imgBox.innerHTML = `<div class="mch-img-fallback mch-img-error" role="alert"><span>${escapeHtml(data.message || "CAPTCHA image is unavailable or expired.")}</span></div>`;
@@ -1683,7 +1759,7 @@
             if (ui.captchaDiagTbody) {
                 renderCaptchaDiagnostics(ui.captchaDiagTbody, cm.recent_events);
             }
-            renderManualCaptchaChallenges(ui, data.active_challenges);
+            renderManualCaptchaChallenges(ui, data.active_challenges, Boolean(data.truecaptcha_configured));
             if (ui.failedEl) ui.failedEl.textContent = String(data.failed || 0);
 
             const pct = window.SPAUtils ? window.SPAUtils.clampPercent(data.percentage || 0) : Math.min(100, Math.max(0, data.percentage || 0));
@@ -3585,7 +3661,18 @@
             srcElInit.addEventListener("change", handleSearchSourceChange);
         }
 
-        return sections.createSearchSources();
+        return {
+            show() {
+                const url = new URL(window.location.href);
+                const requested = url.pathname === "/google-maps" ? "google_maps" : url.searchParams.get("source");
+                if (srcElInit && ["all", "job_portals", "google_maps"].includes(requested)) {
+                    srcElInit.value = requested;
+                }
+                handleSearchSourceChange();
+            },
+            hide() {
+            },
+        };
     };
 
     window.SPASections = sections;

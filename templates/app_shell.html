@@ -242,7 +242,7 @@
                                 <!-- Row 4: Search Source -->
                                 <div class="form-row">
                                     <label for="search_source_1" class="field-label">Search Source</label>
-                                    <select id="search_source_1" name="source" class="form-select" aria-controls="search-jobs-workspace search-maps-workspace">
+                                    <select id="search_source_1" name="source" class="form-select">
                                         <option value="all" selected>All Sources (Job Portals + Google Maps)</option>
                                         <option value="job_portals">Job Portals Only</option>
                                         <option value="google_maps">Google Maps Only</option>
@@ -1092,185 +1092,6 @@
                             </div>
                         </div>
                     </div>
-                <div id="search-maps-workspace" hidden>
-                    <div class="section-hero gmaps-hero">
-                        <div>
-                            <span class="section-kicker gmaps-kicker">Google Maps</span>
-                            <h2>Company &amp; Job Opportunity Discovery</h2>
-                            <p>Unternehmen auf Google Maps finden, Karriereseiten crawlen, E-Mails extrahieren, Ausbildung &amp; offene Stellen verifizieren und Bewerbungsformulare entdecken.</p>
-                        </div>
-                    </div>
-
-                    <div class="gmaps-workspace">
-                        <form id="gmaps-search-form" class="gmaps-search-card">
-                            <div class="gmaps-form-grid">
-                                <div class="gmaps-field gmaps-field--wide">
-                                    <label for="gmaps-query">Suchbegriff</label>
-                                    <input
-                                        type="text"
-                                        id="gmaps-query"
-                                        placeholder="z.B. IT Unternehmen M&uuml;nchen, Zahnarzt Berlin, Softwareentwicklung K&ouml;ln"
-                                        required
-                                        autocomplete="off"
-                                    >
-                                </div>
-                                <div class="gmaps-field">
-                                    <label for="gmaps-radius">Umkreis</label>
-                                    <select id="gmaps-radius">
-                                        <option value="1">1 km</option>
-                                        <option value="5">5 km</option>
-                                        <option value="10" selected>10 km</option>
-                                        <option value="25">25 km</option>
-                                        <option value="50">50 km</option>
-                                    </select>
-                                </div>
-                                <div class="gmaps-field">
-                                    <label for="gmaps-max-results">Max. Ergebnisse: <strong id="gmaps-max-results-value">50</strong></label>
-                                    <input type="range" id="gmaps-max-results" min="5" max="200" value="50" step="5">
-                                </div>
-                            </div>
-
-                            <!-- Career & Opportunity Verification Controls -->
-                            <div class="gmaps-verification-box">
-                                <div class="gmaps-toggle-row">
-                                    <label class="gmaps-switch">
-                                        <input type="checkbox" id="gmaps-verify-toggle">
-                                        <span class="gmaps-slider"></span>
-                                    </label>
-                                    <label for="gmaps-verify-toggle" class="gmaps-toggle-label">
-                                        <strong>Verify Open Jobs / Ausbildung Opportunities</strong>
-                                        <span>Karriereseiten automatisch nach passenden Ausbildungs- oder Festanstellungsplätzen durchsuchen</span>
-                                    </label>
-                                </div>
-                                <div id="gmaps-verification-options" class="gmaps-form-grid gmaps-verification-grid" hidden>
-                                    <div class="gmaps-field">
-                                        <label for="gmaps-job-type">Anstellungsart</label>
-                                        <select id="gmaps-job-type">
-                                            <option value="both" selected>Alle (Ausbildung &amp; Festanstellung)</option>
-                                            <option value="ausbildung">Nur Ausbildung</option>
-                                            <option value="employment">Nur Festanstellung</option>
-                                        </select>
-                                    </div>
-                                    <div class="gmaps-field">
-                                        <label for="gmaps-target-title">Zielberuf / Stellentitel</label>
-                                        <input
-                                            type="text"
-                                            id="gmaps-target-title"
-                                            placeholder="z.B. Fachinformatiker Anwendungsentwicklung, Softwareentwickler"
-                                        >
-                                    </div>
-                                    <div class="gmaps-field">
-                                        <label for="gmaps-client-select">Kandidaten-Profil (Optional)</label>
-                                        <select id="gmaps-client-select">
-                                            <option value="">Manuelle Kriterien / Allgemein</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="gmaps-form-actions">
-                                <button id="gmaps-search-btn" type="submit" class="gmaps-btn-primary">
-                                    Unternehmen &amp; Karrieren via Google Maps entdecken
-                                </button>
-                            </div>
-                            <div id="gmaps-loading" class="gmaps-loading" hidden>
-                                <div class="gmaps-spinner"></div>
-                                <p>Google Maps wird durchsucht, bitte warten&hellip;</p>
-                            </div>
-                        </form>
-
-                        <section id="gmaps-progress-panel" class="gmaps-progress-panel" hidden>
-                            <h4 class="gmaps-progress-title">Progress &amp; Discovery Stats</h4>
-                            <div id="gmaps-phase-label" class="gmaps-phase-label">Warte auf Start&hellip;</div>
-                            <div class="gmaps-progress-stats" style="grid-template-columns: repeat(6, 1fr);">
-                                <div class="gmaps-progress-stat">
-                                    <span id="gmaps-stat-businesses" class="value">0</span>
-                                    <span class="label">Unternehmen</span>
-                                </div>
-                                <div class="gmaps-progress-stat">
-                                    <span id="gmaps-stat-emails" class="value">0</span>
-                                    <span class="label">Emails</span>
-                                </div>
-                                <div class="gmaps-progress-stat">
-                                    <span id="gmaps-stat-vacancies" class="value">0</span>
-                                    <span class="label">Stellen</span>
-                                </div>
-                                <div class="gmaps-progress-stat">
-                                    <span id="gmaps-stat-forms" class="value">0</span>
-                                    <span class="label">Formulare</span>
-                                </div>
-                                <div class="gmaps-progress-stat">
-                                    <span id="gmaps-stat-no-email" class="value">0</span>
-                                    <span class="label">Keine E-Mail</span>
-                                </div>
-                                <div class="gmaps-progress-stat">
-                                    <span id="gmaps-stat-failed" class="value">0</span>
-                                    <span class="label">Errors</span>
-                                </div>
-                            </div>
-                            <div class="gmaps-progress-track">
-                                <div id="gmaps-progress-fill" class="gmaps-progress-fill"></div>
-                            </div>
-                            <div id="gmaps-progress-status" class="gmaps-progress-status">Idle</div>
-                            <div id="gmaps-progress-error" class="gmaps-progress-error" hidden></div>
-                            <div class="gmaps-progress-actions">
-                                <button id="gmaps-stop-btn" type="button" class="gmaps-progress-stop-btn" hidden>Stoppen</button>
-                            </div>
-                        </section>
-
-                        <div id="gmaps-discovery-summary" class="gmaps-discovery-summary" hidden>
-                            <div class="gmaps-discovery-card">
-                                <span class="gmaps-discovery-icon">&#128269;</span>
-                                <div>
-                                    <strong><span id="gmaps-discovery-count">0</span> Businesses gefunden</strong>
-                                    <p>Klicken Sie auf 'E-Mails &amp; Karrieren extrahieren', um Websites und Stellenangebote zu analysieren.</p>
-                                </div>
-                                <button id="gmaps-start-extract-btn" type="button" class="gmaps-extract-btn" hidden>
-                                    Extraktion &amp; Verifizierung starten
-                                </button>
-                            </div>
-                        </div>
-
-                        <section id="gmaps-results-panel" class="gmaps-results-panel" hidden>
-                            <div class="gmaps-results-head">
-                                <div>
-                                    <h3>Ergebnisse</h3>
-                                    <span id="gmaps-results-summary" class="gmaps-results-summary"></span>
-                                </div>
-                                <div class="gmaps-filter-bar">
-                                    <button type="button" class="gmaps-filter-btn active" data-filter="all">Alle Unternehmen</button>
-                                    <button type="button" class="gmaps-filter-btn" data-filter="verified">Bestätigte Stellen (<span id="gmaps-count-verified">0</span>)</button>
-                                    <button type="button" class="gmaps-filter-btn" data-filter="forms">Bewerbungsformulare (<span id="gmaps-count-forms">0</span>)</button>
-                                    <button type="button" class="gmaps-filter-btn" data-filter="emails">Mit E-Mail (<span id="gmaps-count-emails">0</span>)</button>
-                                </div>
-                            </div>
-                            <div class="gmaps-results-table-wrap">
-                                <table class="gmaps-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Unternehmen</th>
-                                            <th>Standort</th>
-                                            <th>Website &amp; Karriere</th>
-                                            <th>Verifizierte Stelle</th>
-                                            <th>Passung</th>
-                                            <th>Bewerbungsweg</th>
-                                            <th>E-Mails</th>
-                                            <th>Status</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="gmaps-results-body"></tbody>
-                                </table>
-                            </div>
-                        </section>
-
-                        <div id="gmaps-export-bar" class="gmaps-export-bar" hidden>
-                            <span>Export:</span>
-                            <button type="button" id="gmaps-dl-excel" class="gmaps-export-btn">Excel</button>
-                            <button type="button" id="gmaps-dl-csv" class="gmaps-export-btn">CSV</button>
-                            <button type="button" id="gmaps-dl-json" class="gmaps-export-btn">JSON</button>
-                        </div>
-                    </div>
-                </div>
                 </section>
 
                 <section id="dashboard-section" class="app-section" data-section="dashboard" {% if initial_section
@@ -5643,7 +5464,6 @@
     <script src="{{ url_for('static', filename='spa/sections/ausbildungen.js') }}?v=3.0"></script>
     <script src="{{ url_for('static', filename='spa/sections/create-anschreibens.js') }}?v=2.2"></script>
     <script src="{{ url_for('static', filename='spa/sections/send-emails.js') }}?v=2.2"></script>
-    <script src="{{ url_for('static', filename='spa/sections/google-maps.js') }}?v=2.2"></script>
     <script src="{{ url_for('static', filename='spa/sections/autofill-hub.js') }}?v=2.2"></script>
     <script src="{{ url_for('static', filename='spa/sections/ai-settings.js') }}?v=1.0"></script>
     <script src="{{ url_for('static', filename='spa/sections/whatsapp.js') }}?v=1.0"></script>

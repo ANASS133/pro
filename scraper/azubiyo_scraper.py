@@ -226,9 +226,17 @@ class AzubiyoScraper:
                 company = comp_el.get_text(strip=True) if comp_el else "N/A"
 
                 # 3. URL & Reference
-                link_el = card.find("a", href=True)
+                from services.data_validator import is_advice_or_generic_page
+                link_el = card.find("a", href=lambda h: h and "/stellenanzeigen/" in h) or card.find("a", href=True)
                 relative_url = link_el["href"] if link_el else ""
                 full_url = urllib.parse.urljoin("https://www.azubiyo.de", relative_url)
+                if is_advice_or_generic_page(full_url):
+                    for a_cand in card.find_all("a", href=True):
+                        cand_url = urllib.parse.urljoin("https://www.azubiyo.de", a_cand["href"])
+                        if not is_advice_or_generic_page(cand_url) and "/stellenanzeigen/" in cand_url:
+                            full_url = cand_url
+                            relative_url = a_cand["href"]
+                            break
 
                 slug_match = re.search(r"/stellenanzeigen/([^/]+)/?", relative_url)
                 if slug_match:

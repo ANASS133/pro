@@ -284,6 +284,15 @@ class ApplicationFormDiscovery:
         if cls.is_job_portal_url(url):
             return False, STATUS_JOB_AD_ONLY, ["job_portal_listing"]
 
+        from services.data_validator import is_advice_or_generic_page, GENERIC_PORTAL_ROOTS
+        if is_advice_or_generic_page(url):
+            return False, STATUS_NONE, ["generic_advice_page"]
+
+        netloc = (parsed.netloc or "").lower()
+        if netloc in GENERIC_PORTAL_ROOTS:
+            if not path_lower or path_lower in ("jobs", "stellenangebote", "stellen", "jobsuche"):
+                return False, STATUS_JOB_AD_ONLY, ["generic_job_portal_root"]
+
         soup = BeautifulSoup(html, "html.parser")
 
         # 1. Check for ATS application workflow endpoints
@@ -415,11 +424,19 @@ class ApplicationFormDiscovery:
                 if full_url in seen:
                     continue
 
+                from services.data_validator import is_advice_or_generic_page
+                if is_advice_or_generic_page(full_url):
+                    continue
+
                 text = (a_tag.get_text() or "").strip().lower()
                 title_attr = (a_tag.get("title") or "").strip().lower()
                 aria_label = (a_tag.get("aria-label") or "").strip().lower()
                 class_str = " ".join(a_tag.get("class", [])).lower()
                 haystack = f"{text} {title_attr} {aria_label} {class_str} {full_url.lower()}"
+
+                # Exclude advice/guide keywords in text
+                if any(bad in haystack for bad in ["ratgeber", "tipps", "magazin", "faq", "hilfe"]):
+                    continue
 
                 # Direct match for application button keywords or ATS
                 is_apply_button = any(kw in haystack for kw in APPLICATION_BUTTON_KEYWORDS)
@@ -642,11 +659,11 @@ def classify_application_method(
     em = str(existing_method or "").strip().lower()
     has_direct_url = bool(direct_url and not ApplicationFormDiscovery.is_job_portal_url(direct_url))
 
-    if has_valid_email and (has_form or has_direct_url or em in {"form", "external_link", "portal", "both"}):
+    if has_valid_email and (has_form or has_direct_url):
         return "both", "E-Mail + Online-Formular"
     if has_valid_email:
         return "email", "E-Mail"
-    if has_form or em == "form":
+    if has_form:
         return "form", "Online-Formular"
     if has_direct_url or em in {"external_link", "portal"}:
         return "external_link", "Online-Portal / Link"
@@ -668,10 +685,19 @@ def normalize_job_opportunity_row(
     """
     Normalizes a job dictionary into the exact 21-column Excel schema in exact order.
     Preserves all discovered job opportunities regardless of email availability.
+    Enforces strict data quality on listing URLs, phones, recruiters, and form links.
     """
     row = dict(job or {})
+    from services.data_validator import (
+        validate_job_listing_url,
+        validate_phone_number,
+        sanitize_contact_person,
+        validate_application_url,
+        validate_form_link,
+        is_advice_or_generic_page,
+    )
 
-    # Extract or preserve email
+    # 1. Extract or preserve email
     raw_email = row.get("email")
     clean_email = str(raw_email or "").strip().lower()
     has_valid_email = bool(
@@ -683,40 +709,82 @@ def normalize_job_opportunity_row(
     )
     email_val = clean_email if has_valid_email else ""
 
-    # Preserve original apply_url / listing URL
-    original_apply_url = str(row.get("apply_url") or row.get("url") or "").strip()
+    # 2. Preserve genuine job listing URL (never overwrite with advice page)
+    orig_listing_cand = str(row.get("job_listing_url") or row.get("url") or row.get("original_url") or "").strip()
+    if is_advice_or_generic_page(orig_listing_cand):
+        alt_cand = str(row.get("url") or row.get("original_url") or "").strip()
+        if not is_advice_or_generic_page(alt_cand):
+            orig_listing_cand = alt_cand
 
-    # Determine form discovery attributes
-    if discovery_result is not None:
-        has_form = bool(discovery_result.has_form)
-        form_link = str(discovery_result.form_link or "").strip() if has_form else ""
-        bewerbung_link = str(discovery_result.bewerbung_link or original_apply_url or "").strip()
+    is_list_ok, clean_listing, _ = validate_job_listing_url(orig_listing_cand)
+    job_listing_url = clean_listing or (orig_listing_cand if not is_advice_or_generic_page(orig_listing_cand) else "")
+
+    # 3. Application destination URL (apply_url)
+    raw_apply = str(row.get("apply_url") or "").strip()
+    is_app_ok, clean_apply_url, _ = validate_application_url(raw_apply)
+    apply_url = clean_apply_url if (is_app_ok and not is_advice_or_generic_page(clean_apply_url)) else job_listing_url
+
+    # 4. Direct application URL / mailto correction
+    raw_direct = str(row.get("direct_application_url") or "").strip()
+    if "mailto:" in raw_direct.lower():
+        m = re.search(r"mailto:([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})", raw_direct, re.I)
+        if m and not email_val:
+            email_val = m.group(1).lower()
+        direct_app_url = ""
     else:
-        # Respect existing fields if already verified
-        has_form = bool(row.get("has_form") is True or str(row.get("has_form")).lower() in {"true", "1"})
+        is_dir_ok, clean_dir_url, _ = validate_application_url(raw_direct)
+        direct_app_url = clean_dir_url if is_dir_ok else ""
+
+    # 5. Form discovery validation (reject generic portal roots like jobs.hogapage.de)
+    if discovery_result is not None:
+        raw_has_form = bool(discovery_result.has_form)
+        raw_form_link = str(discovery_result.form_link or "").strip() if raw_has_form else ""
+        is_form_valid, form_link, _ = validate_form_link(raw_form_link, has_form=raw_has_form)
+        has_form = is_form_valid
+        form_link = form_link if is_form_valid else ""
+        raw_bewerbung_link = str(discovery_result.bewerbung_link or apply_url or job_listing_url or "").strip()
+    else:
+        raw_has_form = bool(row.get("has_form") is True or str(row.get("has_form")).lower() in {"true", "1"})
         raw_form_link = str(row.get("form_link") or "").strip()
-        # If raw_form_link is identical to job ad portal URL and not verified, do not treat as genuine form
-        if ApplicationFormDiscovery.is_job_portal_url(raw_form_link):
-            has_form = False
-            form_link = ""
-        else:
-            form_link = raw_form_link if has_form else ""
+        is_form_valid, form_link, _ = validate_form_link(raw_form_link, has_form=raw_has_form)
+        has_form = is_form_valid
+        form_link = form_link if is_form_valid else ""
+        raw_bewerbung_link = str(row.get("bewerbung_link") or form_link or apply_url or job_listing_url or "").strip()
 
-        bewerbung_link = str(row.get("bewerbung_link") or form_link or original_apply_url or "").strip()
+    if not direct_app_url and has_form and form_link:
+        direct_app_url = form_link
 
+    # Clean bewerbung_link of advice pages or malformed mailto
+    if is_advice_or_generic_page(raw_bewerbung_link) or "mailto:" in raw_bewerbung_link.lower():
+        bewerbung_link = direct_app_url or job_listing_url
+    else:
+        bewerbung_link = raw_bewerbung_link or direct_app_url or job_listing_url
+
+    # 6. Phone number validation (reject fragments, coordinates, dates)
+    raw_phone = row.get("phone")
+    if raw_phone is None or str(raw_phone).strip().lower() in ("nan", "none", "null", ""):
+        phone_val = ""
+    else:
+        is_phone_ok, clean_phone, _ = validate_phone_number(str(raw_phone))
+        phone_val = clean_phone if is_phone_ok else ""
+
+    # 7. Recruiter / Contact person sanitization (strip addresses, street markers)
+    raw_contact = row.get("contact_person") or row.get("arbeitsgeber")
+    if raw_contact is None or str(raw_contact).strip().lower() in ("nan", "none", "null", ""):
+        contact_val = ""
+    else:
+        is_cp_ok, clean_cp, _ = sanitize_contact_person(str(raw_contact))
+        contact_val = clean_cp if is_cp_ok else ""
+    arbeitsgeber = contact_val
+
+    # Method inference
     existing_method = str(row.get("application_method") or "").strip()
-    explicit_direct_url = str(row.get("direct_application_url") or "").strip()
-    direct_app_url = explicit_direct_url or form_link
-    if not direct_app_url and discovery_result is None and row.get("has_form"):
-        direct_app_url = str(bewerbung_link if bewerbung_link != original_apply_url else "").strip()
-
-    # Source-aware method inference for postal-only and portal-login portals
     src_val = str(row.get("source") or "").lower()
-    if ("ihk" in src_val or "ihk" in original_apply_url) and not email_val and not has_form and not direct_app_url:
+    if ("ihk" in src_val or "ihk" in job_listing_url) and not email_val and not has_form and not direct_app_url:
         if row.get("postal_only") or "schriftlich" in str(row.get("bewerbungsart", "")).lower() or "post" in str(row.get("bewerbungsart", "")).lower() or existing_method in ("postal", "schriftlich"):
             existing_method = "postal"
 
-    if ("azubiyo" in src_val or "azubiyo" in original_apply_url) and not email_val and not has_form and not direct_app_url:
+    if ("azubiyo" in src_val or "azubiyo" in job_listing_url) and not email_val and not has_form and not direct_app_url:
         if row.get("portal_application_only") or row.get("is_portal_login_required") or row.get("portal_login_required") or "login" in str(row.get("bewerbungsart", "")).lower() or "registrier" in str(row.get("bewerbungsart", "")).lower() or existing_method in ("portal_login_required", "portal_login"):
             existing_method = "portal_login_required"
 
@@ -728,8 +796,7 @@ def normalize_job_opportunity_row(
     )
 
     # Anrede calculation
-    arbeitsgeber = str(row.get("contact_person") or row.get("arbeitsgeber") or "").strip()
-    contact = arbeitsgeber.lower()
+    contact = contact_val.lower()
     if contact.startswith("herr") or contact.startswith("herrn"):
         anrede = "Sehr geehrter"
     elif contact.startswith("frau"):
@@ -737,10 +804,12 @@ def normalize_job_opportunity_row(
     else:
         anrede = "Sehr geehrte Damen und Herren"
 
-    # Enriched fields preserved
     email_type = str(row.get("email_type") or ("recruitment" if email_val else "")).strip()
     employer_website = str(row.get("employer_website") or "").strip()
     application_url_type = str(row.get("application_url_type") or ("direct_form" if has_form else ("postal" if app_method == "postal" else ("portal_login" if app_method == "portal_login_required" else "none")))).strip()
+    if not has_form and application_url_type == "direct_form":
+        application_url_type = "career_portal" if direct_app_url else "none"
+
     required_documents = str(row.get("required_documents") or "").strip()
     default_status = "completed" if (email_val or has_form or direct_app_url or app_method in ("postal", "portal_login_required")) else "unresolved"
     extraction_status = str(row.get("extraction_status") or default_status).strip()
@@ -757,10 +826,10 @@ def normalize_job_opportunity_row(
         "start_date": str(row.get("start_date") or "N/A"),
         "hauptberuf": str(row.get("hauptberuf") or "N/A"),
         "email": email_val,
-        "phone": str(row.get("phone") or ""),
+        "phone": phone_val,
         "source": str(row.get("source") or "Arbeitsagentur"),
-        "arbeitsgeber": arbeitsgeber,
-        "apply_url": original_apply_url,
+        "arbeitsgeber": contact_val,
+        "apply_url": apply_url,
         "form_link": form_link,
         "has_form": has_form,
         "application_method": app_method,
@@ -772,8 +841,8 @@ def normalize_job_opportunity_row(
         "salary": str(row.get("salary") or ""),
         # Extended fields for full application details
         "email_type": email_type,
-        "contact_person": arbeitsgeber,
-        "job_listing_url": original_apply_url,
+        "contact_person": contact_val,
+        "job_listing_url": job_listing_url,
         "employer_website": employer_website,
         "direct_application_url": direct_app_url,
         "application_url_type": application_url_type,

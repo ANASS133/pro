@@ -70,6 +70,44 @@ def capture_loaded_captcha(driver, element, timeout=5.0):
         ) is True)
     except Exception:
         return "", "CAPTCHA image did not load in the worker browser. Restart workers created with image blocking enabled."
+
+    # Put the element in a deterministic desktop layout before reading its source
+    # or rasterizing it. Require two consecutive identical rectangles so a lazy
+    # image, sticky header, or responsive reflow cannot move it mid-capture.
+    try:
+        driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center', inline: 'center'});",
+            element,
+        )
+        previous_rect = [None]
+        stable_reads = [0]
+
+        def same_rectangle(first, second):
+            if not isinstance(first, (list, tuple)) or not isinstance(second, (list, tuple)):
+                return first == second
+            if len(first) != len(second):
+                return False
+            try:
+                return all(abs(float(a) - float(b)) <= 0.25 for a, b in zip(first, second))
+            except (TypeError, ValueError):
+                return first == second
+
+        def layout_is_stable(active_driver):
+            rect = active_driver.execute_script("""
+                const r = arguments[0].getBoundingClientRect();
+                return [r.left, r.top, r.width, r.height];
+            """, element)
+            if same_rectangle(rect, previous_rect[0]):
+                stable_reads[0] += 1
+            else:
+                previous_rect[0] = rect
+                stable_reads[0] = 1
+            return stable_reads[0] >= 2
+
+        WebDriverWait(driver, timeout, poll_frequency=0.05).until(layout_is_stable)
+    except Exception:
+        return "", "CAPTCHA image layout did not stabilize before capture."
+
     error = "CAPTCHA image capture failed."
 
     # Strategy 1 & 2: If element has a valid src URL, capture the original unclipped raster image
@@ -145,20 +183,11 @@ def capture_loaded_captcha(driver, element, timeout=5.0):
             except Exception:
                 pass
 
+    # Selenium element screenshots are browser-native raster captures and avoid
+    # canvas tainting/CORS failures. Try both exposed element screenshot forms.
     for capture in (
         lambda: "data:image/png;base64," + element.screenshot_as_base64,
-        lambda: driver.execute_script("""
-            const img = arguments[0];
-            const canvas = document.createElement('canvas');
-            canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
-            canvas.getContext('2d').drawImage(img, 0, 0);
-            return canvas.toDataURL('image/png');
-        """, element),
-        lambda: (
-            driver.execute_script("arguments[0].scrollIntoView({block: 'center', inline: 'center'});", element)
-            if hasattr(driver, "execute_script") else None,
-            "data:image/png;base64," + element.screenshot_as_base64
-        )[-1],
+        lambda: "data:image/png;base64," + base64.b64encode(element.screenshot_as_png).decode("ascii"),
     ):
         try:
             candidate = capture()
@@ -260,33 +289,62 @@ class ManualCaptchaChallenge:
                 "//img[contains(@class, 'captcha')]",
                 "//div[contains(@class, 'captcha')]//img",
             ]
-            img_el = None
-            # Ask the authenticated Arbeitsagentur session for a fresh image;
-            # never fetch a new challenge outside the worker's browser.
-            try:
-                reload_buttons = self.driver_ref.find_elements(By.CSS_SELECTOR, "#kontaktdaten-captcha-reload-button")
-                if reload_buttons:
-                    reload_buttons[0].click()
-                    time.sleep(0.4)
-            except Exception:
-                pass
-            for sel in selectors:
+            def find_image_element():
+                for sel in selectors:
+                    try:
+                        els = self.driver_ref.find_elements(By.XPATH, sel)
+                        for candidate in els:
+                            try:
+                                size = candidate.size
+                                if size and (size.get("width", 0) < 30 or size.get("height", 0) < 10):
+                                    continue
+                            except Exception:
+                                pass
+                            return candidate
+                    except Exception:
+                        continue
+                return None
+
+            img_el = find_image_element()
+            old_src = ""
+            if img_el is not None:
                 try:
-                    els = self.driver_ref.find_elements(By.XPATH, sel)
-                    for el in els:
-                        try:
-                            size = el.size
-                            if size and (size.get("width", 0) < 30 or size.get("height", 0) < 10):
-                                continue
-                            img_el = el
-                            break
-                        except Exception:
-                            img_el = el
-                            break
-                    if img_el:
-                        break
+                    old_src = str(img_el.get_attribute("src") or "")
                 except Exception:
-                    continue
+                    old_src = ""
+
+            # Ask the authenticated Arbeitsagentur session for a fresh image;
+            # wait for its source identity to change instead of guessing a delay.
+            reload_buttons = self.driver_ref.find_elements(By.CSS_SELECTOR, "#kontaktdaten-captcha-reload-button")
+            if reload_buttons:
+                from selenium.common.exceptions import TimeoutException
+                from selenium.webdriver.support.ui import WebDriverWait
+
+                try:
+                    reload_buttons[0].click()
+                except Exception as exc:
+                    self.captcha_image_base64 = ""
+                    self.image_valid = False
+                    self.image_error = f"CAPTCHA reload request failed: {exc}"
+                    return ""
+
+                def refreshed_element(_driver):
+                    candidate = find_image_element()
+                    if candidate is None:
+                        return False
+                    try:
+                        new_src = str(candidate.get_attribute("src") or "")
+                    except Exception:
+                        return False
+                    return candidate if new_src and new_src != old_src else False
+
+                try:
+                    img_el = WebDriverWait(self.driver_ref, 5.0, poll_frequency=0.05).until(refreshed_element)
+                except TimeoutException:
+                    self.captcha_image_base64 = ""
+                    self.image_valid = False
+                    self.image_error = "CAPTCHA image source did not change before the refresh timeout."
+                    return ""
 
             if img_el is not None:
                 try:

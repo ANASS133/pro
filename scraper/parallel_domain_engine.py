@@ -197,6 +197,9 @@ def normalize_domain_url(raw: str) -> Tuple[str, str]:
     cleaned = str(raw or "").strip().lower()
     if not cleaned:
         return "", ""
+    # Never prepend https:// to mailto:, tel:, or javascript: schemes
+    if cleaned.startswith(("mailto:", "tel:", "javascript:")):
+        return "", ""
     if not cleaned.startswith(("http://", "https://")):
         cleaned = "https://" + cleaned
     

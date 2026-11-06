@@ -333,9 +333,17 @@ class AubiPlusScraper:
                             break
 
                 # 3. URL & Reference
-                link_el = card.find("a", href=lambda h: h and ("/ausbildung/" in h or "/duales-studium/" in h))
+                from services.data_validator import is_advice_or_generic_page
+                link_el = card.find("a", href=lambda h: h and ("/ausbildung/" in h or "/duales-studium/" in h)) or card.find("a", href=True)
                 relative_url = link_el["href"] if link_el else ""
                 full_url = urllib.parse.urljoin("https://www.aubi-plus.de", relative_url)
+                if is_advice_or_generic_page(full_url):
+                    for a_cand in card.find_all("a", href=True):
+                        cand_url = urllib.parse.urljoin("https://www.aubi-plus.de", a_cand["href"])
+                        if not is_advice_or_generic_page(cand_url) and ("/ausbildung/" in cand_url or "/duales-studium/" in cand_url):
+                            full_url = cand_url
+                            relative_url = a_cand["href"]
+                            break
 
                 slug_match = re.search(r"/ausbildung/([^/]+)/?", relative_url)
                 if slug_match:

@@ -400,6 +400,48 @@ class ManualCaptchaEndpointsTest(unittest.TestCase):
         self.assertTrue(d3["success"])
         self.assertEqual(ch2.status, "dismissed")
 
+    def test_truecaptcha_endpoint_solves_and_submits_in_worker_session(self):
+        submitted_codes = []
+        ch = self.manager.create_challenge(
+            job_id="job_test_api",
+            search_run_id="run_api_1",
+            job_index=1,
+            worker_id=1,
+            platform="ihk.de",
+            job_title="Elektriker",
+            employer="Elektro GmbH",
+            source_url="https://example.test/job/1",
+            challenge_type="image_text",
+            captcha_image_base64=VALID_PNG,
+            submit_handler=lambda code: (submitted_codes.append(code) is None, "Code OK"),
+        )
+
+        with patch.object(app_module, "CAPTCHA_USERID", "user-1"), \
+             patch.object(app_module, "CAPTCHA_APIKEY", "key-1"), \
+             patch("scraper.true_captcha_solver.TrueCaptchaSolver.solve_captcha", return_value="A7K9") as solve:
+            response = self.app.post(
+                "/api/inline/auto-jobs/challenges/solve-truecaptcha",
+                json={"challenge_id": ch.challenge_id},
+            )
+
+        data = response.get_json()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(data["success"])
+        self.assertEqual(data["provider"], "TrueCaptcha")
+        self.assertEqual(submitted_codes, ["A7K9"])
+        self.assertEqual(ch.status, "solved")
+        solve.assert_called_once()
+
+    def test_truecaptcha_endpoint_requires_server_credentials(self):
+        with patch.object(app_module, "CAPTCHA_USERID", ""), patch.object(app_module, "CAPTCHA_APIKEY", ""):
+            response = self.app.post(
+                "/api/inline/auto-jobs/challenges/solve-truecaptcha",
+                json={"challenge_id": "mch_missing"},
+            )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertFalse(response.get_json()["success"])
+
     def test_refresh_challenge_image_endpoint(self):
         mock_driver = MagicMock()
         mock_driver.find_elements.return_value = []
@@ -430,7 +472,9 @@ class ManualCaptchaEndpointsTest(unittest.TestCase):
         image_element = MagicMock()
         image_element.get_attribute.return_value = ""
         image_element.screenshot_as_base64 = VALID_PNG.split(",", 1)[1]
-        mock_driver.find_elements.return_value = [image_element]
+        mock_driver.find_elements.side_effect = lambda by, selector: (
+            [] if selector == "#kontaktdaten-captcha-reload-button" else [image_element]
+        )
         mock_driver.execute_script.return_value = True
         ch = self.manager.create_challenge(
             job_id="job_refresh_valid", search_run_id="run_ref_2", job_index=2,

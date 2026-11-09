@@ -220,6 +220,7 @@ class ManualCaptchaChallenge:
     last_error: str = ""
     image_valid: bool = False
     image_error: str = ""
+    recognized_code: str = ""
     resolved_at: Optional[str] = None
     
     # Internal sync hooks (not serialized to json)
@@ -252,6 +253,7 @@ class ManualCaptchaChallenge:
             "captcha_image_base64": self.captcha_image_base64,
             "image_valid": self.image_valid,
             "image_error": self.image_error,
+            "recognized_code": getattr(self, "recognized_code", "") or "",
             "created_at": self.created_at,
             "expires_at": self.expires_at,
             "status": "expired" if self.is_expired() else self.status,
@@ -475,6 +477,13 @@ class ManualCaptchaManager:
             else:
                 ch.status = "failed" if ch.attempts >= ch.max_attempts else "pending"
                 ch.last_error = msg or "Verification failed. Target website rejected the code."
+                # Most image CAPTCHA providers rotate the challenge after a
+                # rejected answer.  Refresh the dashboard payload immediately
+                # so the next attempt is made against the current live image.
+                if ch.status == "pending" and ch.driver_ref:
+                    refreshed = ch.refresh_image()
+                    if not refreshed and ch.image_error:
+                        ch.last_error = f"{ch.last_error} {ch.image_error}"
                 if ch.status == "failed":
                     ch.completion_event.set()
                 return False, ch.last_error

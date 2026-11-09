@@ -52,22 +52,46 @@ GENERIC_ADVICE_PATHS = (
 
 KNOWN_PORTAL_ADVICE_DOMAINS = {
     "ausbildung.de": ["/ratgeber", "/bewerbung", "/magazin", "/tipps", "/suche"],
-    "azubiyo.de": ["/bewerbung", "/ratgeber", "/magazin", "/tipps", "/schueler", "/suche"],
-    "aubi-plus.de": ["/bewerbung", "/ratgeber", "/magazin", "/tipps", "/suche"],
-    "arbeitsagentur.de": ["/ratgeber", "/tipps", "/faq", "/hilfe"],
+    "azubiyo.de": [
+        "/bewerbung",
+        "/ratgeber",
+        "/magazin",
+        "/tipps",
+        "/schueler",
+        "/suche",
+        "/unterrichtsmaterial",
+        "/berufswahltest",
+        "/welcher-beruf-passt-zu-mir",
+        "/azubi-wissen",
+        "/schuelerrabatte",
+        "/arbeitgeber",
+        "/formular-zur-meldung",
+        "/stellenmarkt",
+        "/anmeldung",
+        "/profil-anlegen",
+        "/meine-stellen",
+    ],
+    "aubi-plus.de": ["/bewerbung", "/ratgeber", "/magazin", "/tipps", "/suche", "/suchmaschine"],
+    "arbeitsagentur.de": ["/ratgeber", "/tipps", "/faq", "/hilfe", "/eservices", "/vor-ort"],
 }
 
 # Generic job board root domains or landing pages that must NEVER be classified as a verified application form
 GENERIC_PORTAL_ROOTS = {
     "jobs.hogapage.de",
     "hogapage.de",
+    "www.hogapage.de",
     "stepstone.de",
     "www.stepstone.de",
     "indeed.com",
     "de.indeed.com",
     "monster.de",
     "stellenanzeigen.de",
+    "www.stellenanzeigen.de",
     "stellenmarkt.de",
+    "yourfirm.de",
+    "www.yourfirm.de",
+    "heyjobs.co",
+    "www.heyjobs.co",
     "arbeitsagentur.de",
     "www.arbeitsagentur.de",
     "ausbildung.de",
@@ -76,6 +100,16 @@ GENERIC_PORTAL_ROOTS = {
     "www.azubiyo.de",
     "aubi-plus.de",
     "www.aubi-plus.de",
+    "ihk-lehrstellenboerse.de",
+    "www.ihk-lehrstellenboerse.de",
+    "meine-ausbildung-in-deutschland.de",
+    "jobs.meine-ausbildung-in-deutschland.de",
+    "indexinternet.de",
+    "ihk-azubi-stellenmarkt.indexinternet.de",
+    "bewerbung2go.de",
+    "www.bewerbung2go.de",
+    "funkeworks.de",
+    "www.funkeworks.de",
 }
 
 # -----------------------------------------------------------------------------
@@ -148,6 +182,12 @@ INVALID_CONTACT_PATTERNS = [
     re.compile(r"\bund\s+ausbilder\b", re.I),
     re.compile(r"\bunterstützen\s+und\s+fördern\b", re.I),
     re.compile(r"\bfür\s+restaurants\b", re.I),
+    re.compile(r"\bstehen\s+dir\b", re.I),
+    re.compile(r"\bmit\s+rat\s+und\s+tat\b", re.I),
+    re.compile(r"\bdas\s+team\b", re.I),
+    re.compile(r"\bunser(?:e)?\s+team\b", re.I),
+    re.compile(r"\bfreut\s+sich\b", re.I),
+    re.compile(r"^(?:sein|dein|deine|ihr|ihre|unser|unsere|gerne|bitte|hier|oder|und)$", re.I),
 ]
 
 
@@ -506,6 +546,12 @@ def validate_application_url(
     parsed = urlparse(raw)
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         return False, "", "Invalid URL scheme or missing hostname"
+
+    netloc = (parsed.netloc or "").lower()
+    path = (parsed.path or "").strip("/")
+    if netloc in GENERIC_PORTAL_ROOTS:
+        if not path or path in ("jobs", "de-de/jobs", "stellenangebote", "stellen", "jobsuche", "ausbildung"):
+            return False, "", f"Generic portal root '{netloc}' is not a valid application URL"
 
     return True, raw, ""
 

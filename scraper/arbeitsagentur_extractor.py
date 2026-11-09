@@ -190,6 +190,20 @@ class ArbeitsagenturDetailExtractor:
     # Stage 1: Official API / SSR Embedded JSON
     # -------------------------------------------------------------------------
 
+    @staticmethod
+    def _normalize_external_url(raw_url: Any) -> str:
+        """Ensures URLs like 'www.wm.de' or 'www.bg-kliniken.de/...' have an https:// scheme."""
+        val = str(raw_url or "").strip()
+        if not val or val.lower() in ("null", "none", "nan"):
+            return ""
+        if val.startswith(("http://", "https://", "mailto:", "tel:")):
+            return val
+        if val.startswith("//"):
+            return "https:" + val
+        if re.match(r"^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(?:/.*)?$", val):
+            return "https://" + val
+        return ""
+
     def extract_from_ssr_script(self, html: str) -> Dict[str, Any]:
         """Extracts pre-rendered jobdetail JSON data embedded by Angular SSR."""
         data: Dict[str, Any] = {}
@@ -199,14 +213,20 @@ class ArbeitsagenturDetailExtractor:
         soup = BeautifulSoup(html, "html.parser")
         for s in soup.find_all("script"):
             content = s.string or ""
-            if "jobdetail" in content and "from-ssr" in content:
+            s_id = str(s.get("id") or "")
+            if "jobdetail" in content and ("from-ssr" in content or "from-ssr" in s_id or "serverApp-state" in s_id):
                 try:
                     parsed = json.loads(content)
                     jd = parsed.get("jobdetail", {})
                     if isinstance(jd, dict):
                         data["ssr_jobdetail"] = jd
                         data["firma"] = jd.get("firma")
-                        data["allianzpartnerUrl"] = jd.get("allianzpartnerUrl")
+                        data["externeURL"] = self._normalize_external_url(
+                            jd.get("externeURL") or jd.get("externeUrl")
+                        )
+                        data["allianzpartnerUrl"] = self._normalize_external_url(
+                            jd.get("allianzpartnerUrl")
+                        )
                         data["allianzpartnerName"] = jd.get("allianzpartnerName")
                         data["referenznummer"] = jd.get("referenznummer")
                         data["arbeitsorte"] = jd.get("stellenlokationen", [])
@@ -310,10 +330,10 @@ class ArbeitsagenturDetailExtractor:
             result["phone"] = normalize_phone_number(phone_match)
             result["logs"].append(f"Phone extracted: {result['phone']}")
 
-        # 4. Extract Contact Person
+        # 4. Extract Contact Person (require explicit colon after Ansprechpartner/Kontaktperson to avoid prose matches)
         contact_person = ""
         cp_match = re.search(
-            r"(?:ansprechpartner(?:in)?|kontaktperson|bewerbermanagement)\s*[:\-\s]\s*([^\n\r<]{3,80})",
+            r"(?:ansprechpartner(?:in)?|kontaktperson)\s*:\s*([^\n\r<]{3,70})",
             combined_focused_text,
             re.IGNORECASE,
         )
@@ -325,7 +345,14 @@ class ArbeitsagenturDetailExtractor:
             if salut_match:
                 contact_person = salut_match.group(1).strip()
 
-        from services.data_validator import sanitize_contact_person, validate_form_link, validate_application_url, validate_job_listing_url, validate_phone_number
+        from services.data_validator import (
+            GENERIC_PORTAL_ROOTS,
+            sanitize_contact_person,
+            validate_form_link,
+            validate_application_url,
+            validate_job_listing_url,
+            validate_phone_number,
+        )
         is_cp_valid, cleaned_cp, _ = sanitize_contact_person(contact_person)
         result["contact_person"] = cleaned_cp if is_cp_valid else ""
         if result["contact_person"]:
@@ -359,6 +386,14 @@ class ArbeitsagenturDetailExtractor:
         # 7. Extract Application Links & Employer URLs
         candidate_links: List[str] = []
 
+        # Also check explicit external job buttons on Arbeitsagentur detail page ("Externe Seite öffnen")
+        for ext_btn_id in ("detail-beschreibung-externe-url-btn", "detail-footer-externe-url-btn", "detail-kopfbereich-externe-url-btn"):
+            ext_btn = soup.find(id=ext_btn_id)
+            if ext_btn and ext_btn.get("href"):
+                norm_ext = self._normalize_external_url(ext_btn.get("href"))
+                if norm_ext and "arbeitsagentur.de" not in norm_ext.lower():
+                    candidate_links.append(norm_ext)
+
         # Find external anchor links in application & copytext sections
         for blk in target_blocks:
             for a in blk.find_all("a", href=True):
@@ -375,19 +410,26 @@ class ArbeitsagenturDetailExtractor:
                             result["email_type"] = "recruitment"
                             result["logs"].append(f"Email extracted from mailto link: {extracted_mail}")
                     continue
-                abs_url = urljoin(source_url, href)
+                abs_url = urljoin(source_url, href) if href.startswith("/") else self._normalize_external_url(href)
+                if not abs_url:
+                    continue
                 # Filter out Arbeitsagentur internal navigation and social shares
                 domain = urlparse(abs_url).netloc.lower()
                 if "arbeitsagentur.de" in domain:
                     continue
                 candidate_links.append(abs_url)
 
-        # Check allianzpartnerUrl or partner redirects
+        # Check SSR externeURL and allianzpartnerUrl or partner redirects
         ssr_data = self.extract_from_ssr_script(html)
+        ssr_externe = ssr_data.get("externeURL")
         ssr_allianz = ssr_data.get("allianzpartnerUrl")
+
         if ssr_allianz:
             if "arbeitsagentur.de" not in ssr_allianz:
-                candidate_links.insert(0, ssr_allianz)
+                p_allianz = urlparse(ssr_allianz.lower())
+                # Do not add bare generic portal root homepages (e.g. https://jobs.hogapage.de)
+                if not (p_allianz.netloc in GENERIC_PORTAL_ROOTS and not p_allianz.path.strip("/")):
+                    candidate_links.insert(0, ssr_allianz)
             else:
                 # Safely resolve bounded partner redirect
                 resolved_url, res_state, needs_manual = self.resolve_partner_redirect(ssr_allianz, timeout=5.0)
@@ -402,10 +444,25 @@ class ArbeitsagenturDetailExtractor:
                     result["application_url_type"] = "partner_portal"
                     result["logs"].append(f"Partner portal redirect unresolved/blocked: {ssr_allianz}")
 
-        # Classify candidate links
+        # Prioritize specific externeURL ahead of generic allianzpartnerUrl
+        if ssr_externe and "arbeitsagentur.de" not in ssr_externe.lower():
+            candidate_links.insert(0, ssr_externe)
+            result["externe_url"] = ssr_externe
+
+        # Filter out bare generic portal homepages from candidate_links
+        filtered_candidates: List[str] = []
         for url in candidate_links:
             if url.startswith("mailto:") or "mailto:" in url:
                 continue
+            p_cand = urlparse(url.lower())
+            if p_cand.netloc in GENERIC_PORTAL_ROOTS and not p_cand.path.strip("/"):
+                continue
+            if url not in filtered_candidates:
+                filtered_candidates.append(url)
+        candidate_links = filtered_candidates
+
+        # Classify candidate links
+        for url in candidate_links:
             url_type, raw_has_form = detect_ats_or_url_type(url)
             is_valid_form, clean_form_url, _ = validate_form_link(url, has_form=raw_has_form)
             if is_valid_form:
@@ -415,17 +472,17 @@ class ArbeitsagenturDetailExtractor:
                 result["logs"].append(f"ATS/Application form found: {clean_form_url} ({url_type})")
                 break
             elif not result["employer_website"]:
-                result["employer_website"] = url
+                from services.employer_cache import is_non_employer_domain
+                if not is_non_employer_domain(url):
+                    result["employer_website"] = url
                 result["application_url_type"] = url_type
-                result["logs"].append(f"Employer website found: {url}")
+                result["logs"].append(f"External URL found: {url}")
 
         if not result["direct_application_url"] and candidate_links:
-            # If no direct ATS form, use first external candidate as employer application website (excluding mailto)
-            valid_cand = [c for c in candidate_links if not c.startswith("mailto:") and "mailto:" not in c]
-            if valid_cand:
-                result["direct_application_url"] = valid_cand[0]
-                if result["application_url_type"] == "none":
-                    result["application_url_type"] = "career_portal"
+            # If no direct ATS form, use first external candidate as application destination
+            result["direct_application_url"] = candidate_links[0]
+            if result["application_url_type"] == "none":
+                result["application_url_type"] = "career_portal"
 
         # 8. Identify Accepted Application Methods
         methods: List[str] = []
@@ -685,11 +742,18 @@ class ArbeitsagenturDetailExtractor:
         Discovers company career pages, contact details, and ATS forms
         when the official Arbeitsagentur listing does not contain direct contact details.
         """
+        from services.employer_cache import is_non_employer_domain, is_valid_company_name
+        from services.contamination_detector import is_email_compatible_with_employer
+
+        norm_existing = self._normalize_external_url(existing_website)
+        if norm_existing and is_non_employer_domain(norm_existing):
+            norm_existing = ""
+
         result: Dict[str, Any] = {
             "email": "",
             "email_type": "",
             "phone": "",
-            "employer_website": existing_website,
+            "employer_website": norm_existing,
             "direct_application_url": "",
             "has_form": False,
             "application_method": "unknown",
@@ -697,16 +761,18 @@ class ArbeitsagenturDetailExtractor:
             "logs": ["Attempting employer website discovery fallback"],
         }
 
-        target_website = existing_website
-        if not target_website and company:
+        target_website = norm_existing
+        if not target_website and is_valid_company_name(company):
             # Clean company name
-            clean_comp = re.sub(r"\b(gmbh|ag|kg|e\.v\.|ohg|gbr|co\.)\b", "", company, flags=re.IGNORECASE).strip()
-            # Try basic domain heuristic
+            clean_comp = re.sub(r"\b(gmbh|ag|kg|e\.v\.|ohg|gbr|co\.|mbh|se|stiftung)\b", "", company, flags=re.IGNORECASE).strip()
+            # Try basic domain heuristic only when company name is reasonably specific
             domain_guess = re.sub(r"[^a-zA-Z0-9]", "", clean_comp).lower()
-            if domain_guess:
-                target_website = f"https://www.{domain_guess}.de"
+            if domain_guess and len(domain_guess) >= 4:
+                cand_site = f"https://www.{domain_guess}.de"
+                if not is_non_employer_domain(cand_site):
+                    target_website = cand_site
 
-        if not target_website:
+        if not target_website or is_non_employer_domain(target_website):
             return result
 
         result["employer_website"] = target_website
@@ -731,10 +797,14 @@ class ArbeitsagenturDetailExtractor:
             impressum_info = self.impressum_extractor.extract_from_website(target_website)
             if impressum_info:
                 if impressum_info.get("emails"):
-                    # Explicit rule: Do not classify Impressum email as recruitment email
-                    result["email"] = impressum_info["emails"][0]
-                    result["email_type"] = "impressum"
-                    result["logs"].append(f"Impressum email extracted: {result['email']} (email_type=impressum)")
+                    for imp_email in impressum_info["emails"]:
+                        ok_imp, _ = is_email_compatible_with_employer(imp_email, company, employer_website=target_website)
+                        if ok_imp:
+                            # Explicit rule: Do not classify Impressum email as recruitment email
+                            result["email"] = imp_email.lower()
+                            result["email_type"] = "impressum"
+                            result["logs"].append(f"Impressum email extracted: {result['email']} (email_type=impressum)")
+                            break
                 if not result["phone"] and impressum_info.get("telephones"):
                     result["phone"] = normalize_phone_number(impressum_info["telephones"][0])
                 if impressum_info.get("geschaeftsfuehrer"):
@@ -798,6 +868,59 @@ class ArbeitsagenturDetailExtractor:
         has_email = bool(parsed_details.get("email") and "@" in parsed_details.get("email"))
         has_form = bool(parsed_details.get("has_form"))
         has_ext_link = bool(parsed_details.get("direct_application_url"))
+
+        # Stage 2b: If Stage 2 found an external partner job URL (externeURL) but no email,
+        # inspect the external partner listing via fast HTTP to extract direct email or ATS form
+        ext_partner_url = str(parsed_details.get("externe_url") or parsed_details.get("direct_application_url") or "").strip()
+        if not has_email and ext_partner_url.startswith("http") and "arbeitsagentur.de" not in ext_partner_url.lower():
+            try:
+                if "ausbildung.de/stellen/" in ext_partner_url.lower():
+                    from .ausbildung_de_detail_extractor import AusbildungDeDetailExtractor
+                    ausb_ext = AusbildungDeDetailExtractor(session=self.session)
+                    sub_job = dict(enriched)
+                    sub_job["url"] = ext_partner_url
+                    ausb_res = ausb_ext.extract_vacancy(sub_job, driver=None, session=self.session)
+                    if ausb_res.get("email"):
+                        parsed_details["email"] = ausb_res["email"]
+                        parsed_details["email_type"] = "recruitment"
+                        has_email = True
+                    if ausb_res.get("has_form") and ausb_res.get("form_link"):
+                        parsed_details["direct_application_url"] = ausb_res["form_link"]
+                        parsed_details["has_form"] = True
+                        has_form = True
+                    if not parsed_details.get("phone") and ausb_res.get("phone"):
+                        parsed_details["phone"] = ausb_res["phone"]
+                    if not parsed_details.get("contact_person") and ausb_res.get("contact_person"):
+                        parsed_details["contact_person"] = ausb_res["contact_person"]
+                else:
+                    ext_resp = self.session.get(ext_partner_url, timeout=6, allow_redirects=True)
+                    if ext_resp.status_code == 200 and ext_resp.text:
+                        final_ext_url = ext_resp.url or ext_partner_url
+                        ext_html = ext_resp.text
+                        from services.contamination_detector import is_email_compatible_with_employer
+                        # Check mailto links on external partner page
+                        for m_cand in re.findall(r'href=["\']mailto:([^"\'\s>?]+)', ext_html, re.I):
+                            m_clean = m_cand.strip().lower()
+                            if m_clean and "@" in m_clean and m_clean not in PORTAL_EXCLUDED_EMAILS:
+                                ok_e, _ = is_email_compatible_with_employer(m_clean, company, employer_website=final_ext_url)
+                                if ok_e:
+                                    parsed_details["email"] = m_clean
+                                    parsed_details["email_type"] = "recruitment"
+                                    has_email = True
+                                    break
+                        # Check application links on external partner page
+                        if not has_form:
+                            ext_links = ApplicationFormDiscovery.extract_application_links_from_html(ext_html, final_ext_url)
+                            for elink in ext_links:
+                                u_type, is_f = detect_ats_or_url_type(elink)
+                                if is_f or ApplicationFormDiscovery.is_known_ats_url(elink):
+                                    parsed_details["direct_application_url"] = elink
+                                    parsed_details["application_url_type"] = u_type
+                                    parsed_details["has_form"] = True
+                                    has_form = True
+                                    break
+            except Exception as ext_err:
+                logger.debug("External partner page inspection skipped for %s: %s", ext_partner_url, ext_err)
 
         # ---------------------------------------------------------------------
         # Stage 3: Browser Fallback (Selenium)
@@ -909,19 +1032,28 @@ class ArbeitsagenturDetailExtractor:
         enriched["application_method"] = app_method
         enriched["bewerbung_art"] = bewerbung_art
 
-        if enriched["email"] or enriched["has_form"] or enriched["direct_application_url"]:
-            enriched["extraction_status"] = "completed"
-        elif enriched["phone"] or enriched["contact_person"]:
-            enriched["extraction_status"] = "partial"
-        else:
-            enriched["extraction_status"] = "no_contact_found"
-
         if parsed_details.get("extraction_method"):
             enriched["extraction_method"] = parsed_details["extraction_method"]
         elif driver is not None and not (has_email or has_form or has_ext_link):
             enriched["extraction_method"] = "selenium"
         else:
             enriched["extraction_method"] = "fast_http"
+
+        from services.contamination_detector import attach_contact_provenance
+        attach_contact_provenance(
+            enriched,
+            source_url=source_url,
+            section="arbeitsagentur_kontaktdaten",
+            extraction_method=enriched["extraction_method"],
+            verified=True,
+        )
+
+        if enriched["email"] or enriched["has_form"] or enriched["direct_application_url"]:
+            enriched["extraction_status"] = "completed"
+        elif enriched["phone"] or enriched["contact_person"]:
+            enriched["extraction_status"] = "partial"
+        else:
+            enriched["extraction_status"] = "no_contact_found"
 
         enriched["extraction_logs"] = logs
         return normalize_job_opportunity_row(enriched)

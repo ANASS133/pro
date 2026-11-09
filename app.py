@@ -564,9 +564,14 @@ def _neutralize_excel_formula(value: Any) -> Any:
 
 
 def _build_excel_export_dataframe(records: Iterable[Dict]) -> pd.DataFrame:
-    """Project rich job records into the exact Excel-only 18-column contract."""
+    """Project rich job records into the exact Excel-only 18-column contract after cross-employer contamination check."""
+    from services.contamination_detector import detect_and_clean_cross_employer_contamination
+
+    input_records = [dict(r) for r in (records or []) if isinstance(r, dict)]
+    cleaned_records, _ = detect_and_clean_cross_employer_contamination(input_records)
+
     rows: List[Dict] = []
-    for raw_record in records or []:
+    for raw_record in cleaned_records:
         if not isinstance(raw_record, dict):
             continue
         normalized = normalize_job_opportunity_row(raw_record)
@@ -583,17 +588,16 @@ def _build_excel_export_dataframe(records: Iterable[Dict]) -> pd.DataFrame:
             raw_record.get("website"),
             raw_record.get("company_website"),
         )
+        # Only use validated form_link and direct_application_url from normalize_job_opportunity_row
         normalized["form_link"] = _first_valid_export_url(
             normalized.get("form_link"),
-            raw_record.get("form_link"),
         )
         normalized["direct_application_url"] = _first_valid_export_url(
             normalized.get("direct_application_url"),
-            raw_record.get("direct_application_url"),
             normalized.get("form_link"),
-            raw_record.get("form_link"),
         )
-        if not normalized["direct_application_url"]:
+        if not normalized["direct_application_url"] and raw_record.get("validation_status") != "rejected_contamination":
+            from services.contamination_detector import is_url_compatible_with_job
             excluded_destinations = {
                 normalized.get("job_listing_url"),
                 normalized.get("employer_website"),
@@ -601,13 +605,24 @@ def _build_excel_export_dataframe(records: Iterable[Dict]) -> pd.DataFrame:
             for legacy_link in (raw_record.get("bewerbung_link"), raw_record.get("apply_url")):
                 candidate = _first_valid_export_url(legacy_link)
                 if candidate and candidate not in excluded_destinations:
-                    normalized["direct_application_url"] = candidate
-                    break
+                    ok_leg, _ = is_url_compatible_with_job(
+                        candidate,
+                        company=str(normalized.get("company") or ""),
+                        job_listing_url=str(normalized.get("job_listing_url") or ""),
+                    )
+                    if ok_leg:
+                        normalized["direct_application_url"] = candidate
+                        break
         if (
             normalized.get("direct_application_url")
             and str(normalized.get("application_method") or "").lower() in {"", "none", "unknown"}
         ):
             normalized["application_method"] = "external_link"
+
+        # Step 5 Excel Output Rule for Ausbildung.de: If email is found, application form/link columns must be empty
+        if str(normalized.get("source") or "").lower() == "ausbildung.de" and normalized.get("email"):
+            normalized["direct_application_url"] = ""
+            normalized["form_link"] = ""
 
         rows.append({
             column: _neutralize_excel_formula(normalized.get(column, ""))
@@ -3035,6 +3050,7 @@ def _run_auto_extraction_job(job_id: str):
             worker_slots.put(worker_id)
 
         def _worker_task_job(i, job_record):
+            job_record = dict(job_record or {})
             with auto_extraction_jobs_lock:
                 current_job = auto_extraction_jobs.get(job_id)
                 if not current_job or not current_job.get("is_running") or current_job.get("paused") or current_job.get("stop_requested"):
@@ -3357,6 +3373,14 @@ def _run_auto_extraction_job(job_id: str):
                             f.cancel()
                         break
 
+        # Run cross-employer contamination detector across all processed jobs
+        try:
+            from services.contamination_detector import detect_and_clean_cross_employer_contamination
+            jobs, contam_report = detect_and_clean_cross_employer_contamination(jobs)
+        except Exception as contam_err:
+            logger.debug("Contamination detector check error: %s", contam_err)
+            contam_report = {}
+
         with auto_extraction_jobs_lock:
             job = auto_extraction_jobs.get(job_id)
             if not job:
@@ -3367,6 +3391,7 @@ def _run_auto_extraction_job(job_id: str):
             processed_count = len(jobs) - len(remaining_unfinished)
 
             job["jobs"] = jobs
+            job["contamination_report"] = contam_report
             job["total_jobs"] = len(jobs)
             job["current_index"] = processed_count
             job["updated_at"] = datetime.now().isoformat()
@@ -8703,7 +8728,7 @@ def api_inline_auto_job_solve_challenge():
 
 @app.route("/api/inline/auto-jobs/challenges/solve-truecaptcha", methods=["POST"])
 def api_inline_auto_job_solve_with_truecaptcha():
-    """Solve an image challenge through TrueCaptcha, then submit it in the live worker session."""
+    """Recognize an image challenge and return its code for the normal submit flow."""
     from scraper.true_captcha_solver import TrueCaptchaSolver
     from services.manual_captcha_service import get_manual_captcha_manager
 
@@ -8747,13 +8772,10 @@ def api_inline_auto_job_solve_with_truecaptcha():
             "message": "TrueCaptcha konnte keinen Code erkennen. Manuelle Eingabe ist weiterhin möglich.",
         }), 502
 
-    success, msg = manager.submit_solution(ch_id, solution)
-    updated = manager.get_challenge(ch_id)
+    ch.recognized_code = solution
     return jsonify({
-        "success": success,
-        "message": msg if success else (msg or "Der von TrueCaptcha erkannte Code wurde von der Webseite abgelehnt."),
-        "challenge": updated.to_dict() if updated else None,
-        "can_retry": updated.to_dict()["can_retry"] if updated else False,
+        "success": True,
+        "solution": solution,
         "provider": "TrueCaptcha",
     })
 

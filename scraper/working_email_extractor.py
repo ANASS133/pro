@@ -31,7 +31,19 @@ from services.worker_network_router import (
     apply_proxy_to_browser_options,
     redact_proxy_url,
 )
-from services.employer_cache import get_employer_cache
+from services.employer_cache import (
+    get_employer_cache,
+    get_job_cache,
+    is_non_employer_domain,
+    is_portal_domain,
+    is_shortener_domain,
+)
+from services.contamination_detector import (
+    PORTAL_SUPPORT_PHONES,
+    attach_contact_provenance,
+    is_email_compatible_with_employer,
+    is_url_compatible_with_job,
+)
 
 logger = logging.getLogger(__name__)
 NAME_PATTERN = r"[A-ZÄÖÜ][A-Za-zÄÖÜäöüß'.-]+"
@@ -111,6 +123,8 @@ class WorkingEmailExtractor:
         self.form_discovery = ApplicationFormDiscovery(session=self.session)
         from .arbeitsagentur_extractor import ArbeitsagenturDetailExtractor
         self.aa_extractor = ArbeitsagenturDetailExtractor(session=self.session)
+        from .ausbildung_de_detail_extractor import AusbildungDeDetailExtractor
+        self.ausbildung_extractor = AusbildungDeDetailExtractor(session=self.session)
         self.current_job: Dict[str, Any] = {}
         self.on_stage_change: Optional[Callable[[str], None]] = None
         init_s = initial_stats or {}
@@ -128,6 +142,7 @@ class WorkingEmailExtractor:
             "failed": int(init_s.get("failed", 0)),
         }
         self.employer_cache = get_employer_cache()
+        self.job_cache = get_job_cache()
         self._cache_lock = threading.Lock()
         self.selenium_lock = threading.Lock()
         self._stats_lock = threading.Lock()
@@ -484,6 +499,14 @@ class WorkingEmailExtractor:
                 except Exception as auto_err:
                     logger.debug("Automated solver submission error: %s", auto_err)
 
+            # A rejected submission commonly rotates the CAPTCHA and replaces
+            # the <img> node.  Never hand the pre-submit element to manual
+            # review, otherwise the dashboard can show a code that no longer
+            # belongs to the live form.
+            captcha_img = self._find_captcha_image()
+            captcha_input = self._find_captcha_input()
+            challenge_type = self._classify_manual_challenge(captcha_img, captcha_input)
+
         # Route to Manual CAPTCHA Review
         logger.info("Routing challenge on %s to Manual CAPTCHA Review (type: %s)", domain, challenge_type)
         return self._request_manual_captcha_review(
@@ -624,31 +647,43 @@ class WorkingEmailExtractor:
             page_text = ""
         self._last_page_text = page_text
 
-        email_pattern = r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"
-        emails = re.findall(email_pattern, page_text)
+        curr_job = getattr(self, "current_job", {}) or {}
+        curr_company = str(curr_job.get("company") or curr_job.get("firma") or "").strip()
 
-        # Phone extraction: prioritize tel: links, then labeled cues, then validate
+        email_pattern = r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b"
+        raw_emails = re.findall(email_pattern, page_text)
+        emails = []
+        for e_cand in raw_emails:
+            e_low = e_cand.strip().lower()
+            ok_e, _ = is_email_compatible_with_employer(e_low, curr_company)
+            if ok_e and e_low not in emails:
+                emails.append(e_low)
+
+        # Phone extraction: prioritize tel: links (outside nav/header/footer), then labeled cues, then validate
         from services.data_validator import validate_phone_number
         phones = []
         try:
-            tel_elements = self.driver.find_elements(By.XPATH, "//a[starts-with(@href, 'tel:')]")
+            tel_elements = self.driver.find_elements(
+                By.XPATH,
+                "//a[starts-with(@href, 'tel:') and not(ancestor::nav) and not(ancestor::header) and not(ancestor::footer)]",
+            )
             for tel_el in tel_elements:
                 href = (tel_el.get_attribute("href") or "").replace("tel:", "").strip()
                 ok, clean_p, _ = validate_phone_number(href)
-                if ok and clean_p not in phones:
+                if ok and clean_p not in PORTAL_SUPPORT_PHONES and clean_p not in phones:
                     phones.append(clean_p)
         except Exception:
             pass
 
         if not phones:
             tel_cues = re.findall(
-                r"(?:tel(?:efon)?\.?|fon|phone|mobil|hotline)\s*[:\-\s]\s*([+0-9\s/().\-]{7,25})",
+                r"(?:tel(?:efon)?\.?|fon|phone|mobil)\s*[:\-\s]\s*([+0-9\s/().\-]{7,25})",
                 page_text,
                 re.IGNORECASE,
             )
             for cue in tel_cues:
                 ok, clean_p, _ = validate_phone_number(cue)
-                if ok and clean_p not in phones:
+                if ok and clean_p not in PORTAL_SUPPORT_PHONES and clean_p not in phones:
                     phones.append(clean_p)
 
         if not phones:
@@ -659,7 +694,7 @@ class WorkingEmailExtractor:
             for pattern in phone_patterns:
                 for match in re.findall(pattern, page_text):
                     ok, clean_p, _ = validate_phone_number(match)
-                    if ok and clean_p not in phones:
+                    if ok and clean_p not in PORTAL_SUPPORT_PHONES and clean_p not in phones:
                         phones.append(clean_p)
 
         arbeitsgeber_match = ARBEITGEBER_PATTERN.search(page_text)
@@ -668,12 +703,50 @@ class WorkingEmailExtractor:
         ) or None
         return (emails[0] if emails else None, phones[0] if phones else None, arbeitsgeber)
 
+    def _resolve_shortener_url(self, short_url: str, timeout: float = 5.0) -> str:
+        """Resolves URL shorteners like short.sg to the actual employer/ATS destination URL."""
+        clean_u = str(short_url or "").strip()
+        if not clean_u or not clean_u.startswith("http"):
+            return clean_u
+        if not is_shortener_domain(clean_u):
+            return clean_u
+        try:
+            resp = self.session.get(clean_u, timeout=timeout, allow_redirects=True, stream=True)
+            resolved = str(resp.url or "").strip()
+            resp.close()
+            if resolved and resolved.startswith("http") and not is_shortener_domain(resolved):
+                return resolved
+        except Exception as exc:
+            logger.debug("Shortener resolution failed for %s: %s", clean_u, exc)
+        return clean_u
+
+    @staticmethod
+    def _decode_cf_emails(html: str) -> List[str]:
+        """Decodes Cloudflare data-cfemail / email-protection hex strings in HTML."""
+        decoded: List[str] = []
+        if not html or "cfemail" not in html and "email-protection#" not in html:
+            return decoded
+        hex_candidates = re.findall(r'(?:data-cfemail=["\']|email-protection#)([0-9a-fA-F]{10,128})', html)
+        for h in hex_candidates:
+            try:
+                key = int(h[:2], 16)
+                out_chars = [chr(int(h[i:i + 2], 16) ^ key) for i in range(2, len(h), 2)]
+                cand = "".join(out_chars).strip().lower()
+                if "@" in cand and "." in cand.split("@")[-1]:
+                    decoded.append(cand)
+            except Exception:
+                continue
+        return decoded
+
     def extract_application_link(self, fallback_url: str = "") -> str:
         from services.data_validator import is_advice_or_generic_page, validate_application_url
         try:
+            # Exclude navbar, header, footer, and recommended job teaser links
             links = self.driver.find_elements(
                 By.XPATH,
-                "//a[@href and not(starts-with(@href, 'mailto:')) and not(starts-with(@href, 'tel:'))]",
+                "//a[@href and not(starts-with(@href, 'mailto:')) and not(starts-with(@href, 'tel:')) "
+                "and not(ancestor::nav) and not(ancestor::header) and not(ancestor::footer) "
+                "and not(ancestor::*[contains(@class, 'job-offer-teaser')])]",
             )
             for link in links:
                 try:
@@ -687,11 +760,18 @@ class WorkingEmailExtractor:
                     aria_label = (link.get_attribute("aria-label") or "").strip().lower()
                     haystack = f"{text} {title_attr} {aria_label} {href.lower()}"
 
-                    if any(bad in haystack for bad in ["ratgeber", "tipps", "magazin", "faq", "hilfe"]):
+                    if any(bad in haystack for bad in [
+                        "ratgeber", "tipps", "magazin", "faq", "hilfe",
+                        "unterrichtsmaterial", "arbeitshefte", "berufswahl",
+                        "orientieren", "bewerbung2go", "stellenmarkt",
+                    ]):
                         continue
 
-                    if any(kw in haystack for kw in ["bewerb", "apply", "online-bewerb", "formular"]):
-                        ok, clean_app_url, _ = validate_application_url(href)
+                    if any(kw in haystack for kw in ["bewerb", "apply", "online-bewerb", "formular"]) or is_shortener_domain(href):
+                        target_href = self._resolve_shortener_url(href) if is_shortener_domain(href) else href
+                        if is_advice_or_generic_page(target_href):
+                            continue
+                        ok, clean_app_url, _ = validate_application_url(target_href)
                         if ok:
                             return clean_app_url
                 except Exception:
@@ -721,6 +801,384 @@ class WorkingEmailExtractor:
             return urlparse(website).netloc or website
         return ""
 
+    def _extract_scoped_dom_contacts(self, html: str, company: str = "") -> tuple:
+        """
+        Extracts (emails, phones, contact_person, main_soup) strictly from the current job listing body,
+        after removing <nav>, <header>, <footer>, and recommended-job teasers.
+        """
+        from bs4 import BeautifulSoup
+        from services.data_validator import validate_phone_number, sanitize_contact_person
+
+        soup = BeautifulSoup(html or "", "html.parser")
+        for noise in soup.find_all(["nav", "header", "footer", "aside"]):
+            noise.decompose()
+        for teaser in soup.find_all(
+            lambda el: el.name in ("div", "section", "article", "li")
+            and el.get("class")
+            and any(
+                c in " ".join(el.get("class", [])).lower()
+                for c in (
+                    "job-offer-teaser", "similar-jobs", "recommended-jobs",
+                    "related-jobs", "other-jobs", "more-jobs", "sidebar-ad",
+                )
+            )
+        ):
+            teaser.decompose()
+
+        scoped_html = str(soup)
+        scoped_text = soup.get_text("\n", strip=True)
+
+        # 1. Emails (mailto + CF email decode + text regex)
+        cand_emails: List[str] = []
+        for m in re.findall(r'href=["\']mailto:([^"\'\s>?]+)', scoped_html, re.I):
+            cand_emails.append(m.strip().lower())
+        cand_emails.extend(self._decode_cf_emails(scoped_html))
+        for m in re.findall(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", scoped_text):
+            cand_emails.append(m.strip().lower())
+
+        valid_emails: List[str] = []
+        for e in cand_emails:
+            if not e or "@" not in e:
+                continue
+            ok_e, _ = is_email_compatible_with_employer(e, company)
+            if ok_e and e not in valid_emails:
+                valid_emails.append(e)
+
+        # 2. Phones (tel: links + labeled cues + JSON-LD JobPosting description)
+        valid_phones: List[str] = []
+        for t in re.findall(r'href=["\']tel:([^"\']+)["\']', scoped_html, re.I):
+            ok_p, clean_p, _ = validate_phone_number(t)
+            if ok_p and clean_p not in PORTAL_SUPPORT_PHONES and clean_p not in valid_phones:
+                valid_phones.append(clean_p)
+
+        if not valid_phones:
+            for cue in re.findall(r"(?:tel(?:efon)?\.?|fon|phone|mobil)\s*[:\-\s]\s*([+0-9\s/().\-]{7,25})", scoped_text, re.I):
+                ok_p, clean_p, _ = validate_phone_number(cue)
+                if ok_p and clean_p not in PORTAL_SUPPORT_PHONES and clean_p not in valid_phones:
+                    valid_phones.append(clean_p)
+
+        # 3. Contact person (JSON-LD + labeled Ansprechpartner + Frau/Herr salutation)
+        contact_person = ""
+        anspr_m = re.search(
+            r"(?:Ansprechpartner(?:in)?|Kontaktperson)\s*[:\-]\s*([^\n\r<]{3,65})",
+            scoped_text,
+            re.I,
+        )
+        if anspr_m:
+            ok_c, clean_c, _ = sanitize_contact_person(anspr_m.group(1))
+            if ok_c:
+                contact_person = clean_c
+
+        if not contact_person:
+            salut_m = ARBEITGEBER_PATTERN.search(scoped_text)
+            if salut_m:
+                ok_c, clean_c, _ = sanitize_contact_person(salut_m.group(0))
+                if ok_c:
+                    contact_person = clean_c
+
+        # Check JSON-LD JobPosting in original HTML for phone/contact fallback
+        ld_scripts = re.findall(r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', html or "", re.DOTALL | re.I)
+        for script in ld_scripts:
+            try:
+                ld_raw = json.loads(script.strip())
+                ld_list = ld_raw if isinstance(ld_raw, list) else [ld_raw]
+                for item in ld_list:
+                    if isinstance(item, dict) and item.get("@type") == "JobPosting":
+                        desc = str(item.get("description") or "")
+                        if desc and not valid_phones:
+                            for cue in re.findall(r"(?:tel(?:efon)?\.?|fon|phone|mobil)\s*[:\-\s]\s*([+0-9\s/().\-]{7,25})", desc, re.I):
+                                ok_p, clean_p, _ = validate_phone_number(cue)
+                                if ok_p and clean_p not in PORTAL_SUPPORT_PHONES and clean_p not in valid_phones:
+                                    valid_phones.append(clean_p)
+                        if desc and not contact_person:
+                            anspr = re.search(r"(?:Ansprechpartner(?:in)?|Kontaktperson)\s*[:\-]\s*([^\n\r<]{3,60})", desc, re.I)
+                            if anspr:
+                                ok_c, clean_c, _ = sanitize_contact_person(anspr.group(1))
+                                if ok_c:
+                                    contact_person = clean_c
+            except Exception:
+                pass
+
+        return valid_emails, valid_phones, contact_person, soup
+
+    def _extract_azubiyo_fast(self, job: Dict, html: str, final_url: str) -> Optional[Dict]:
+        """
+        Dedicated Azubiyo detail extractor:
+        1. Inspects /stellenanzeigen/<slug>/bewerben-email/ for setApplication(1, 'mailto:...') or CF email.
+        2. Inspects /stellenanzeigen/<slug>/bewerben/ for validateAndTrackAndOpen(..., 'https://...') or setApplication(2, 'https://...').
+        3. Scopes phone & contact person to main job container, rejecting navbar /unterrichtsmaterial/ and portal hotline.
+        """
+        company = str(job.get("company") or job.get("firma") or "").strip()
+        city = str(job.get("city") or job.get("location") or "").strip()
+
+        # Recover real employer name from JSON-LD hiringOrganization if input company is a 1-letter badge (e.g. "M")
+        if len(company) < 3 or company.lower() in {"n/a", "unknown", "unbekannt"}:
+            m_org = re.search(r'"hiringOrganization"\s*:\s*\{[^}]*?"name"\s*:\s*"([^"]{3,120})"', html, re.I)
+            if m_org:
+                company = m_org.group(1).strip()
+                job["company"] = company
+                job["firma"] = company
+
+        valid_emails, valid_phones, contact_person, soup = self._extract_scoped_dom_contacts(html, company=company)
+        email_source_section = "azubiyo_job_detail"
+        external_apply_url = ""
+        form_source_section = ""
+
+        # 1. Check /bewerben-email/ subpage (or main page setApplication mailto)
+        m_email_sub = re.search(r'href=[\'"](/stellenanzeigen/[^\'"]+/bewerben-email/?)[\'"]', html, re.I)
+        if m_email_sub:
+            try:
+                b_url = urllib.parse.urljoin(final_url, m_email_sub.group(1))
+                b_resp = self.session.get(b_url, timeout=4)
+                if b_resp.status_code == 200 and b_resp.text:
+                    sub_html = b_resp.text
+                    # Look for setApplication(1, "mailto:...")
+                    for m_js in re.findall(r'mailto:([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})', sub_html, re.I):
+                        e_low = m_js.strip().lower()
+                        ok_e, _ = is_email_compatible_with_employer(e_low, company)
+                        if ok_e and e_low not in valid_emails:
+                            valid_emails.insert(0, e_low)
+                            email_source_section = "azubiyo_bewerben_email_endpoint"
+                    for cf_e in self._decode_cf_emails(sub_html):
+                        ok_e, _ = is_email_compatible_with_employer(cf_e, company)
+                        if ok_e and cf_e not in valid_emails:
+                            valid_emails.insert(0, cf_e)
+                            email_source_section = "azubiyo_bewerben_email_cf"
+            except Exception as exc:
+                logger.debug("Azubiyo bewerben-email fetch error: %s", exc)
+
+        # 2. If no email, check /bewerben/ subpage OR inline JS on main page for external employer application URL
+        if not valid_emails:
+            # First check inline validateAndTrackAndOpen / setApplication on main page HTML
+            inline_js_urls = re.findall(
+                r'(?:validateAndTrackAndOpen|setApplication)\s*\(\s*\d+\s*,\s*[\'"](https?://[^\'"]+)[\'"]',
+                html,
+                re.I,
+            )
+            for ju in inline_js_urls:
+                ju_clean = ju.strip()
+                if "azubiyo.de" not in ju_clean.lower():
+                    external_apply_url = self._resolve_shortener_url(ju_clean)
+                    form_source_section = "azubiyo_inline_js_target"
+                    break
+
+            m_apply_sub = re.search(r'href=[\'"](/stellenanzeigen/[^\'"]+/bewerben/?)[\'"]', html, re.I)
+            if not external_apply_url and m_apply_sub:
+                try:
+                    a_url = urllib.parse.urljoin(final_url, m_apply_sub.group(1))
+                    a_resp = self.session.get(a_url, timeout=4, allow_redirects=True)
+                    if a_resp.status_code == 200 and a_resp.text:
+                        a_html = a_resp.text
+                        # Check if redirected off azubiyo.de directly
+                        if a_resp.url and "azubiyo.de" not in a_resp.url.lower():
+                            external_apply_url = a_resp.url
+                            form_source_section = "azubiyo_bewerben_redirect"
+                        else:
+                            # Look for validateAndTrackAndOpen(1, "https://...") or setApplication(2, "https://...", false)
+                            js_urls = re.findall(
+                                r'(?:validateAndTrackAndOpen|setApplication)\s*\(\s*\d+\s*,\s*[\'"](https?://[^\'"]+)[\'"]',
+                                a_html,
+                                re.I,
+                            )
+                            for ju in js_urls:
+                                ju_clean = ju.strip()
+                                if "azubiyo.de" not in ju_clean.lower():
+                                    external_apply_url = self._resolve_shortener_url(ju_clean)
+                                    form_source_section = "azubiyo_bewerben_js_target"
+                                    break
+                except Exception as exc:
+                    logger.debug("Azubiyo bewerben subpage fetch error: %s", exc)
+
+        # 3. Also check scoped links on the main Azubiyo listing if no external_apply_url yet
+        if not valid_emails and not external_apply_url:
+            scoped_links = ApplicationFormDiscovery.extract_application_links_from_html(str(soup), final_url)
+            for sl in scoped_links:
+                if "azubiyo.de" not in sl.lower():
+                    external_apply_url = self._resolve_shortener_url(sl)
+                    form_source_section = "azubiyo_scoped_apply_button"
+                    break
+
+        norm = dict(job)
+        norm["job_listing_url"] = final_url
+        norm["apply_url"] = final_url
+        if valid_phones:
+            norm["phone"] = valid_phones[0]
+        if contact_person:
+            norm["contact_person"] = contact_person
+            norm["arbeitsgeber"] = contact_person
+
+        if valid_emails:
+            norm["email"] = valid_emails[0]
+            norm["email_extracted"] = True
+            norm["email_type"] = "recruitment"
+            norm["has_form"] = False
+            norm["form_link"] = ""
+            norm["direct_application_url"] = ""
+            norm["bewerbung_link"] = final_url
+            norm["application_method"] = "email"
+            norm["extraction_method"] = "fast_http"
+            attach_contact_provenance(
+                norm,
+                source_url=final_url,
+                section=email_source_section,
+                extraction_method="fast_http",
+                verified=True,
+            )
+            norm = normalize_job_opportunity_row(norm)
+            self.job_cache.put(final_url, norm, company=company)
+            return norm
+
+        if external_apply_url:
+            norm["email"] = ""
+            norm["email_extracted"] = False
+            norm["has_form"] = True
+            norm["form_link"] = external_apply_url
+            norm["direct_application_url"] = external_apply_url
+            norm["bewerbung_link"] = external_apply_url
+            norm["application_method"] = "form"
+            norm["application_url_type"] = "direct_form"
+            norm["extraction_method"] = "fast_http"
+            attach_contact_provenance(
+                norm,
+                source_url=final_url,
+                section=form_source_section,
+                extraction_method="fast_http",
+                verified=True,
+            )
+            norm = normalize_job_opportunity_row(norm)
+            self.job_cache.put(final_url, norm, company=company)
+            self.employer_cache.put(company=company, city=city, url_or_domain=external_apply_url, data=norm)
+            return norm
+
+        # Check for Per Post or internal Azubiyo portal application only
+        scoped_text_low = soup.get_text(" ", strip=True).lower()
+        if "per post" in scoped_text_low and "online bewerben" not in scoped_text_low:
+            norm["postal_only"] = True
+            norm["application_method"] = "postal"
+            norm["extraction_method"] = "fast_http"
+            attach_contact_provenance(
+                norm,
+                source_url=final_url,
+                section="azubiyo_postal_only",
+                extraction_method="fast_http",
+                verified=True,
+            )
+            norm = normalize_job_opportunity_row(norm)
+            self.job_cache.put(final_url, norm, company=company)
+            return norm
+
+        if "/bewerben/" in html or "über azubiyo" in scoped_text_low or "jetzt bewerben" in scoped_text_low:
+            norm["portal_login_required"] = True
+            norm["application_method"] = "portal_login_required"
+            norm["extraction_method"] = "fast_http"
+            attach_contact_provenance(
+                norm,
+                source_url=final_url,
+                section="azubiyo_internal_portal",
+                extraction_method="fast_http",
+                verified=True,
+            )
+            norm = normalize_job_opportunity_row(norm)
+            self.job_cache.put(final_url, norm, company=company)
+            return norm
+
+        return None
+
+    def _extract_aubi_plus_fast(self, job: Dict, html: str, final_url: str) -> Optional[Dict]:
+        """
+        Dedicated AUBI-plus detail extractor:
+        1. Strips footer/header noise (bewerbung2go.de, empty mailto:?body=... share links).
+        2. Resolves short.sg external apply URLs per job to the real employer ATS destination.
+        3. Extracts scoped phone and contact person from the current job listing only.
+        """
+        company = str(job.get("company") or job.get("firma") or "").strip()
+        city = str(job.get("city") or job.get("location") or "").strip()
+
+        valid_emails, valid_phones, contact_person, soup = self._extract_scoped_dom_contacts(html, company=company)
+        external_apply_url = ""
+        form_section = ""
+
+        # Look for short.sg or external apply button in scoped DOM
+        for a_tag in soup.find_all("a", href=True):
+            href = (a_tag.get("href") or "").strip()
+            if not href or href.startswith(("mailto:", "tel:", "javascript:", "#")):
+                continue
+            full_href = urllib.parse.urljoin(final_url, href)
+            if "bewerbung2go.de" in full_href.lower():
+                continue
+            text_low = (a_tag.get_text(" ", strip=True) or "").lower()
+            if is_shortener_domain(full_href) or any(
+                kw in text_low for kw in ("online-bewerbung", "jetzt bewerben", "online bewerben", "zur bewerbung")
+            ):
+                if "aubi-plus.de" not in full_href.lower() or "/bewerbung/" in full_href.lower():
+                    external_apply_url = self._resolve_shortener_url(full_href)
+                    form_section = "aubi_plus_apply_button"
+                    break
+
+        if not external_apply_url:
+            # Regex fallback for short.sg links in HTML
+            short_m = re.search(r'https?://short\.sg/[A-Za-z0-9/_-]+', str(soup), re.I)
+            if short_m:
+                external_apply_url = self._resolve_shortener_url(short_m.group(0))
+                form_section = "aubi_plus_short_sg_resolved"
+
+        if not valid_emails and not external_apply_url and not valid_phones:
+            return None
+
+        norm = dict(job)
+        norm["job_listing_url"] = final_url
+        norm["apply_url"] = final_url
+        if valid_phones:
+            norm["phone"] = valid_phones[0]
+        if contact_person:
+            norm["contact_person"] = contact_person
+            norm["arbeitsgeber"] = contact_person
+
+        if valid_emails:
+            norm["email"] = valid_emails[0]
+            norm["email_extracted"] = True
+            norm["email_type"] = "recruitment"
+            norm["has_form"] = False
+            norm["form_link"] = ""
+            norm["direct_application_url"] = ""
+            norm["bewerbung_link"] = final_url
+            norm["application_method"] = "email"
+            norm["extraction_method"] = "fast_http"
+            attach_contact_provenance(
+                norm,
+                source_url=final_url,
+                section="aubi_plus_job_detail_email",
+                extraction_method="fast_http",
+                verified=True,
+            )
+            norm = normalize_job_opportunity_row(norm)
+            self.job_cache.put(final_url, norm, company=company)
+            return norm
+
+        if external_apply_url:
+            norm["email"] = ""
+            norm["email_extracted"] = False
+            norm["has_form"] = True
+            norm["form_link"] = external_apply_url
+            norm["direct_application_url"] = external_apply_url
+            norm["bewerbung_link"] = external_apply_url
+            norm["application_method"] = "form"
+            norm["application_url_type"] = "direct_form"
+            norm["extraction_method"] = "fast_http"
+            attach_contact_provenance(
+                norm,
+                source_url=final_url,
+                section=form_section,
+                extraction_method="fast_http",
+                verified=True,
+            )
+            norm = normalize_job_opportunity_row(norm)
+            self.job_cache.put(final_url, norm, company=company)
+            self.employer_cache.put(company=company, city=city, url_or_domain=external_apply_url, data=norm)
+            return norm
+
+        return None
+
     def extract_via_fast_http(self, job: Dict) -> Optional[Dict]:
         """
         Rapid HTTP-first extraction in ~150ms.
@@ -730,14 +1188,37 @@ class WorkingEmailExtractor:
         city = str(job.get("city") or job.get("location") or "").strip()
         source_url = str(job.get("apply_url") or job.get("url") or "").strip()
 
-        # 0. Global thread-safe employer cache lookup
-        cached = self.employer_cache.get(company=company, city=city, url_or_domain=source_url)
+        # 0a. Tier 1 Job-Specific Cache lookup (exact canonical job URL + company match)
+        job_cached = self.job_cache.get(source_url, company=company)
+        if job_cached and (job_cached.get("email") or job_cached.get("has_form") or job_cached.get("direct_application_url")):
+            cached_res = dict(job)
+            for k, v in job_cached.items():
+                if v and not cached_res.get(k):
+                    cached_res[k] = v
+            cached_res["extraction_method"] = "cache"
+            return normalize_job_opportunity_row(cached_res)
+
+        # 0b. Tier 2 Verified Employer Cache lookup (only short-circuits before page fetch
+        # if explicitly populated or if source_url is an employer's own domain, NEVER a portal domain)
+        cached = self.employer_cache.get(
+            company=company,
+            city=city,
+            url_or_domain=source_url,
+            require_explicit_or_non_portal=True,
+        )
         if cached and (cached.get("email") or cached.get("has_form") or cached.get("direct_application_url")):
             cached_res = dict(job)
             for k, v in cached.items():
                 if v and not cached_res.get(k):
                     cached_res[k] = v
             cached_res["extraction_method"] = "cache"
+            attach_contact_provenance(
+                cached_res,
+                source_url=source_url,
+                section="verified_employer_cache",
+                extraction_method="cache",
+                verified=True,
+            )
             return normalize_job_opportunity_row(cached_res)
 
         if not source_url or not source_url.startswith("http"):
@@ -750,21 +1231,35 @@ class WorkingEmailExtractor:
                 res = self.aa_extractor.extract_vacancy(job, driver=None, captcha_solver=self.captcha_solver)
                 res["extraction_method"] = "fast_http"
                 if res.get("email") or res.get("has_form") or res.get("direct_application_url"):
-                    self.employer_cache.put(company=company, city=city, url_or_domain=source_url, data=res)
+                    self.job_cache.put(source_url, res, company=company)
+                    emp_site = str(res.get("employer_website") or "").strip()
+                    self.employer_cache.put(company=company, city=city, url_or_domain=emp_site, data=res)
                     return res
             except Exception as exc:
                 logger.debug("Fast HTTP aa_extractor error for %s: %s", source_url, exc)
 
-        # 2. Generic portals fast HTTP fetch
+        # 1b. For Ausbildung.de, run high-speed Stage 1 & 2
+        if "ausbildung.de" in source or "ausbildung.de" in source_url:
+            try:
+                res = self.ausbildung_extractor.extract_vacancy(job, driver=None, session=self.session, worker_id=self.worker_id)
+                if res and (res.get("email") or res.get("has_form") or res.get("direct_application_url")):
+                    self.job_cache.put(source_url, res, company=company)
+                    emp_site = str(res.get("employer_website") or "").strip()
+                    self.employer_cache.put(company=company, city=city, url_or_domain=emp_site, data=res)
+                    return res
+            except Exception as exc:
+                logger.debug("Fast HTTP ausbildung_extractor error for %s: %s", source_url, exc)
+
+        # 2. Generic portals fast HTTP fetch (Azubiyo, AUBI-plus, IHK, or direct employer URL)
         try:
-            resp = self.session.get(source_url, timeout=5, allow_redirects=True)
+            resp = self.session.get(source_url, timeout=6, allow_redirects=True)
             if resp.status_code == 200 and resp.text:
                 html = resp.text
                 final_url = resp.url or source_url
                 if any(ind in html.lower() for ind in ["sicherheitsabfrage", "security check", "cf-chl-bypass"]):
                     return None
 
-                # Redirected to Arbeitsagentur detail page?
+                # Redirected to Arbeitsagentur detail page (e.g. from IHK klick_zaehler.cfm)?
                 if "arbeitsagentur.de/jobsuche/jobdetail" in final_url:
                     try:
                         aa_job = dict(job)
@@ -772,12 +1267,24 @@ class WorkingEmailExtractor:
                         res = self.aa_extractor.extract_vacancy(aa_job, driver=None, captcha_solver=self.captcha_solver)
                         res["extraction_method"] = "fast_http"
                         if res.get("email") or res.get("has_form") or res.get("direct_application_url"):
-                            self.employer_cache.put(company=company, city=city, url_or_domain=final_url, data=res)
+                            self.job_cache.put(source_url, res, company=company)
                             return res
                     except Exception:
                         pass
 
-                # Safe meta-refresh redirect detection (e.g., Ausbildung.de partner/ATS redirect)
+                # Redirected to Ausbildung.de detail page (e.g. from IHK)?
+                if "ausbildung.de/stellen/" in final_url:
+                    try:
+                        aus_job = dict(job)
+                        aus_job["url"] = final_url
+                        res = self.ausbildung_extractor.extract_vacancy(aus_job, driver=None, session=self.session, worker_id=self.worker_id)
+                        if res and (res.get("email") or res.get("has_form") or res.get("direct_application_url")):
+                            self.job_cache.put(source_url, res, company=company)
+                            return res
+                    except Exception:
+                        pass
+
+                # Safe meta-refresh redirect detection (e.g., partner/ATS redirect)
                 meta_match = re.search(r'<meta[^>]*http-equiv=["\']?refresh["\']?[^>]*content=["\']?[^"\'>]*url=([^"\'\s;>]+)', html, re.IGNORECASE)
                 if meta_match:
                     raw_target = meta_match.group(1).strip(" '\"")
@@ -792,67 +1299,47 @@ class WorkingEmailExtractor:
                         except Exception as redir_err:
                             logger.debug("Fast HTTP meta-refresh error for %s -> %s: %s", final_url, resolved_target, redir_err)
 
-                emails = re.findall(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", html)
+                # 2a. Dedicated Azubiyo extraction
+                if "azubiyo.de" in final_url.lower():
+                    az_res = self._extract_azubiyo_fast(job, html, final_url)
+                    if az_res is not None:
+                        return az_res
 
-                # Check for portal subpages like Azubiyo bewerben-email
-                if "azubiyo.de" in final_url:
-                    m = re.search(r'href=[\'"](/stellenanzeigen/[^\'"]+/bewerben-email/?)[\'"]', html, re.IGNORECASE)
-                    if m:
-                        try:
-                            b_url = urllib.parse.urljoin(final_url, m.group(1))
-                            b_resp = self.session.get(b_url, timeout=3)
-                            if b_resp.status_code == 200 and b_resp.text:
-                                emails.extend(re.findall(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", b_resp.text))
-                        except Exception:
-                            pass
+                # 2b. Dedicated AUBI-plus extraction
+                if "aubi-plus.de" in final_url.lower():
+                    aubi_res = self._extract_aubi_plus_fast(job, html, final_url)
+                    if aubi_res is not None:
+                        return aubi_res
 
-                clean_emails = [
-                    e.lower() for e in emails
-                    if not any(x in e.lower() for x in ["example", "wix", "sentry", "u003c", "azubiyo.de", "aubi-plus.de", "ausbildung.de", "funkeworks.de"])
-                ]
+                # 2c. Scoped DOM extraction for IHK / external employer destination pages
+                clean_emails, phones, contact_person, scoped_soup = self._extract_scoped_dom_contacts(html, company=company)
 
-                # Phone extraction
-                from services.data_validator import validate_phone_number, validate_contact_person
-                phones = []
-                # First check tel: links in HTML
-                tel_matches = re.findall(r'href=["\']tel:([^"\']+)["\']', html, re.IGNORECASE)
-                for t in tel_matches:
-                    ok, clean_p, _ = validate_phone_number(t)
-                    if ok and clean_p not in phones:
-                        phones.append(clean_p)
-
-                # Parse JSON-LD metadata
-                contact_person = ""
-                ld_scripts = re.findall(r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', html, re.DOTALL | re.IGNORECASE)
-                for script in ld_scripts:
-                    try:
-                        ld_raw = json.loads(script.strip())
-                        ld_list = ld_raw if isinstance(ld_raw, list) else [ld_raw]
-                        for item in ld_list:
-                            if not isinstance(item, dict):
-                                continue
-                            if item.get("@type") == "JobPosting":
-                                desc = item.get("description", "")
-                                if desc and not phones:
-                                    tel_cues = re.findall(r"(?:tel(?:efon)?\.?|fon|phone|mobil)\s*[:\-\s]\s*([+0-9\s/().\-]{7,25})", desc, re.IGNORECASE)
-                                    for cue in tel_cues:
-                                        ok, clean_p, _ = validate_phone_number(cue)
-                                        if ok and clean_p not in phones:
-                                            phones.append(clean_p)
-                                if desc and not contact_person:
-                                    anspr = re.search(r"(?:Ansprechpartner|Kontakt(?:person)?)[^<]*<[^>]+>\s*(?:<[^>]+>)*\s*([A-ZÄÖÜ][A-Za-zÄÖÜäöüß\s\.\-]{3,40})", desc, re.IGNORECASE)
-                                    if anspr:
-                                        ok, clean_cp, _ = validate_contact_person(anspr.group(1))
-                                        if ok:
-                                            contact_person = clean_cp
-                    except Exception:
-                        pass
-
-                # Check if destination is a known ATS or contains a verifiable application form
+                # Check if destination is a known ATS, external IHK redirect target, or contains a verifiable application form
                 is_ats = ApplicationFormDiscovery.is_known_ats_url(final_url)
                 has_form, form_type, _ = ApplicationFormDiscovery.verify_form_page(html, final_url)
+                discovered_form_url = final_url if (has_form or is_ats) else ""
 
-                if clean_emails or has_form or is_ats:
+                # If IHK redirected off-portal to an external employer/ATS page, also check for explicit apply links on that page
+                is_ihk_external_redirect = (
+                    ("meine-ausbildung-in-deutschland.de" in source_url.lower() or "ihk" in source)
+                    and not is_portal_domain(final_url)
+                )
+                if not discovered_form_url and not clean_emails:
+                    ext_links = ApplicationFormDiscovery.extract_application_links_from_html(str(scoped_soup), final_url)
+                    for elink in ext_links:
+                        resolved_elink = self._resolve_shortener_url(elink)
+                        if ApplicationFormDiscovery.is_known_ats_url(resolved_elink) or any(
+                            k in resolved_elink.lower() for k in ("/apply", "/bewerb", "formular", "talentcommunity", "karriere", "jobs")
+                        ):
+                            discovered_form_url = resolved_elink
+                            has_form = True
+                            break
+                    if not discovered_form_url and is_ihk_external_redirect:
+                        # The IHK klick_zaehler redirect target IS the employer's external application/vacancy page
+                        discovered_form_url = final_url
+                        has_form = True
+
+                if clean_emails or has_form or is_ats or discovered_form_url:
                     norm = dict(job)
                     if clean_emails:
                         norm["email"] = clean_emails[0]
@@ -863,16 +1350,34 @@ class WorkingEmailExtractor:
                     if contact_person:
                         norm["contact_person"] = contact_person
                         norm["arbeitsgeber"] = contact_person
-                    if has_form or is_ats:
+                    if (has_form or is_ats or discovered_form_url) and not clean_emails:
+                        target_f = discovered_form_url or final_url
                         norm["has_form"] = True
-                        norm["form_link"] = final_url
-                        norm["direct_application_url"] = final_url
-                        norm["bewerbung_link"] = final_url
-                        norm["application_method"] = "form" if not clean_emails else "both"
+                        norm["form_link"] = target_f
+                        norm["direct_application_url"] = target_f
+                        norm["bewerbung_link"] = target_f
+                        norm["application_method"] = "form"
+                        norm["application_url_type"] = "direct_form"
+                    elif (has_form or is_ats or discovered_form_url) and clean_emails:
+                        target_f = discovered_form_url or final_url
+                        norm["has_form"] = True
+                        norm["form_link"] = target_f
+                        norm["direct_application_url"] = target_f
+                        norm["bewerbung_link"] = target_f
+                        norm["application_method"] = "both"
                         norm["application_url_type"] = "direct_form"
                     norm["extraction_method"] = "fast_http"
+                    attach_contact_provenance(
+                        norm,
+                        source_url=final_url,
+                        section="ihk_redirect_destination" if is_ihk_external_redirect else "generic_fast_http_scoped",
+                        extraction_method="fast_http",
+                        verified=True,
+                    )
                     norm = normalize_job_opportunity_row(norm)
-                    self.employer_cache.put(company=company, city=city, url_or_domain=final_url, data=norm)
+                    self.job_cache.put(source_url, norm, company=company)
+                    if not is_non_employer_domain(final_url):
+                        self.employer_cache.put(company=company, city=city, url_or_domain=final_url, data=norm)
                     return norm
         except Exception as http_err:
             logger.debug("Fast HTTP generic error for %s: %s", source_url, http_err)
@@ -930,6 +1435,7 @@ class WorkingEmailExtractor:
         Google Maps: Mandatory website inspection to verify an active matching Ausbildung advertisement,
                      regardless of email availability.
         """
+        job = dict(job or {})
         source = str(job.get("source") or "").strip().lower()
         self.current_job = job
         self.on_stage_change = on_stage_change
@@ -1017,7 +1523,62 @@ class WorkingEmailExtractor:
                 logger.error("Error in Arbeitsagentur extraction: %s", aa_err)
 
         # ----------------------------------------------------------------------
-        # 3. Generic Job Portals (Ausbildung.de, Azubiyo, AUBI-plus, IHK)
+        # 3. Ausbildung.de Vacancies (Dedicated 5-Step Pipeline)
+        # ----------------------------------------------------------------------
+        is_ausbildung_de = (
+            "ausbildung.de" in source
+            or "ausbildung.de" in str(job.get("url") or "").lower()
+        )
+        if is_ausbildung_de:
+            # 1. Fast HTTP first
+            if on_stage_change:
+                on_stage_change("HTTP Fast-Path")
+            fast_res = self.extract_via_fast_http(job)
+            if fast_res is not None and (fast_res.get("email") or fast_res.get("has_form") or fast_res.get("direct_application_url")):
+                if on_stage_change:
+                    on_stage_change("Email Extraction" if fast_res.get("email") else "Finding Application Form")
+                norm_email = self._normalize_email(fast_res.get("email"))
+                if norm_email and "@" in norm_email:
+                    with self._stats_lock:
+                        if norm_email not in self.known_emails:
+                            self.stats["emails_found"] += 1
+                            self.known_emails.add(norm_email)
+                with self._stats_lock:
+                    self.stats["processed"] += 1
+                    self.stats["fast_path_hits"] += 1
+                return fast_res
+
+            # 2. Interactive Selenium fallback for Ausbildung.de
+            try:
+                with self._stats_lock:
+                    self.stats["selenium_fallbacks"] += 1
+                if on_stage_change:
+                    on_stage_change("Selenium Fallback")
+                self.recycle_driver_if_needed()
+                with self.selenium_lock:
+                    enriched = self.ausbildung_extractor.extract_vacancy(
+                        job,
+                        driver=getattr(self, "driver", None),
+                        session=self.session,
+                        on_stage_change=on_stage_change,
+                        worker_id=self.worker_id,
+                    )
+                with self._stats_lock:
+                    self.stats["processed"] += 1
+                norm_email = self._normalize_email(enriched.get("email"))
+                if norm_email and "@" in norm_email:
+                    if on_stage_change:
+                        on_stage_change("Email Extraction")
+                    with self._stats_lock:
+                        if norm_email not in self.known_emails:
+                            self.stats["emails_found"] += 1
+                            self.known_emails.add(norm_email)
+                return enriched
+            except Exception as aus_err:
+                logger.error("[AusbildungDe] Error in extraction: %s", aus_err)
+
+        # ----------------------------------------------------------------------
+        # 4. Generic Job Portals (Azubiyo, AUBI-plus, IHK)
         # ----------------------------------------------------------------------
         # Fast HTTP / Cache shortcut: skip opening Selenium if contact info is found
         if on_stage_change:
@@ -1113,6 +1674,13 @@ class WorkingEmailExtractor:
                 job["has_form"] = False
                 job["form_link"] = ""
                 job["bewerbung_link"] = job.get("direct_application_url") or job.get("job_listing_url") or ""
+                attach_contact_provenance(
+                    job,
+                    source_url=job_listing_url,
+                    section="selenium_dom_extraction",
+                    extraction_method="selenium",
+                    verified=True,
+                )
                 job = normalize_job_opportunity_row(job, discovery_result=None)
             else:
                 # If no email exists, inspect original job ad & company website for application form
@@ -1122,16 +1690,28 @@ class WorkingEmailExtractor:
                     job,
                     driver=getattr(self, "driver", None),
                 )
+                attach_contact_provenance(
+                    job,
+                    source_url=job_listing_url,
+                    section="selenium_form_discovery",
+                    extraction_method="selenium",
+                    verified=True,
+                )
                 job = normalize_job_opportunity_row(job, discovery_result=discovery)
 
-            # Store discovered contact info in the global employer cache for cross-worker sharing
+            # Store discovered contact info in Tier 1 job cache and Tier 2 verified employer cache
+            comp_name = str(job.get("company") or job.get("firma") or "")
+            city_name = str(job.get("city") or job.get("location") or "")
             if job.get("email") or job.get("has_form") or job.get("direct_application_url"):
-                self.employer_cache.put(
-                    company=str(job.get("company") or job.get("firma") or ""),
-                    city=str(job.get("city") or job.get("location") or ""),
-                    url_or_domain=str(job.get("url") or job.get("job_listing_url") or ""),
-                    data=job,
-                )
+                self.job_cache.put(job_listing_url, job, company=comp_name)
+                emp_site = str(job.get("employer_website") or "").strip()
+                if emp_site and not is_non_employer_domain(emp_site):
+                    self.employer_cache.put(
+                        company=comp_name,
+                        city=city_name,
+                        url_or_domain=emp_site,
+                        data=job,
+                    )
 
             self.stats["processed"] += 1
             self._jobs_since_recycle += 1

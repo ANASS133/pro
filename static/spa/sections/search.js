@@ -1337,10 +1337,102 @@
                 if (entry.timeoutId) clearTimeout(entry.timeoutId);
                 if (entry.intervalId) clearInterval(entry.intervalId);
                 ui._trueCaptchaTimers.delete(chId);
-                const btn = ui.manualCaptchaCards?.querySelector(`.btn-solve-truecaptcha[data-challenge-id="${chId}"]`);
-                if (btn && !btn.disabled) {
-                    const span = btn.querySelector("span") || btn;
-                    span.textContent = "Mit TrueCaptcha lösen";
+                if (ui._trueCaptchaAttempted) {
+                    ui._trueCaptchaAttempted.add(chId);
+                }
+            }
+        }
+
+        async function recognizeAndSubmitTrueCaptcha(ui, chId) {
+            if (!ui?.manualCaptchaCards || !chId) return;
+            const getLiveElements = () => {
+                const card = ui.manualCaptchaCards.querySelector(`.manual-captcha-card[data-challenge-id="${chId}"]`);
+                return {
+                    card,
+                    input: card?.querySelector(".mch-code-input"),
+                    submitBtn: card?.querySelector(".btn-submit-captcha-code"),
+                    feedbackEl: card?.querySelector(".mch-feedback-msg"),
+                };
+            };
+            const initial = getLiveElements();
+            if (!initial.card || !initial.input || !initial.submitBtn || initial.submitBtn.disabled) return;
+
+            if (initial.feedbackEl) {
+                initial.feedbackEl.style.display = "block";
+                initial.feedbackEl.className = "mch-feedback-msg info";
+                initial.feedbackEl.textContent = "TrueCaptcha erkennt den Code...";
+            }
+
+            try {
+                const resp = await fetch("/api/inline/auto-jobs/challenges/solve-truecaptcha", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ challenge_id: chId }),
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok || !data.success || !data.solution) {
+                    throw new Error(data.message || "TrueCaptcha konnte keinen Code erkennen.");
+                }
+
+                const solution = String(data.solution).trim();
+                if (!ui._captchaInputValues) ui._captchaInputValues = new Map();
+                ui._captchaInputValues.set(chId, solution);
+
+                // Write the recognized code immediately into the input field
+                let live = getLiveElements();
+                if (live.input) {
+                    live.input.value = solution;
+                    live.input.setAttribute("value", solution);
+                    live.input.dispatchEvent(new Event("input", { bubbles: true }));
+                    live.input.dispatchEvent(new Event("change", { bubbles: true }));
+                }
+
+                if (live.feedbackEl) {
+                    live.feedbackEl.style.display = "block";
+                    live.feedbackEl.className = "mch-feedback-msg info";
+                    live.feedbackEl.textContent = `Code erkannt: ${solution}. Bestätige...`;
+                }
+
+                // Keep the recognized value visible briefly before auto-submitting
+                await new Promise(resolve => setTimeout(resolve, 500));
+
+                live = getLiveElements();
+                if (!live.input || !live.submitBtn || live.submitBtn.disabled) return;
+                live.input.value = solution;
+                live.submitBtn.click();
+            } catch (error) {
+                const retryCount = (ui._trueCaptchaRetries && ui._trueCaptchaRetries.get(chId)) || 0;
+                if (retryCount < 1) {
+                    if (!ui._trueCaptchaRetries) ui._trueCaptchaRetries = new Map();
+                    ui._trueCaptchaRetries.set(chId, 1);
+                    const live = getLiveElements();
+                    if (live.feedbackEl) {
+                        live.feedbackEl.style.display = "block";
+                        live.feedbackEl.className = "mch-feedback-msg info";
+                        live.feedbackEl.textContent = "Erkennung fehlgeschlagen. Lade neues Bild für einen erneuten Versuch...";
+                    }
+                    try {
+                        const rResp = await fetch("/api/inline/auto-jobs/challenges/refresh-image", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ challenge_id: chId }),
+                        });
+                        const rData = await rResp.json().catch(() => ({}));
+                        if (rResp.ok && rData.success && rData.captcha_image_base64) {
+                            const imgBox = live.card?.querySelector(".mch-img-box");
+                            if (imgBox) {
+                                imgBox.innerHTML = `<img src="${rData.captcha_image_base64}" alt="CAPTCHA Sicherheits-Code" class="mch-captcha-img" />`;
+                            }
+                            await new Promise(r => setTimeout(r, 1000));
+                            return recognizeAndSubmitTrueCaptcha(ui, chId);
+                        }
+                    } catch (_) {}
+                }
+                const live = getLiveElements();
+                if (live.feedbackEl) {
+                    live.feedbackEl.style.display = "block";
+                    live.feedbackEl.className = "mch-feedback-msg error";
+                    live.feedbackEl.textContent = error?.message || "TrueCaptcha ist momentan nicht erreichbar.";
                 }
             }
         }
@@ -1351,6 +1443,15 @@
             if (!ui._trueCaptchaTimers) {
                 ui._trueCaptchaTimers = new Map();
             }
+            if (!ui._trueCaptchaAttempted) {
+                ui._trueCaptchaAttempted = new Set();
+            }
+            if (!ui._trueCaptchaRetries) {
+                ui._trueCaptchaRetries = new Map();
+            }
+            if (!ui._captchaInputValues) {
+                ui._captchaInputValues = new Map();
+            }
 
             if (active.length === 0) {
                 for (const [_, entry] of ui._trueCaptchaTimers.entries()) {
@@ -1358,6 +1459,9 @@
                     if (entry.intervalId) clearInterval(entry.intervalId);
                 }
                 ui._trueCaptchaTimers.clear();
+                ui._trueCaptchaAttempted.clear();
+                ui._trueCaptchaRetries.clear();
+                ui._captchaInputValues.clear();
                 ui.manualCaptchaSection.style.display = "none";
                 ui.manualCaptchaCards.innerHTML = "";
                 return;
@@ -1368,7 +1472,7 @@
                 ui.manualCaptchaBadge.textContent = `${active.length} ${active.length === 1 ? "Prüfung aktiv" : "Prüfungen aktiv"}`;
             }
 
-            // Clean up timers for challenges that are no longer active
+            // Clean up timers and attempt records for challenges that are no longer active
             const activeIds = new Set(active.map(c => c.challenge_id));
             for (const [chId, entry] of ui._trueCaptchaTimers.entries()) {
                 if (!activeIds.has(chId)) {
@@ -1377,61 +1481,58 @@
                     ui._trueCaptchaTimers.delete(chId);
                 }
             }
+            for (const chId of ui._trueCaptchaAttempted) {
+                if (!activeIds.has(chId)) {
+                    ui._trueCaptchaAttempted.delete(chId);
+                }
+            }
+            for (const chId of ui._trueCaptchaRetries.keys()) {
+                if (!activeIds.has(chId)) {
+                    ui._trueCaptchaRetries.delete(chId);
+                }
+            }
 
-            // Schedule 4-second automatic TrueCaptcha trigger if user does not click
+            // Schedule single 4-second automatic TrueCaptcha trigger if not yet attempted
             if (trueCaptchaConfigured) {
                 active.forEach(ch => {
                     const chId = ch.challenge_id;
                     const isImageCaptcha = (ch.challenge_type === "image_text");
                     const hasImg = Boolean(ch.image_valid && ch.captcha_image_base64);
-                    if (chId && isImageCaptcha && hasImg && ch.status === "pending" && !ch.last_error && !ui._trueCaptchaTimers.has(chId)) {
+                    const attempts = Number(ch.attempts || 0);
+                    const alreadyAttempted = ui._trueCaptchaAttempted.has(chId) || attempts > 0;
+
+                    // Execute auto-trigger only ONCE per challenge - never repeat multiple times
+                    if (chId && isImageCaptcha && hasImg && ch.status === "pending" && !alreadyAttempted && !ch.last_error && !ui._trueCaptchaTimers.has(chId)) {
                         const duration = 4000;
-                        const deadline = Date.now() + duration;
 
                         const triggerAuto = () => {
                             const entry = ui._trueCaptchaTimers?.get(chId);
                             if (!entry) return;
-                            if (entry.intervalId) clearInterval(entry.intervalId);
                             ui._trueCaptchaTimers.delete(chId);
-
-                            const btn = ui.manualCaptchaCards?.querySelector(`.btn-solve-truecaptcha[data-challenge-id="${chId}"]`);
-                            if (btn && !btn.disabled) {
-                                btn.click();
-                            }
-                        };
-
-                        const updateCountdown = () => {
-                            const entry = ui._trueCaptchaTimers?.get(chId);
-                            if (!entry) return;
-                            const remainingMs = Math.max(0, entry.deadline - Date.now());
-                            const remainingSec = Math.ceil(remainingMs / 1000);
-                            const btn = ui.manualCaptchaCards?.querySelector(`.btn-solve-truecaptcha[data-challenge-id="${chId}"]`);
-                            if (btn && !btn.disabled) {
-                                const span = btn.querySelector("span") || btn;
-                                if (remainingSec > 0) {
-                                    span.textContent = `Mit TrueCaptcha lösen (${remainingSec}s)`;
-                                } else {
-                                    span.textContent = "Mit TrueCaptcha lösen";
-                                }
-                            }
+                            ui._trueCaptchaAttempted.add(chId);
+                            recognizeAndSubmitTrueCaptcha(ui, chId);
                         };
 
                         const timeoutId = setTimeout(triggerAuto, duration);
-                        const intervalId = setInterval(updateCountdown, 250);
-
-                        ui._trueCaptchaTimers.set(chId, {
-                            deadline,
-                            timeoutId,
-                            intervalId,
-                        });
+                        ui._trueCaptchaTimers.set(chId, { timeoutId });
                     }
                 });
             }
 
-            // Preserve typing state if user is entering code
+            // Preserve input values and typing state across redraws
+            ui.manualCaptchaCards.querySelectorAll("input.mch-code-input").forEach(inp => {
+                const id = inp.getAttribute("data-challenge-id");
+                if (id && inp.value) {
+                    ui._captchaInputValues.set(id, inp.value);
+                }
+            });
+
             const activeInput = ui.manualCaptchaCards.querySelector("input.mch-code-input:focus");
             const activeChallengeId = activeInput ? activeInput.getAttribute("data-challenge-id") : null;
             const activeInputValue = activeInput ? activeInput.value : "";
+            if (activeChallengeId && activeInputValue) {
+                ui._captchaInputValues.set(activeChallengeId, activeInputValue);
+            }
 
             ui.manualCaptchaCards.innerHTML = active.map(ch => {
                 const chId = escapeHtml(ch.challenge_id || "");
@@ -1456,13 +1557,7 @@
                 const typeLabel = typeLabels[type] || typeLabels.unknown;
                 const lastErr = ch.last_error ? escapeHtml(ch.last_error) : "";
                 const sourceUrl = escapeHtml(ch.source_url || "");
-
-                let tcLabel = "Mit TrueCaptcha lösen";
-                const activeTimer = ui._trueCaptchaTimers?.get(ch.challenge_id);
-                if (activeTimer) {
-                    const sec = Math.max(1, Math.ceil((activeTimer.deadline - Date.now()) / 1000));
-                    tcLabel = `Mit TrueCaptcha lösen (${sec}s)`;
-                }
+                const savedVal = escapeHtml((ui._captchaInputValues && ui._captchaInputValues.get(ch.challenge_id)) || ch.recognized_code || "");
 
                 return `
                     <div class="manual-captcha-card ${isInteractive ? 'interactive-card' : ''}" data-challenge-id="${chId}">
@@ -1522,13 +1617,10 @@
                                     </button>
                                 </div>
                                 ${hasImg ? `<div class="mch-input-group">
-                                    <input type="text" class="mch-code-input" placeholder="7-stelligen Code eingeben..." maxlength="7" minlength="7" inputmode="text" autocomplete="off" data-challenge-id="${chId}" />
+                                    <input type="text" class="mch-code-input" placeholder="CAPTCHA-Code eingeben..." maxlength="64" inputmode="text" autocomplete="off" autocapitalize="none" spellcheck="false" data-challenge-id="${chId}" value="${savedVal}" />
                                     <button type="button" class="mch-btn mch-btn-primary btn-submit-captcha-code" data-challenge-id="${chId}">
                                         <span>Bestätigen</span>
                                     </button>
-                                    ${trueCaptchaConfigured ? `<button type="button" class="mch-btn mch-btn-truecaptcha btn-solve-truecaptcha" data-challenge-id="${chId}" title="Code automatisch erkennen und auf der Original-Webseite prüfen">
-                                        <span>${tcLabel}</span>
-                                    </button>` : ''}
                                     <button type="button" class="mch-btn mch-btn-browser btn-open-captcha-browser" data-challenge-id="${chId}" data-url="${sourceUrl}" title="Zielseite im Browser öffnen, um den Code dort einzusehen">
                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
                                         <span>Im Browser öffnen</span>
@@ -1555,10 +1647,18 @@
                 `;
             }).join("");
 
-            if (activeChallengeId && activeInputValue) {
+            // Re-apply preserved values to DOM inputs
+            ui.manualCaptchaCards.querySelectorAll("input.mch-code-input").forEach(inp => {
+                const id = inp.getAttribute("data-challenge-id");
+                const val = ui._captchaInputValues?.get(id);
+                if (val && inp.value !== val) {
+                    inp.value = val;
+                }
+            });
+
+            if (activeChallengeId) {
                 const inputToRestore = ui.manualCaptchaCards.querySelector(`input.mch-code-input[data-challenge-id="${activeChallengeId}"]`);
                 if (inputToRestore) {
-                    inputToRestore.value = activeInputValue;
                     inputToRestore.focus();
                 }
             }
@@ -1615,6 +1715,39 @@
                                 pollAutoProgress(ui);
                             }, 1000);
                         } else {
+                            const retryCount = (ui._trueCaptchaRetries && ui._trueCaptchaRetries.get(chId)) || 0;
+                            const isTrueCaptcha = Boolean(ui._trueCaptchaAttempted && ui._trueCaptchaAttempted.has(chId));
+
+                            if (isTrueCaptcha && retryCount < 1 && resData.can_retry !== false) {
+                                if (!ui._trueCaptchaRetries) ui._trueCaptchaRetries = new Map();
+                                ui._trueCaptchaRetries.set(chId, 1);
+
+                                // If server rotated the image, update DOM immediately
+                                if (resData.challenge && resData.challenge.captcha_image_base64) {
+                                    const imgBox = card?.querySelector(".mch-img-box");
+                                    if (imgBox) {
+                                        imgBox.innerHTML = `<img src="${resData.challenge.captcha_image_base64}" alt="CAPTCHA Sicherheits-Code" class="mch-captcha-img" />`;
+                                    }
+                                }
+
+                                if (feedbackEl) {
+                                    feedbackEl.style.display = "block";
+                                    feedbackEl.className = "mch-feedback-msg info";
+                                    feedbackEl.textContent = "Code von Website abgelehnt. TrueCaptcha versucht es einmal erneut mit dem neuen Bild...";
+                                }
+                                if (errEl) errEl.style.display = "none";
+
+                                if (input) {
+                                    input.value = "";
+                                    ui._captchaInputValues?.delete(chId);
+                                }
+
+                                setTimeout(() => {
+                                    recognizeAndSubmitTrueCaptcha(ui, chId);
+                                }, 1000);
+                                return;
+                            }
+
                             if (errEl) {
                                 errEl.style.display = "flex";
                                 const span = errEl.querySelector("span");
@@ -1624,8 +1757,9 @@
                                 feedbackEl.textContent = resData.message || "Code von Website abgelehnt. Erneuter Versuch möglich.";
                             }
                             if (input) {
-                                input.value = "";
+                                input.value = solution;
                                 input.focus();
+                                input.select();
                             }
                         }
                     } catch (err) {
@@ -1636,55 +1770,6 @@
                     } finally {
                         submitBtn.disabled = false;
                         submitBtn.innerHTML = origHtml;
-                    }
-                    return;
-                }
-
-                // 1b. Recognize the image with TrueCaptcha on explicit user request.
-                const trueCaptchaBtn = target.closest(".btn-solve-truecaptcha");
-                if (trueCaptchaBtn) {
-                    const card = trueCaptchaBtn.closest(".manual-captcha-card");
-                    const chId = trueCaptchaBtn.dataset.challengeId || card?.getAttribute("data-challenge-id");
-                    cancelTrueCaptchaTimer(ui, chId);
-                    const feedbackEl = card?.querySelector(".mch-feedback-msg");
-                    const errEl = card?.querySelector(".mch-error-message");
-                    const origHtml = trueCaptchaBtn.innerHTML;
-                    trueCaptchaBtn.disabled = true;
-                    trueCaptchaBtn.innerHTML = `<span>TrueCaptcha prüft...</span>`;
-                    if (feedbackEl) {
-                        feedbackEl.style.display = "block";
-                        feedbackEl.className = "mch-feedback-msg info";
-                        feedbackEl.textContent = "TrueCaptcha erkennt den Code und prüft ihn auf der Original-Webseite...";
-                    }
-                    try {
-                        const resp = await fetch("/api/inline/auto-jobs/challenges/solve-truecaptcha", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ challenge_id: chId }),
-                        });
-                        const resData = await resp.json().catch(() => ({}));
-                        if (resp.ok && resData.success) {
-                            if (feedbackEl) {
-                                feedbackEl.className = "mch-feedback-msg success";
-                                feedbackEl.textContent = "TrueCaptcha-Code akzeptiert. Worker setzt die Extraktion fort...";
-                            }
-                            setTimeout(() => pollAutoProgress(ui), 800);
-                        } else if (errEl) {
-                            errEl.style.display = "flex";
-                            const span = errEl.querySelector("span");
-                            if (span) span.textContent = resData.message || "TrueCaptcha konnte die Prüfung nicht lösen.";
-                        } else if (feedbackEl) {
-                            feedbackEl.className = "mch-feedback-msg error";
-                            feedbackEl.textContent = resData.message || "TrueCaptcha konnte die Prüfung nicht lösen.";
-                        }
-                    } catch (_) {
-                        if (feedbackEl) {
-                            feedbackEl.className = "mch-feedback-msg error";
-                            feedbackEl.textContent = "TrueCaptcha ist momentan nicht erreichbar.";
-                        }
-                    } finally {
-                        trueCaptchaBtn.disabled = false;
-                        trueCaptchaBtn.innerHTML = origHtml;
                     }
                     return;
                 }
@@ -1714,6 +1799,10 @@
                     const card = refreshBtn.closest(".manual-captcha-card");
                     const chId = refreshBtn.dataset.challengeId || card?.getAttribute("data-challenge-id");
                     cancelTrueCaptchaTimer(ui, chId);
+                    if (chId) {
+                        ui._trueCaptchaRetries?.delete(chId);
+                        ui._trueCaptchaAttempted?.delete(chId);
+                    }
                     const imgBox = card?.querySelector(".mch-img-box");
                     const origSvg = refreshBtn.innerHTML;
                     refreshBtn.disabled = true;
@@ -1819,6 +1908,10 @@
                 if (e.target && e.target.classList.contains("mch-code-input")) {
                     const card = e.target.closest(".manual-captcha-card");
                     const chId = e.target.dataset.challengeId || card?.getAttribute("data-challenge-id");
+                    if (chId) {
+                        if (!ui._captchaInputValues) ui._captchaInputValues = new Map();
+                        ui._captchaInputValues.set(chId, e.target.value);
+                    }
                     cancelTrueCaptchaTimer(ui, chId);
                 }
             });

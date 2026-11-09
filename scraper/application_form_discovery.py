@@ -139,9 +139,20 @@ JOB_PORTAL_DOMAINS = {
     "ihk.de",
     "ihk-lehrstellenboerse.de",
     "lehrstellenboerse.de",
+    "meine-ausbildung-in-deutschland.de",
+    "jobs.meine-ausbildung-in-deutschland.de",
+    "indexinternet.de",
+    "ihk-azubi-stellenmarkt.indexinternet.de",
     "indeed.com",
     "indeed.de",
     "stepstone.de/stellenangebote",
+    "stellenanzeigen.de",
+    "yourfirm.de",
+    "heyjobs.co",
+    "hogapage.de",
+    "jobs.hogapage.de",
+    "bewerbung2go.de",
+    "funkeworks.de",
 }
 
 CAREER_PATH_CANDIDATES = [
@@ -406,6 +417,14 @@ class ApplicationFormDiscovery:
 
         try:
             soup = BeautifulSoup(html, "html.parser")
+            # Remove site navigation, header, footer, and sidebar recommendation cards to prevent cross-job contamination
+            for noise in soup.find_all(["nav", "header", "footer"]):
+                noise.decompose()
+            for noise_div in soup.find_all(
+                "div",
+                class_=lambda c: c and any(k in " ".join(c if isinstance(c, list) else [c]).lower() for k in ["job-offer-teaser", "similar-jobs", "recommended", "footer", "mega-menu"]),
+            ):
+                noise_div.decompose()
 
             # 1. Prioritize ATS iframes
             for iframe in soup.find_all("iframe", src=True):
@@ -478,7 +497,13 @@ class ApplicationFormDiscovery:
         if not base_url:
             return None
 
+        from services.employer_cache import is_non_employer_domain
+        if self.is_job_portal_url(base_url) or is_non_employer_domain(base_url):
+            return None
+
         parsed = urlparse(base_url)
+        if not parsed.scheme or not parsed.netloc:
+            return None
         root_domain = f"{parsed.scheme}://{parsed.netloc}"
 
         for path in CAREER_PATH_CANDIDATES:
@@ -697,7 +722,13 @@ def normalize_job_opportunity_row(
         is_advice_or_generic_page,
     )
 
-    # 1. Extract or preserve email
+    # 1. Extract or preserve email (and verify employer compatibility)
+    from services.contamination_detector import (
+        PORTAL_SUPPORT_PHONES,
+        is_email_compatible_with_employer,
+        is_url_compatible_with_job,
+    )
+    company_str = str(row.get("company") or row.get("firma") or "").strip()
     raw_email = row.get("email")
     clean_email = str(raw_email or "").strip().lower()
     has_valid_email = bool(
@@ -707,6 +738,10 @@ def normalize_job_opportunity_row(
         and clean_email != "captcha_failed"
         and clean_email != "duplicate_email_skipped"
     )
+    if has_valid_email:
+        email_compat, _ = is_email_compatible_with_employer(clean_email, company_str)
+        if not email_compat:
+            has_valid_email = False
     email_val = clean_email if has_valid_email else ""
 
     # 2. Preserve genuine job listing URL (never overwrite with advice page)
@@ -729,10 +764,15 @@ def normalize_job_opportunity_row(
     if "mailto:" in raw_direct.lower():
         m = re.search(r"mailto:([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})", raw_direct, re.I)
         if m and not email_val:
-            email_val = m.group(1).lower()
+            cand_m = m.group(1).lower()
+            m_ok, _ = is_email_compatible_with_employer(cand_m, company_str)
+            if m_ok:
+                email_val = cand_m
         direct_app_url = ""
     else:
         is_dir_ok, clean_dir_url, _ = validate_application_url(raw_direct)
+        if is_dir_ok:
+            is_dir_ok, _ = is_url_compatible_with_job(clean_dir_url, company=company_str, job_listing_url=job_listing_url)
         direct_app_url = clean_dir_url if is_dir_ok else ""
 
     # 5. Form discovery validation (reject generic portal roots like jobs.hogapage.de)
@@ -740,13 +780,17 @@ def normalize_job_opportunity_row(
         raw_has_form = bool(discovery_result.has_form)
         raw_form_link = str(discovery_result.form_link or "").strip() if raw_has_form else ""
         is_form_valid, form_link, _ = validate_form_link(raw_form_link, has_form=raw_has_form)
+        if is_form_valid:
+            is_form_valid, _ = is_url_compatible_with_job(form_link, company=company_str, job_listing_url=job_listing_url)
         has_form = is_form_valid
         form_link = form_link if is_form_valid else ""
         raw_bewerbung_link = str(discovery_result.bewerbung_link or apply_url or job_listing_url or "").strip()
     else:
         raw_has_form = bool(row.get("has_form") is True or str(row.get("has_form")).lower() in {"true", "1"})
-        raw_form_link = str(row.get("form_link") or "").strip()
+        raw_form_link = str(row.get("form_link") or (row.get("direct_application_url") if raw_has_form else "") or "").strip()
         is_form_valid, form_link, _ = validate_form_link(raw_form_link, has_form=raw_has_form)
+        if is_form_valid:
+            is_form_valid, _ = is_url_compatible_with_job(form_link, company=company_str, job_listing_url=job_listing_url)
         has_form = is_form_valid
         form_link = form_link if is_form_valid else ""
         raw_bewerbung_link = str(row.get("bewerbung_link") or form_link or apply_url or job_listing_url or "").strip()
@@ -760,13 +804,13 @@ def normalize_job_opportunity_row(
     else:
         bewerbung_link = raw_bewerbung_link or direct_app_url or job_listing_url
 
-    # 6. Phone number validation (reject fragments, coordinates, dates)
+    # 6. Phone number validation (reject fragments, coordinates, dates, portal support hotlines)
     raw_phone = row.get("phone")
     if raw_phone is None or str(raw_phone).strip().lower() in ("nan", "none", "null", ""):
         phone_val = ""
     else:
         is_phone_ok, clean_phone, _ = validate_phone_number(str(raw_phone))
-        phone_val = clean_phone if is_phone_ok else ""
+        phone_val = clean_phone if (is_phone_ok and clean_phone not in PORTAL_SUPPORT_PHONES) else ""
 
     # 7. Recruiter / Contact person sanitization (strip addresses, street markers)
     raw_contact = row.get("contact_person") or row.get("arbeitsgeber")
@@ -817,7 +861,7 @@ def normalize_job_opportunity_row(
         extraction_status = "completed"
     app_methods = row.get("application_methods") or ([app_method] if app_method not in ("unknown", "none") else [])
 
-    return {
+    out = {
         "title": str(row.get("title") or "N/A"),
         "company": str(row.get("company") or "N/A"),
         "location": str(row.get("location") or "N/A"),
@@ -841,6 +885,8 @@ def normalize_job_opportunity_row(
         "salary": str(row.get("salary") or ""),
         # Extended fields for full application details
         "email_type": email_type,
+        "email_extracted": bool(email_val and "@" in email_val),
+        "manual_review_required": bool(row.get("manual_review_required")),
         "contact_person": contact_val,
         "job_listing_url": job_listing_url,
         "employer_website": employer_website,
@@ -851,3 +897,26 @@ def normalize_job_opportunity_row(
         "application_methods": app_methods,
         "extraction_method": str(row.get("extraction_method") or "").strip(),
     }
+    # Preserve provenance and diagnostic metadata when present
+    for prov_key in (
+        "email_source_url",
+        "email_source_section",
+        "email_verified",
+        "application_url_source",
+        "application_url_verified",
+        "form_link_source",
+        "form_link_verified",
+        "phone_source",
+        "phone_verified",
+        "contact_person_source",
+        "contact_person_verified",
+        "validation_status",
+        "validation_reason",
+        "contact_provenance",
+        "raw_candidates",
+        "extraction_completed",
+        "manual_review_reason",
+    ):
+        if prov_key in row:
+            out[prov_key] = row[prov_key]
+    return out

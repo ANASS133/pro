@@ -1,5 +1,6 @@
 from .enhanced_api_scraper import EnhancedJobScraper
 from .ausbildung_de_scraper import AusbildungDeScraper
+from .ausbildung_de_detail_extractor import AusbildungDeDetailExtractor
 from .azubiyo_scraper import AzubiyoScraper
 from .aubi_plus_scraper import AubiPlusScraper
 from .ihk_scraper import IhkScraper
@@ -37,6 +38,7 @@ from .parallel_domain_engine import (
 __all__ = [
     "EnhancedJobScraper",
     "AusbildungDeScraper",
+    "AusbildungDeDetailExtractor",
     "AzubiyoScraper",
     "AubiPlusScraper",
     "IhkScraper",

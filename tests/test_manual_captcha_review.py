@@ -122,6 +122,22 @@ class ManualCaptchaReviewTests(unittest.TestCase):
         self.assertTrue(challenge.completion_event.is_set())
         self.assertIn("CORRECT42", submitted_code)
 
+    def test_rejected_code_refreshes_rotated_live_captcha(self):
+        challenge = self.manager.create_challenge(
+            job_id="test_job_123", search_run_id="run_abc123", job_index=1,
+            worker_id=1, platform="Arbeitsagentur", job_title="Koch",
+            employer="Restaurant", source_url="https://example.com/job/1",
+            challenge_type="image_text", captcha_image_base64=VALID_PNG,
+            submit_handler=lambda _code: (False, "Incorrect code."),
+            driver_ref=MagicMock(),
+        )
+        challenge.refresh_image = MagicMock(return_value=VALID_PNG)
+
+        ok, _ = self.manager.submit_solution(challenge.challenge_id, "WRONG")
+
+        self.assertFalse(ok)
+        challenge.refresh_image.assert_called_once_with()
+
     def test_interactive_captcha_verification(self):
         is_unblocked = [False]
 
@@ -400,7 +416,7 @@ class ManualCaptchaEndpointsTest(unittest.TestCase):
         self.assertTrue(d3["success"])
         self.assertEqual(ch2.status, "dismissed")
 
-    def test_truecaptcha_endpoint_solves_and_submits_in_worker_session(self):
+    def test_truecaptcha_endpoint_returns_solution_without_submitting(self):
         submitted_codes = []
         ch = self.manager.create_challenge(
             job_id="job_test_api",
@@ -428,8 +444,9 @@ class ManualCaptchaEndpointsTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(data["success"])
         self.assertEqual(data["provider"], "TrueCaptcha")
-        self.assertEqual(submitted_codes, ["A7K9"])
-        self.assertEqual(ch.status, "solved")
+        self.assertEqual(data["solution"], "A7K9")
+        self.assertEqual(submitted_codes, [])
+        self.assertEqual(ch.status, "pending")
         solve.assert_called_once()
 
     def test_truecaptcha_endpoint_requires_server_credentials(self):
@@ -492,9 +509,93 @@ class ManualCaptchaEndpointsTest(unittest.TestCase):
         js_content = Path("static/spa/sections/search.js").read_text(encoding="utf-8")
         self.assertIn("function cancelTrueCaptchaTimer", js_content)
         self.assertIn("const duration = 4000;", js_content)
-        self.assertIn("btn.click()", js_content)
-        self.assertIn("Mit TrueCaptcha lösen (${remainingSec}s)", js_content)
+        self.assertIn("recognizeAndSubmitTrueCaptcha(ui, chId);", js_content)
+        self.assertIn("const getLiveElements = () =>", js_content)
+        self.assertIn("live.input.value = solution;", js_content)
+        self.assertIn("live.submitBtn.click();", js_content)
+        self.assertNotIn('mch-btn mch-btn-truecaptcha btn-solve-truecaptcha', js_content)
         self.assertIn("cancelTrueCaptchaTimer(ui, chId);", js_content)
+        self.assertIn("ui._trueCaptchaAttempted", js_content)
+        self.assertIn("alreadyAttempted", js_content)
+        self.assertIn("ui._captchaInputValues.set(chId, solution);", js_content)
+        self.assertIn('value="${savedVal}"', js_content)
+        self.assertIn("ui._trueCaptchaRetries", js_content)
+        self.assertIn("retryCount < 1", js_content)
+        self.assertIn("TrueCaptcha versucht es einmal erneut mit dem neuen Bild...", js_content)
+
+    def test_truecaptcha_retry_on_rejected_code_backend_flow(self):
+        """Simulate TrueCaptcha solving a challenge, submitting a code rejected by the target site, and retrying on the rotated image."""
+        mock_driver = MagicMock()
+        image_element = MagicMock()
+        image_element.get_attribute.return_value = ""
+        image_element.screenshot_as_base64 = VALID_PNG.split(",", 1)[1]
+        mock_driver.find_elements.side_effect = lambda by, selector: (
+            [] if selector == "#kontaktdaten-captcha-reload-button" else [image_element]
+        )
+        mock_driver.execute_script.return_value = True
+
+        submitted_codes = []
+        def mock_submit(code):
+            submitted_codes.append(code)
+            if code == "WRONG1":
+                return False, "Code von Website abgelehnt."
+            return True, "Code akzeptiert."
+
+        ch = self.manager.create_challenge(
+            job_id="job_retry_test",
+            search_run_id="run_retry_1",
+            job_index=1,
+            worker_id=1,
+            platform="arbeitsagentur.de",
+            job_title="Informatiker",
+            employer="Firma GmbH",
+            source_url="https://arbeitsagentur.de/job/1",
+            challenge_type="image_text",
+            captcha_image_base64=VALID_PNG,
+            submit_handler=mock_submit,
+            driver_ref=mock_driver,
+        )
+
+        # 1. First TrueCaptcha recognition & submission (returns wrong code)
+        with patch.object(app_module, "CAPTCHA_USERID", "user-1"), \
+             patch.object(app_module, "CAPTCHA_APIKEY", "key-1"), \
+             patch("scraper.true_captcha_solver.TrueCaptchaSolver.solve_captcha", return_value="WRONG1"):
+            tc_resp1 = self.app.post("/api/inline/auto-jobs/challenges/solve-truecaptcha", json={"challenge_id": ch.challenge_id})
+            self.assertEqual(tc_resp1.status_code, 200)
+            self.assertEqual(tc_resp1.get_json()["solution"], "WRONG1")
+
+        solve_resp1 = self.app.post("/api/inline/auto-jobs/challenges/solve", json={
+            "challenge_id": ch.challenge_id,
+            "solution_text": "WRONG1",
+        })
+        d1 = solve_resp1.get_json()
+        self.assertFalse(d1["success"])
+        self.assertTrue(d1["can_retry"])
+        self.assertEqual(ch.attempts, 1)
+        self.assertEqual(ch.status, "pending")
+        self.assertEqual(submitted_codes, ["WRONG1"])
+
+        # 2. Retry with second recognition on rotated image (succeeds)
+        with patch.object(app_module, "CAPTCHA_USERID", "user-1"), \
+             patch.object(app_module, "CAPTCHA_APIKEY", "key-1"), \
+             patch("scraper.true_captcha_solver.TrueCaptchaSolver.solve_captcha", return_value="CORRECT2"):
+            tc_resp2 = self.app.post("/api/inline/auto-jobs/challenges/solve-truecaptcha", json={"challenge_id": ch.challenge_id})
+            self.assertEqual(tc_resp2.status_code, 200)
+            self.assertEqual(tc_resp2.get_json()["solution"], "CORRECT2")
+
+        solve_resp2 = self.app.post("/api/inline/auto-jobs/challenges/solve", json={
+            "challenge_id": ch.challenge_id,
+            "solution_text": "CORRECT2",
+        })
+        d2 = solve_resp2.get_json()
+        self.assertTrue(d2["success"])
+        self.assertEqual(ch.status, "solved")
+        self.assertEqual(submitted_codes, ["WRONG1", "CORRECT2"])
+
+    def test_manual_code_input_does_not_truncate_to_seven_characters(self):
+        js_content = Path("static/spa/sections/search.js").read_text(encoding="utf-8")
+        self.assertNotIn('maxlength="7"', js_content)
+        self.assertIn('placeholder="CAPTCHA-Code eingeben..."', js_content)
 
 
 if __name__ == "__main__":

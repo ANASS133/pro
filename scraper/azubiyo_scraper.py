@@ -221,9 +221,19 @@ class AzubiyoScraper:
                 )
                 title = title_el.get_text(strip=True) if title_el else "Ausbildungsplatz"
 
-                # 2. Company
-                comp_el = card.find("span", class_=lambda cl: cl and "text-secondary" in cl)
-                company = comp_el.get_text(strip=True) if comp_el else "N/A"
+                # 2. Company (skip single-letter avatar/initial badges like "M")
+                company = "N/A"
+                for cand_sp in card.find_all("span", class_=lambda cl: cl and "text-secondary" in cl):
+                    cand_txt = cand_sp.get_text(strip=True)
+                    if cand_txt and len(cand_txt) > 1:
+                        company = cand_txt
+                        break
+                if company == "N/A":
+                    comp_el = card.find("span", class_=lambda cl: cl and "text-secondary" in cl)
+                    if comp_el:
+                        cand_txt = comp_el.get_text(strip=True)
+                        if len(cand_txt) > 1:
+                            company = cand_txt
 
                 # 3. URL & Reference
                 from services.data_validator import is_advice_or_generic_page

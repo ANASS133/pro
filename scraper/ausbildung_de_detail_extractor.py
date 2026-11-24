@@ -24,6 +24,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from scraper.application_form_discovery import ApplicationFormDiscovery, normalize_job_opportunity_row
 from scraper.cookie_handler import accept_cookies
+from services.application_url_validator import (
+    ApplicationDestinationType,
+    classify_and_validate_destination,
+)
 from services.contamination_detector import attach_contact_provenance
 from services.data_validator import validate_phone_number, sanitize_contact_person
 from services.employer_cache import is_shortener_domain
@@ -32,12 +36,105 @@ logger = logging.getLogger(__name__)
 
 EMAIL_PATTERN = re.compile(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$")
 
+# Regional restriction patterns on Ausbildung.de
+REGIONAL_RESTRICTION_PATTERNS = [
+    re.compile(r"applications?\s+for\s+this\s+position\s+from\s+your\s+region\s+aren['’]t\s+supported", re.I),
+    re.compile(r"applications?\s+for\s+this\s+position\s+from\s+your\s+region\s+are\s+not\s+supported", re.I),
+    re.compile(r"region\s+aren['’]t\s+supported", re.I),
+    re.compile(r"region\s+are\s+not\s+supported", re.I),
+    re.compile(r"region\s+isn['’]t\s+supported", re.I),
+    re.compile(r"region\s+is\s+not\s+supported", re.I),
+    re.compile(r"applications?\s+for\s+this\s+position\s+from\s+your\s+region", re.I),
+    re.compile(r"aus\s+deiner\s+region\s+werden\s+aktuell\s+nicht\s+unterstützt", re.I),
+    re.compile(r"aus\s+ihrer\s+region\s+werden\s+aktuell\s+nicht\s+unterstützt", re.I),
+    re.compile(r"aus\s+dieser\s+region\s+(?:werden\s+aktuell\s+)?nicht\s+unterstützt", re.I),
+    re.compile(r"von\s+deiner\s+region\s+(?:werden\s+aktuell\s+)?nicht\s+unterstützt", re.I),
+]
+
+
+def detect_regional_restriction(text_or_html: str = "", driver: Optional[Any] = None) -> Tuple[bool, str]:
+    """Detects regional restriction messages on Ausbildung.de listings."""
+    # 1. Check raw text/HTML
+    if text_or_html:
+        for pat in REGIONAL_RESTRICTION_PATTERNS:
+            m = pat.search(text_or_html)
+            if m:
+                return True, m.group(0).strip()
+
+    # 2. Check live driver DOM elements (tooltip, dialog, popover)
+    if driver is not None:
+        try:
+            page_src = getattr(driver, "page_source", "") or ""
+            for pat in REGIONAL_RESTRICTION_PATTERNS:
+                m = pat.search(page_src)
+                if m:
+                    return True, m.group(0).strip()
+            nodes = driver.find_elements(
+                By.XPATH,
+                "//*[contains(@class, 'tooltip') or contains(@class, 'popover') or contains(@class, 'dialog') "
+                "or contains(@role, 'tooltip') or contains(@role, 'dialog') or self::span or self::div]",
+            )
+            for n in nodes:
+                try:
+                    txt = getattr(n, "text", "") or ""
+                    if "region" in txt.lower() and ("support" in txt.lower() or "unterstützt" in txt.lower()):
+                        for pat in REGIONAL_RESTRICTION_PATTERNS:
+                            m = pat.search(txt)
+                            if m:
+                                return True, txt.strip()
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    return False, ""
+
+
+def resolve_final_redirect_url(
+    url: str,
+    session: Optional[requests.Session] = None,
+    timeout: int = 6,
+) -> Tuple[str, List[str]]:
+    """Resolves HTTP redirects to determine the true landing application URL."""
+    if not url or not url.startswith(("http://", "https://")):
+        return url, [url] if url else []
+
+    s = session or requests.Session()
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    }
+    chain = [url]
+    try:
+        resp = s.get(url, headers=headers, timeout=timeout, allow_redirects=True, stream=True)
+        hist = getattr(resp, "history", None)
+        if isinstance(hist, list):
+            for h in hist:
+                h_url = getattr(h, "url", None)
+                if isinstance(h_url, str) and h_url not in chain:
+                    chain.append(h_url)
+        r_url = getattr(resp, "url", None)
+        final_u = r_url.strip() if isinstance(r_url, str) and r_url.startswith(("http://", "https://")) else url
+        if final_u not in chain:
+            chain.append(final_u)
+        if hasattr(resp, "close"):
+            try:
+                resp.close()
+            except Exception:
+                pass
+        return final_u, chain
+    except Exception as exc:
+        logger.debug("[AusbildungDe] Error resolving redirect for %s: %s", url, exc)
+        return url, chain
+
 # Email domains belonging to portal infrastructure, tracking, or mock/examples
 EMAIL_BLACKLIST = {
     "ausbildung.de",
+    "ausbildung-de.de",
     "funkeworks.de",
     "funke-digital.de",
     "funke.de",
+    "funkemedien.de",
+    "funke-medien.de",
     "example.com",
     "sentry.io",
     "wix.com",
@@ -105,6 +202,9 @@ class AusbildungDeDetailExtractor:
                 if on_stage_change:
                     on_stage_change("Email Extraction" if http_res.get("email") else "Finding Application Form")
                 return normalize_job_opportunity_row(http_res)
+            # If fast HTTP identified regional restriction
+            if http_res.get("extraction_status") == "region_restricted":
+                return normalize_job_opportunity_row(http_res)
 
         # Fallback to interactive Selenium extraction
         if driver is not None:
@@ -117,6 +217,14 @@ class AusbildungDeDetailExtractor:
                 worker_id=worker_id,
             )
             return normalize_job_opportunity_row(sel_res)
+
+        # If driver is unavailable and HTTP produced no result, check if job was flagged as region restricted
+        if norm_job.get("extraction_status") == "region_restricted" or norm_job.get("is_region_restricted"):
+            norm_job["validation_status"] = "region_restricted"
+            norm_job["validation_reason"] = norm_job.get("validation_reason") or "Applications for this position from your region aren't supported right now"
+            norm_job["manual_review_required"] = True
+            norm_job["extraction_completed"] = True
+            return normalize_job_opportunity_row(norm_job)
 
         # If driver is unavailable and HTTP produced no result, mark for review (Step 5)
         self._record_audit_log(
@@ -294,14 +402,44 @@ class AusbildungDeDetailExtractor:
                     )
                     return job
 
-            # Step 3: Search entire page (HTML mailto links and structured text in main content)
-            mailtos = re.findall(r'href=["\']mailto:([^"\'\s>]+)["\']', html, re.I)
-            if not mailtos:
-                # Fallback to labeled contact email in body text
-                mailtos = re.findall(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b", html)
-            for m_cand in mailtos:
-                clean_cand = str(m_cand).strip().split("?")[0].strip().lower()
-                if is_valid_application_email(clean_cand):
+            # Step 3: Search scoped main job page (strip nav/header/footer/aside to avoid footer mailto leaks)
+            from services.application_url_validator import extract_all_emails_including_obfuscated
+            from services.contamination_detector import is_email_compatible_with_employer
+
+            scoped_soup = BeautifulSoup(html, "html.parser")
+            for noise_el in scoped_soup.find_all(["nav", "header", "footer", "aside"]):
+                noise_el.decompose()
+            scoped_html = str(scoped_soup)
+
+            cand_emails: List[str] = []
+            for m_cand in re.findall(r'href=["\']mailto:([^"\'\s>]+)["\']', scoped_html, re.I):
+                cand_emails.append(m_cand)
+            for obf_cand in extract_all_emails_including_obfuscated(scoped_html):
+                cand_emails.append(obf_cand)
+
+            seen_cands: Set[str] = set()
+            valid_cands: List[str] = []
+            for m_cand in cand_emails:
+                clean_cand = str(m_cand).strip().split("?")[0].strip().strip(".,;:").lower()
+                if clean_cand in seen_cands:
+                    continue
+                seen_cands.add(clean_cand)
+                if not is_valid_application_email(clean_cand):
+                    continue
+                ok_emp, _ = is_email_compatible_with_employer(clean_cand, employer)
+                if ok_emp:
+                    valid_cands.append(clean_cand)
+
+            if valid_cands:
+                # Prefer explicit recruitment prefixes over generic addresses
+                valid_cands.sort(
+                    key=lambda e: (
+                        0 if any(k in e.split("@")[0] for k in ("bewerbung", "ausbildung", "karriere", "personal", "recruiting", "jobs", "hr")) else 1,
+                        e,
+                    )
+                )
+                clean_cand = valid_cands[0]
+                if True:
                     job["email"] = clean_cand
                     job["email_extracted"] = True
                     job["email_type"] = "recruitment"
@@ -331,53 +469,129 @@ class AusbildungDeDetailExtractor:
                         weitere_optionen_expanded=False,
                         per_email_bewerben_found=False,
                         extracted_email=clean_cand,
-                        email_source_location="Full page contact section (mailto)",
+                        email_source_location="Scoped job page contact section",
                         full_page_fallback_used=True,
                         jetzt_bewerben_clicked=False,
                         final_destination="",
                         extraction_status="success",
-                        status_reason="Email found in full-page HTML mailto links",
+                        status_reason="Email found in scoped job page HTML/text",
                     )
                     return job
 
-            # Step 4: Check if direct application form URL is present in applicationOptions
-            if app_opts and app_opts.get("url"):
-                target_url = str(app_opts["url"]).strip()
-                if target_url.startswith("/"):
-                    target_url = urllib.parse.urljoin("https://www.ausbildung.de", target_url)
-                elif is_shortener_domain(target_url):
-                    try:
-                        s_resp = session.get(target_url, timeout=4, allow_redirects=True, stream=True)
-                        resolved_target = str(s_resp.url or "").strip()
-                        s_resp.close()
-                        if resolved_target and not is_shortener_domain(resolved_target):
-                            target_url = resolved_target
-                    except Exception:
-                        pass
+            # Step 3b: Detect if page contains regional restriction message
+            is_reg, reg_msg = detect_regional_restriction(html)
+            if is_reg:
+                job["email"] = ""
+                job["email_extracted"] = False
+                job["has_form"] = False
+                job["form_link"] = ""
+                job["direct_application_url"] = ""
+                job["bewerbung_link"] = ""
+                job["application_method"] = "region_restricted"
+                job["bewerbung_art"] = "Regional beschränkt (Region-Restricted)"
+                job["extraction_method"] = "fast_http"
+                job["extraction_status"] = "region_restricted"
+                job["validation_status"] = "region_restricted"
+                job["validation_reason"] = reg_msg or "Applications for this position from your region aren't supported right now"
+                job["manual_review_required"] = True
+                job["manual_review_reason"] = f"Regional restriction: {reg_msg or 'Applications for this position from your region aren\'t supported right now'}"
+                job["is_region_restricted"] = True
+                job["extraction_completed"] = True
+                raw_c = dict(job.get("raw_candidates") or {})
+                if app_opts and app_opts.get("url"):
+                    raw_c["regional_blocked_url"] = str(app_opts["url"]).strip()
+                raw_c["regional_restriction_message"] = reg_msg
+                job["raw_candidates"] = raw_c
 
-                if target_url.startswith("http") and not target_url.endswith("/ratgeber/bewerbung/"):
+                attach_contact_provenance(
+                    job,
+                    source_url=job_url,
+                    section="ausbildung_de_regional_restriction",
+                    extraction_method="fast_http",
+                    verified=False,
+                )
+                self._record_audit_log(
+                    worker_id=worker_id,
+                    job_id=job_id,
+                    url=job_url,
+                    employer=employer,
+                    weitere_optionen_found=False,
+                    weitere_optionen_expanded=False,
+                    per_email_bewerben_found=False,
+                    extracted_email="",
+                    email_source_location="N/A",
+                    full_page_fallback_used=True,
+                    jetzt_bewerben_clicked=False,
+                    final_destination="",
+                    extraction_status="region_restricted",
+                    status_reason=f"Regional restriction detected: {reg_msg}",
+                )
+                return job
+
+            # Step 4: Check if direct application anchor tag (<a> with href) is present in HTML
+            # Only accept an external application URL if the page actually renders an <a> anchor link
+            # with an external destination (not a client-side <button> gated by regional restrictions)
+            soup = BeautifulSoup(html, "html.parser")
+            direct_anchor_href = ""
+            for a_tag in soup.find_all("a"):
+                txt = a_tag.get_text(" ", strip=True).lower()
+                href = (a_tag.get("href") or "").strip()
+                classes = " ".join(a_tag.get("class", []))
+                if ("jetzt bewerben" in txt or "applicationbutton" in classes.lower()) and href:
+                    if href.startswith("http") and "ausbildung.de" not in href:
+                        direct_anchor_href = href
+                        break
+                    elif "/direktbewerbung/" in href:
+                        direct_anchor_href = urllib.parse.urljoin("https://www.ausbildung.de", href)
+                        break
+
+            target_cand = direct_anchor_href
+            has_button_application = bool(soup.find("button", {"data-testid": "application-button"})) or any(
+                "jetzt bewerben" in b.get_text(" ", strip=True).lower() for b in soup.find_all("button")
+            )
+            if not target_cand and app_opts and app_opts.get("url") and not has_button_application:
+                cand_u = str(app_opts["url"]).strip()
+                if cand_u.startswith("/"):
+                    cand_u = urllib.parse.urljoin("https://www.ausbildung.de", cand_u)
+                if cand_u.startswith("http") and not cand_u.endswith("/ratgeber/bewerbung/"):
+                    target_cand = cand_u
+
+            if target_cand:
+                resolved_url, redirect_chain = resolve_final_redirect_url(target_cand, session=session)
+                cls_res = classify_and_validate_destination(
+                    resolved_url,
+                    company=employer,
+                    job_title=str(job.get("title") or ""),
+                    search_keyword=str(job.get("search_query") or ""),
+                    job_listing_url=job_url,
+                )
+                if cls_res.get("application_url_verified"):
                     job["email"] = ""
                     job["email_extracted"] = False
                     job["has_form"] = True
-                    job["form_link"] = target_url
-                    job["direct_application_url"] = target_url
-                    job["bewerbung_link"] = target_url
+                    job["form_link"] = resolved_url
+                    job["direct_application_url"] = resolved_url
+                    job["bewerbung_link"] = resolved_url
+                    job["application_url_original"] = target_cand
+                    job["application_url_final"] = resolved_url
+                    job["application_url_redirect_chain"] = redirect_chain
+                    job["application_url_type"] = cls_res.get("application_url_type") or "direct_application_form"
+                    job["application_url_verified"] = True
                     job["extraction_method"] = "fast_http"
-                    if "ausbildung.de/direktbewerbung" in target_url:
+                    if "ausbildung.de/direktbewerbung" in resolved_url:
                         job["application_method"] = "portal_form"
-                        job["application_url_type"] = "internal_direktbewerbung"
                         job["bewerbung_art"] = "Online-Formular (Ausbildung.de Direktbewerbung)"
                     else:
                         job["application_method"] = "external_form"
-                        job["application_url_type"] = "external_ats"
                         job["bewerbung_art"] = "Online-Formular (Arbeitgeber / ATS)"
                     attach_contact_provenance(
                         job,
                         source_url=job_url,
-                        section="ausbildung_de_application_options_url",
+                        section="ausbildung_de_jetzt_bewerben_anchor",
                         extraction_method="fast_http",
                         verified=True,
                     )
+                    job["validation_status"] = "verified"
                     job["extraction_status"] = "form_found"
 
                     self._record_audit_log(
@@ -392,9 +606,9 @@ class AusbildungDeDetailExtractor:
                         email_source_location="N/A",
                         full_page_fallback_used=True,
                         jetzt_bewerben_clicked=False,
-                        final_destination=target_url,
+                        final_destination=resolved_url,
                         extraction_status="form_found",
-                        status_reason="Application destination URL found in applicationOptions.url",
+                        status_reason=f"Application destination resolved via Jetzt bewerben anchor: {resolved_url}",
                     )
                     return job
 
@@ -642,25 +856,40 @@ class AusbildungDeDetailExtractor:
         if on_stage_change:
             on_stage_change("Finding Application Form")
 
+        # First check if regional restriction is already displayed
+        is_restricted, rest_msg = detect_regional_restriction(driver=driver)
+
         apply_btns = driver.find_elements(
             By.XPATH,
             "//*[contains(translate(text(), 'JETZTBEWERBEN', 'jetztbewerben'), 'jetzt bewerben') "
             "and (self::a or self::button)]",
         )
 
-        if apply_btns:
+        if apply_btns and not is_restricted:
             ab = apply_btns[0]
+            tag_name = ab.tag_name.lower()
             raw_href = (ab.get_attribute("href") or "").strip()
             orig_handles = list(driver.window_handles)
             orig_url = driver.current_url
 
-            # Direct external ATS URL on the link itself
-            if raw_href and raw_href.startswith("http") and "ausbildung.de" not in raw_href:
-                final_destination = raw_href
-            elif raw_href and "/direktbewerbung/" in raw_href:
+            # Direct external ATS URL on an <a> anchor link itself
+            if tag_name == "a" and raw_href and raw_href.startswith("http") and "ausbildung.de" not in raw_href:
+                resolved_url, _ = resolve_final_redirect_url(raw_href, session=self.session)
+                cls_res = classify_and_validate_destination(
+                    resolved_url,
+                    company=employer,
+                    job_title=str(job.get("title") or ""),
+                    search_keyword=str(job.get("search_query") or ""),
+                    job_listing_url=job_url,
+                )
+                if cls_res.get("application_url_verified"):
+                    final_destination = resolved_url
+                else:
+                    final_destination = raw_href
+            elif tag_name == "a" and raw_href and "/direktbewerbung/" in raw_href:
                 final_destination = urllib.parse.urljoin("https://www.ausbildung.de", raw_href)
             else:
-                # Interactive click
+                # Interactive click (<button>)
                 jetzt_bewerben_clicked = True
                 try:
                     driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", ab)
@@ -671,27 +900,81 @@ class AusbildungDeDetailExtractor:
                         driver.execute_script("arguments[0].click();", ab)
                     time.sleep(1.8)
 
-                    # Check for opened tabs
-                    if len(driver.window_handles) > len(orig_handles):
-                        new_h = [h for h in driver.window_handles if h not in orig_handles][0]
-                        driver.switch_to.window(new_h)
-                        final_destination = driver.current_url
-                        driver.close()
-                        driver.switch_to.window(orig_handles[0])
-                    elif driver.current_url != orig_url:
-                        final_destination = driver.current_url
-                    else:
-                        # Check modal or iframe
-                        modals = driver.find_elements(By.XPATH, "//div[contains(@class, 'modal') or contains(@role, 'dialog')]//form")
-                        if modals:
-                            final_destination = orig_url
+                    # Immediately check for regional restriction tooltip / modal
+                    is_restricted, rest_msg = detect_regional_restriction(driver=driver)
+
+                    if not is_restricted:
+                        # Check for opened tabs
+                        if len(driver.window_handles) > len(orig_handles):
+                            new_h = [h for h in driver.window_handles if h not in orig_handles][0]
+                            driver.switch_to.window(new_h)
+                            final_destination = driver.current_url
+                            driver.close()
+                            driver.switch_to.window(orig_handles[0])
+                        elif driver.current_url != orig_url:
+                            final_destination = driver.current_url
                         else:
-                            final_destination = raw_href or orig_url
+                            # Check modal or iframe
+                            modals = driver.find_elements(By.XPATH, "//div[contains(@class, 'modal') or contains(@role, 'dialog')]//form")
+                            if modals:
+                                final_destination = orig_url
+                            else:
+                                final_destination = raw_href or ""
                 except Exception as click_err:
                     logger.debug("[AusbildungDe] Error clicking Jetzt bewerben button: %s", click_err)
                     final_destination = raw_href or ""
 
-        # Also fallback to Next.js applicationOptions.url if element click was empty
+        # Step 4b: Handle regional restriction if detected
+        if is_restricted:
+            app_opts = self._parse_application_options_from_html(driver.page_source or "")
+            raw_cands = dict(job.get("raw_candidates") or {})
+            if app_opts and app_opts.get("url"):
+                raw_cands["regional_blocked_url"] = str(app_opts["url"]).strip()
+            raw_cands["regional_restriction_message"] = rest_msg
+            job["raw_candidates"] = raw_cands
+
+            job["email"] = ""
+            job["email_extracted"] = False
+            job["has_form"] = False
+            job["form_link"] = ""
+            job["direct_application_url"] = ""
+            job["bewerbung_link"] = ""
+            job["application_method"] = "region_restricted"
+            job["bewerbung_art"] = "Regional beschränkt (Region-Restricted)"
+            job["extraction_method"] = "selenium"
+            job["extraction_status"] = "region_restricted"
+            job["validation_status"] = "region_restricted"
+            job["validation_reason"] = rest_msg or "Applications for this position from your region aren't supported right now"
+            job["manual_review_required"] = True
+            job["manual_review_reason"] = f"Regional restriction: {rest_msg or 'Applications for this position from your region aren\'t supported right now'}"
+            job["is_region_restricted"] = True
+            job["extraction_completed"] = True
+            attach_contact_provenance(
+                job,
+                source_url=job_url,
+                section="ausbildung_de_regional_restriction",
+                extraction_method="selenium",
+                verified=False,
+            )
+            self._record_audit_log(
+                worker_id=worker_id,
+                job_id=job_id,
+                url=job_url,
+                employer=employer,
+                weitere_optionen_found=weitere_optionen_found,
+                weitere_optionen_expanded=weitere_optionen_expanded,
+                per_email_bewerben_found=per_email_bewerben_found,
+                extracted_email="",
+                email_source_location="N/A",
+                full_page_fallback_used=full_page_fallback_used,
+                jetzt_bewerben_clicked=jetzt_bewerben_clicked,
+                final_destination="",
+                extraction_status="region_restricted",
+                status_reason=f"Regional restriction detected: {rest_msg}",
+            )
+            return job
+
+        # Also fallback to Next.js applicationOptions.url ONLY if element was not a restricted button
         if not final_destination or final_destination == job_url:
             app_opts = self._parse_application_options_from_html(driver.page_source or "")
             if app_opts and app_opts.get("url"):
@@ -703,21 +986,33 @@ class AusbildungDeDetailExtractor:
 
         # Step 5: Excel output mapping
         if final_destination and not final_destination.endswith("/ratgeber/bewerbung/"):
+            resolved_dest, dest_chain = resolve_final_redirect_url(final_destination, session=self.session)
+            cls_res = classify_and_validate_destination(
+                resolved_dest,
+                company=employer,
+                job_title=str(job.get("title") or ""),
+                search_keyword=str(job.get("search_query") or ""),
+                job_listing_url=job_url,
+            )
             job["email"] = ""
             job["email_extracted"] = False
             job["has_form"] = True
-            job["form_link"] = final_destination
-            job["direct_application_url"] = final_destination
-            job["bewerbung_link"] = final_destination
+            job["form_link"] = resolved_dest
+            job["direct_application_url"] = resolved_dest
+            job["bewerbung_link"] = resolved_dest
+            job["application_url_original"] = final_destination
+            job["application_url_final"] = resolved_dest
+            job["application_url_redirect_chain"] = dest_chain
+            job["application_url_type"] = cls_res.get("application_url_type") or "direct_application_form"
+            job["application_url_verified"] = bool(cls_res.get("application_url_verified", True))
             job["extraction_method"] = "selenium"
             job["extraction_status"] = "form_found"
-            if "ausbildung.de/direktbewerbung" in final_destination:
+            if "ausbildung.de/direktbewerbung" in resolved_dest:
                 job["application_method"] = "portal_form"
                 job["application_url_type"] = "internal_direktbewerbung"
                 job["bewerbung_art"] = "Online-Formular (Ausbildung.de Direktbewerbung)"
             else:
                 job["application_method"] = "external_form"
-                job["application_url_type"] = "external_ats"
                 job["bewerbung_art"] = "Online-Formular (Arbeitgeber / ATS)"
             attach_contact_provenance(
                 job,
@@ -726,6 +1021,7 @@ class AusbildungDeDetailExtractor:
                 extraction_method="selenium",
                 verified=True,
             )
+            job["validation_status"] = "verified"
             job["extraction_status"] = "form_found"
 
             self._record_audit_log(
@@ -740,9 +1036,9 @@ class AusbildungDeDetailExtractor:
                 email_source_location="N/A",
                 full_page_fallback_used=full_page_fallback_used,
                 jetzt_bewerben_clicked=jetzt_bewerben_clicked,
-                final_destination=final_destination,
+                final_destination=resolved_dest,
                 extraction_status="form_found",
-                status_reason=f"Application destination captured via Jetzt bewerben: {final_destination}",
+                status_reason=f"Application destination captured via Jetzt bewerben: {resolved_dest}",
             )
             return job
 

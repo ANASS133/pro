@@ -44,12 +44,14 @@ class EnhancedJobScraper:
         published_since_days: Optional[int] = None,
         angebotsart: int = 4,
         umkreis: Optional[int] = None,
+        progress_callback=None,
+        should_stop=None,
     ) -> List[Dict]:
         """Fetch all available jobs until max_jobs or no more results."""
         all_jobs: List[Dict] = []
         seen_refs = set()
         page = 1
-        size = 25
+        size = min(100, max(25, int(max_jobs or 100)))
 
         search_keyword = self.normalize_keyword(keyword)
         logger.info(
@@ -62,6 +64,10 @@ class EnhancedJobScraper:
         )
 
         while len(all_jobs) < max_jobs:
+            if callable(should_stop) and should_stop():
+                logger.info("Fetch stopped early via should_stop callback at page %s", page)
+                break
+
             params = {
                 "angebotsart": int(angebotsart),
                 "was": search_keyword,
@@ -105,13 +111,28 @@ class EnhancedJobScraper:
                     break
 
             logger.info("Page %s -> %s jobs (total=%s)", page, len(parsed_jobs), len(all_jobs))
+            if callable(progress_callback):
+                try:
+                    progress_callback(
+                        {
+                            "page": page,
+                            "page_jobs": len(parsed_jobs),
+                            "total_fetched": len(all_jobs),
+                            "max_jobs": max_jobs,
+                        }
+                    )
+                except Exception:
+                    pass
 
             if len(jobs_on_page) < size:
                 logger.info("Reached last page")
                 break
 
+            if callable(should_stop) and should_stop():
+                break
+
             page += 1
-            time.sleep(0.7)
+            time.sleep(0.2)
 
         self.total_jobs_fetched = len(all_jobs)
         logger.info("Finished fetch total=%s", self.total_jobs_fetched)
@@ -142,10 +163,15 @@ class EnhancedJobScraper:
                 raw_pub_date = job.get("veroeffentlichungszeitraum", {}).get("von", "")
                 pub_date = str(raw_pub_date)[:10] if raw_pub_date else "k. A."
 
+                raw_title = str(job.get("titel") or job.get("stellenangebotsTitel") or "").strip()
+                hauptberuf = str(job.get("beruf") or job.get("hauptberuf") or "N/A").strip()
+                if not raw_title or raw_title in ("N/A", "None"):
+                    raw_title = f"Ausbildung {hauptberuf}" if hauptberuf and hauptberuf != "N/A" else "N/A"
+
                 parsed.append(
                     {
-                        "title": job.get("stellenangebotsTitel", "N/A"),
-                        "company": job.get("firma", "N/A"),
+                        "title": raw_title,
+                        "company": job.get("firma") or job.get("arbeitgeber") or "N/A",
                         "location": loc_meta["location"],
                         "city": loc_meta["city"],
                         "postal_code": loc_meta["postal_code"] if loc_meta["postal_code"] != "N/A" else postal_code,
@@ -153,7 +179,7 @@ class EnhancedJobScraper:
                         "job_type": "Vollzeit" if job.get("arbeitszeitVollzeit") else "Teilzeit",
                         "published_date": pub_date,
                         "start_date": job.get("eintrittszeitraum", {}).get("von", "nach Absprache"),
-                        "hauptberuf": job.get("hauptberuf", "N/A"),
+                        "hauptberuf": hauptberuf,
                         "url": f"https://www.arbeitsagentur.de/jobsuche/jobdetail/{reference}" if reference else "",
                         "source": "Arbeitsagentur",
                         "scraped_at": now_str,

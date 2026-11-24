@@ -1,0 +1,684 @@
+<section id="supabase-section" class="app-section" data-section="supabase" {% if initial_section
+                    !="supabase" %}hidden{% endif %}>
+                    <div class="sp-dashboard-wrapper">
+                        <!-- Modern Page Header -->
+                        <header class="sp-hero">
+                            <div class="sp-hero-left">
+                                <div class="sp-breadcrumb">
+                                    <span class="sp-kicker-badge">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2.5">
+                                            <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                                            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+                                            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+                                        </svg>
+                                        Applications Live Dashboard
+                                    </span>
+                                </div>
+                                <h2 class="sp-hero-title">Client Applications</h2>
+                                <p class="sp-hero-desc">Manage incoming candidate applications, inspect uploaded
+                                    documents, and advance candidates into outreach.</p>
+                            </div>
+                            <div class="sp-hero-right">
+                                <span class="sp-status-badge" id="supabase-connection-badge"
+                                    title="Live Database Status">
+                                    <span class="sp-status-pulse"></span>
+                                    <span>Database Connected</span>
+                                </span>
+                                <div class="sp-hero-actions">
+                                    <button type="button" id="supabase-refresh" class="sp-btn-secondary"
+                                        title="Reload data from database">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <path d="M23 4v6h-6"></path>
+                                            <path d="M1 20v-6h6"></path>
+                                            <path
+                                                d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15">
+                                            </path>
+                                        </svg>
+                                        <span>Refresh</span>
+                                    </button>
+                                    <div class="sp-export-dropdown-wrap">
+                                        <button type="button" id="sp-export-btn" class="sp-btn-primary"
+                                            title="Export applications">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                                <polyline points="7 10 12 15 17 10"></polyline>
+                                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                                            </svg>
+                                            <span>Export</span>
+                                        </button>
+                                        <div class="sp-export-menu" id="sp-export-menu" hidden>
+                                            <button type="button" class="sp-export-item"
+                                                data-export-format="csv">Download CSV (.csv)</button>
+                                            <button type="button" class="sp-export-item"
+                                                data-export-format="json">Export JSON (.json)</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </header>
+
+                        <!-- Summary Metrics Bar -->
+                        <div class="sp-metrics-grid">
+                            <div class="sp-metric-card">
+                                <div class="sp-metric-icon">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2">
+                                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                        <circle cx="9" cy="7" r="4"></circle>
+                                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                                    </svg>
+                                </div>
+                                <div class="sp-metric-content">
+                                    <span class="sp-metric-label">Total Applications</span>
+                                    <strong class="sp-metric-val" id="sp-metric-total">0</strong>
+                                </div>
+                            </div>
+                            <div class="sp-metric-card">
+                                <div class="sp-metric-icon sp-icon-paid">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2">
+                                        <line x1="12" y1="1" x2="12" y2="23"></line>
+                                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                                    </svg>
+                                </div>
+                                <div class="sp-metric-content">
+                                    <span class="sp-metric-label">Paid</span>
+                                    <div class="sp-metric-subrow">
+                                        <strong class="sp-metric-val" id="sp-metric-paid">0</strong>
+                                        <span class="sp-metric-subtext" id="sp-metric-paid-sum">0 DH</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="sp-metric-card">
+                                <div class="sp-metric-icon sp-icon-open">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2">
+                                        <circle cx="12" cy="12" r="10"></circle>
+                                        <polyline points="12 6 12 12 16 14"></polyline>
+                                    </svg>
+                                </div>
+                                <div class="sp-metric-content">
+                                    <span class="sp-metric-label">Payment Pending</span>
+                                    <div class="sp-metric-subrow">
+                                        <strong class="sp-metric-val" id="sp-metric-open">0</strong>
+                                        <span class="sp-metric-subtext" id="sp-metric-open-sum">0 DH</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="sp-metric-card">
+                                <div class="sp-metric-icon sp-icon-docs">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                        <polyline points="14 2 14 8 20 8"></polyline>
+                                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                                    </svg>
+                                </div>
+                                <div class="sp-metric-content">
+                                    <span class="sp-metric-label">Attached Documents</span>
+                                    <strong class="sp-metric-val" id="sp-metric-docs">0</strong>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Main Control Bar / Toolbar -->
+                        <div class="sp-toolbar-card">
+                            <div class="sp-toolbar-main">
+                                <!-- Search Input -->
+                                <div class="sp-search-wrap">
+                                    <svg class="sp-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                        stroke="currentColor" stroke-width="2">
+                                        <circle cx="11" cy="11" r="8"></circle>
+                                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                    </svg>
+                                    <input type="text" id="supabase-search" class="sp-search-input"
+                                        placeholder="Search by name, email, WhatsApp, or field..." autocomplete="off">
+                                    <button type="button" id="sp-search-clear" class="sp-search-clear-btn" hidden
+                                        title="Clear search">&times;</button>
+                                </div>
+
+                                <!-- View Mode Switcher -->
+                                <div class="sp-view-switcher" role="tablist" aria-label="Toggle view">
+                                    <button type="button" class="sp-seg-btn is-active" id="sp-view-cards-btn"
+                                        data-view="cards" title="Card view">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <rect x="3" y="3" width="7" height="7"></rect>
+                                            <rect x="14" y="3" width="7" height="7"></rect>
+                                            <rect x="14" y="14" width="7" height="7"></rect>
+                                            <rect x="3" y="14" width="7" height="7"></rect>
+                                        </svg>
+                                        <span>Cards</span>
+                                    </button>
+                                    <button type="button" class="sp-seg-btn" id="sp-view-compact-btn" data-view="compact" title="Compact list view">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                                        <span>Compact</span>
+                                    </button>
+                                    <button type="button" class="sp-seg-btn" id="sp-view-table-btn" data-view="table"
+                                        title="Table view">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                                            <path d="M3 9h18"></path>
+                                            <path d="M3 15h18"></path>
+                                            <path d="M9 3v18"></path>
+                                            <path d="M15 3v18"></path>
+                                        </svg>
+                                        <span>Table</span>
+                                    </button>
+                                </div>
+
+                                <!-- Filter Drawer Toggle -->
+                                <button type="button" id="sp-filter-toggle-btn" class="sp-btn-secondary sp-btn-filter">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2">
+                                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon>
+                                    </svg>
+                                    <span>Filters</span>
+                                    <span class="sp-filter-badge" id="sp-active-filter-count" hidden>0</span>
+                                </button>
+                            </div>
+
+                            <!-- Customization Row: Density, Card Columns, Sort, Column Visibility -->
+                            <div class="sp-toolbar-customization">
+                                <div class="sp-custom-control">
+                                    <label for="sp-sort-select" class="sp-custom-label">Sort by:</label>
+                                    <select id="sp-sort-select" class="sp-select-sm">
+                                        <option value="date-desc">Newest first</option>
+                                        <option value="date-asc">Oldest first</option>
+                                        <option value="name-asc">Name (A–Z)</option>
+                                        <option value="name-desc">Name (Z–A)</option>
+                                        <option value="paid-first">Paid first</option>
+                                        <option value="open-first">Open first</option>
+                                    </select>
+                                </div>
+
+                                <div class="sp-custom-control" id="sp-cols-control-wrap">
+                                    <label for="sp-columns-select" class="sp-custom-label">Columns:</label>
+                                    <select id="sp-columns-select" class="sp-select-sm">
+                                        <option value="auto">Auto (Responsive)</option>
+                                        <option value="2">2 Columns</option>
+                                        <option value="3">3 Columns</option>
+                                        <option value="4">4 Columns</option>
+                                        <option value="5">5 Columns</option>
+                                    </select>
+                                </div>
+
+                                <div class="sp-custom-control">
+                                    <label for="sp-density-select" class="sp-custom-label">Density:</label>
+                                    <select id="sp-density-select" class="sp-select-sm">
+                                        <option value="comfortable">Comfortable</option>
+                                        <option value="compact">Compact</option>
+                                        <option value="detailed">Detailed</option>
+                                    </select>
+                                </div>
+
+                                <div class="sp-custom-control sp-col-visibility-wrap">
+                                    <button type="button" id="sp-col-visibility-btn" class="sp-btn-ghost-sm"
+                                        title="Select visible columns &amp; fields">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                            <circle cx="12" cy="12" r="3"></circle>
+                                        </svg>
+                                        <span>Fields</span>
+                                    </button>
+                                    <div class="sp-col-visibility-menu" id="sp-col-visibility-menu" hidden>
+                                        <div class="sp-col-menu-title">Visible Fields</div>
+                                        <label class="sp-checkbox-label"><input type="checkbox" data-col="field" checked> Field / Profession</label>
+                                        <label class="sp-checkbox-label"><input type="checkbox" data-col="language" checked> Language Level</label>
+                                        <label class="sp-checkbox-label"><input type="checkbox" data-col="pack" checked> Application Package &amp; Amount</label>
+                                        <label class="sp-checkbox-label"><input type="checkbox" data-col="bank" checked> Payment Method</label>
+                                        <label class="sp-checkbox-label"><input type="checkbox" data-col="documents" checked> Application Documents</label>
+                                        <label class="sp-checkbox-label"><input type="checkbox" data-col="date" checked> Submitted On</label>
+                                        <label class="sp-checkbox-label"><input type="checkbox" data-col="status" checked> Payment Status</label>
+                                    </div>
+                                </div>
+
+                                <button type="button" id="sp-reset-prefs-btn" class="sp-btn-link-sm"
+                                    title="Reset view settings to default">
+                                    Reset view
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Collapsible Advanced Filters Drawer -->
+                        <div class="sp-filter-drawer" id="sp-filter-drawer" hidden>
+                            <div class="sp-filter-grid">
+                                <div class="sp-filter-group">
+                                    <label for="supabase-filter-pack" class="sp-filter-label">Application Package</label>
+                                    <select id="supabase-filter-pack" class="sp-filter-select">
+                                        <option value="">All Packages</option>
+                                    </select>
+                                </div>
+                                <div class="sp-filter-group">
+                                    <label for="supabase-filter-language" class="sp-filter-label">Language Level</label>
+                                    <select id="supabase-filter-language" class="sp-filter-select">
+                                        <option value="">All Levels</option>
+                                        <option value="A1">A1</option>
+                                        <option value="A2">A2</option>
+                                        <option value="B1">B1</option>
+                                        <option value="B2">B2</option>
+                                        <option value="C1">C1</option>
+                                        <option value="C2">C2</option>
+                                    </select>
+                                </div>
+                                <div class="sp-filter-group">
+                                    <label for="sp-filter-payment" class="sp-filter-label">Payment Status</label>
+                                    <select id="sp-filter-payment" class="sp-filter-select">
+                                        <option value="">All Statuses</option>
+                                        <option value="paid">Paid</option>
+                                        <option value="unpaid">Open</option>
+                                    </select>
+                                </div>
+                                <div class="sp-filter-group">
+                                    <label for="sp-filter-field" class="sp-filter-label">Field / Profession</label>
+                                    <select id="sp-filter-field" class="sp-filter-select">
+                                        <option value="">All Professions</option>
+                                    </select>
+                                </div>
+                                <div class="sp-filter-group">
+                                    <label for="sp-filter-bank" class="sp-filter-label">Payment Method</label>
+                                    <select id="sp-filter-bank" class="sp-filter-select">
+                                        <option value="">All Payment Methods</option>
+                                    </select>
+                                </div>
+                                <div class="sp-filter-group">
+                                    <label for="sp-filter-date-from" class="sp-filter-label">From Date</label>
+                                    <input type="date" id="sp-filter-date-from" class="sp-filter-input">
+                                </div>
+                                <div class="sp-filter-group">
+                                    <label for="sp-filter-date-to" class="sp-filter-label">To Date</label>
+                                    <input type="date" id="sp-filter-date-to" class="sp-filter-input">
+                                </div>
+                            </div>
+                            <div class="sp-filter-actions">
+                                <button type="button" id="sp-filter-clear-all" class="sp-btn-ghost-sm">Clear all
+                                    filters</button>
+                            </div>
+                        </div>
+
+                        <!-- Active Filters Chips Bar -->
+                        <div class="sp-chips-bar" id="sp-active-filter-chips" hidden></div>
+
+                        <!-- Status & Notification -->
+                        <div id="supabase-status" class="sp-status-bar" hidden role="alert"></div>
+
+                        <!-- Loading Skeleton -->
+                        <div id="supabase-skeleton" class="sp-skeleton-wrap" hidden>
+                            <div class="sp-skeleton-grid">
+                                <div class="sp-skel-card"></div>
+                                <div class="sp-skel-card"></div>
+                                <div class="sp-skel-card"></div>
+                                <div class="sp-skel-card"></div>
+                                <div class="sp-skel-card"></div>
+                                <div class="sp-skel-card"></div>
+                            </div>
+                        </div>
+
+                        <!-- Empty State -->
+                        <div id="supabase-empty" class="sp-empty-card" hidden>
+                            <div class="sp-empty-icon">
+                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="1.5">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                            </div>
+                            <h3 class="sp-empty-title">No applications found</h3>
+                            <p class="sp-empty-desc">No applications match your current search terms or filters.</p>
+                            <button type="button" id="sp-empty-reset-btn" class="sp-btn-secondary">Reset
+                                Filters</button>
+                        </div>
+
+                        <!-- 1. Card View Container -->
+                        <div id="supabase-cards" class="sp-cards-grid" data-cols="auto" data-density="comfortable">
+                        </div>
+
+                        <!-- 2. Compact List View Container -->
+                        <div id="sp-compact-view" class="sp-compact-list" data-density="comfortable" hidden></div>
+
+                        <!-- 3. Table View Container -->
+                        <div id="sp-table-view" class="sp-table-wrapper" hidden>
+                            <table class="sp-table" id="sp-main-table">
+                                <thead>
+                                    <tr>
+                                        <th class="th-checkbox"><input type="checkbox" id="sp-table-select-all" title="Select all"></th>
+                                        <th class="th-sortable" data-sort="name">Candidate <span class="sort-icon"></span></th>
+                                        <th data-col="email">Email</th>
+                                        <th data-col="whatsapp">WhatsApp</th>
+                                        <th class="th-sortable" data-sort="field" data-col="field">Profession <span class="sort-icon"></span></th>
+                                        <th class="th-sortable" data-sort="language" data-col="language">Language <span class="sort-icon"></span></th>
+                                        <th class="th-sortable" data-sort="pack" data-col="pack">Application Package <span class="sort-icon"></span></th>
+                                        <th data-col="bank">Payment Method</th>
+                                        <th class="th-sortable" data-sort="status" data-col="status">Payment Status <span class="sort-icon"></span></th>
+                                        <th data-col="documents">Documents</th>
+                                        <th class="th-sortable" data-sort="date" data-col="date">Submitted On <span class="sort-icon"></span></th>
+                                        <th class="th-actions">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sp-table-body"></tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination Footer Bar -->
+                        <div class="sp-pagination-bar" id="sp-pagination" hidden>
+                            <div class="sp-page-size-wrap">
+                                <label for="sp-page-size-select">Entries per page:</label>
+                                <select id="sp-page-size-select" class="sp-select-sm">
+                                    <option value="10">10</option>
+                                    <option value="25" selected>25</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                    <option value="all">All</option>
+                                </select>
+                                <span class="sp-page-info" id="sp-page-info">Showing 0–0 of 0</span>
+                            </div>
+                            <div class="sp-page-nav" id="sp-page-nav">
+                                <button type="button" class="sp-page-btn" id="sp-page-first" title="First page" aria-label="First page">&laquo;</button>
+                                <button type="button" class="sp-page-btn" id="sp-page-prev" title="Previous page" aria-label="Previous page">&lsaquo;</button>
+                                <div class="sp-page-numbers" id="sp-page-numbers"></div>
+                                <button type="button" class="sp-page-btn" id="sp-page-next" title="Next page" aria-label="Next page">&rsaquo;</button>
+                                <button type="button" class="sp-page-btn" id="sp-page-last" title="Last page" aria-label="Last page">&raquo;</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Slide-Over Application Details Drawer -->
+                    <div id="sp-drawer-backdrop" class="sp-drawer-backdrop" hidden></div>
+                    <aside id="sp-details-drawer" class="sp-drawer-panel" hidden aria-label="Client Details" role="dialog" aria-modal="true">
+                        <!-- Sticky Candidate Header -->
+                        <div class="sp-drawer-header">
+                            <div class="sp-drawer-profile-meta">
+                                <div class="sp-drawer-avatar" id="sp-drawer-avatar">AS</div>
+                                <div class="sp-drawer-title-box">
+                                    <div class="sp-drawer-title-line">
+                                        <h3 class="sp-drawer-name" id="sp-drawer-name">Candidate Name</h3>
+                                        <span class="sp-status-pill is-open" id="sp-drawer-status-pill">Open</span>
+                                    </div>
+                                    <div class="sp-drawer-tags">
+                                        <span class="sp-drawer-subtag" id="sp-drawer-pack-tag">Application Package</span>
+                                        <span class="sp-drawer-subtag sp-drawer-subtag--lang" id="sp-drawer-lang-tag" hidden>B2</span>
+                                        <span class="sp-drawer-subtag sp-drawer-subtag--dossier" id="sp-drawer-dossier-pill">Not Imported</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="button" id="sp-drawer-close" class="sp-drawer-close-btn" title="Close (Esc)" aria-label="Close">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            </button>
+                        </div>
+
+                        <!-- Sticky 4-Tab Navigation Bar -->
+                        <nav class="sp-drawer-tabs" role="tablist" aria-label="Candidate Details Sections">
+                            <button
+                                type="button"
+                                class="sp-drawer-tab is-active"
+                                id="sp-tab-btn-overview"
+                                role="tab"
+                                aria-selected="true"
+                                aria-controls="sp-tab-panel-overview"
+                                data-drawer-tab="overview"
+                            >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                <span>Overview</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="sp-drawer-tab"
+                                id="sp-tab-btn-documents"
+                                role="tab"
+                                aria-selected="false"
+                                aria-controls="sp-tab-panel-documents"
+                                data-drawer-tab="documents"
+                            >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                                <span>Documents</span>
+                                <span class="sp-drawer-tab-badge" id="sp-tab-doc-badge">0</span>
+                            </button>
+                            <button
+                                type="button"
+                                class="sp-drawer-tab"
+                                id="sp-tab-btn-payment"
+                                role="tab"
+                                aria-selected="false"
+                                aria-controls="sp-tab-panel-payment"
+                                data-drawer-tab="payment"
+                            >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
+                                <span>Payment</span>
+                                <span class="sp-drawer-tab-dot" id="sp-tab-pay-dot"></span>
+                            </button>
+                            <button
+                                type="button"
+                                class="sp-drawer-tab"
+                                id="sp-tab-btn-activity"
+                                role="tab"
+                                aria-selected="false"
+                                aria-controls="sp-tab-panel-activity"
+                                data-drawer-tab="activity"
+                            >
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                <span>Activity</span>
+                            </button>
+                        </nav>
+
+                        <!-- Single Scrollable Drawer Body -->
+                        <div class="sp-drawer-body">
+                            <!-- TAB 1: OVERVIEW -->
+                            <div class="sp-drawer-tab-panel" id="sp-tab-panel-overview" role="tabpanel" aria-labelledby="sp-tab-btn-overview" data-drawer-panel="overview">
+                                <!-- Candidate Profile & Contact -->
+                                <section class="sp-drawer-section">
+                                    <div class="sp-drawer-sec-header">
+                                        <span class="sp-drawer-sec-icon">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                        </span>
+                                        <h4 class="sp-drawer-section-title">Candidate Profile &amp; Contact</h4>
+                                    </div>
+                                    <div class="sp-drawer-fields-grid">
+                                        <div class="sp-drawer-tile">
+                                            <span class="sp-field-label">Full Name</span>
+                                            <strong class="sp-field-value" id="sp-d-fullname">-</strong>
+                                        </div>
+                                        <div class="sp-drawer-tile">
+                                            <span class="sp-field-label">Applicant ID</span>
+                                            <div class="sp-field-code-wrap">
+                                                <code class="sp-field-code" id="sp-d-id" title="Applicant ID">-</code>
+                                                <button type="button" class="sp-copy-btn" id="sp-copy-id" title="Copy Applicant ID" aria-label="Copy Applicant ID">
+                                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="sp-drawer-tile">
+                                            <span class="sp-field-label">Email Address</span>
+                                            <div class="sp-field-action-row">
+                                                <a href="#" id="sp-d-email" class="sp-field-link">-</a>
+                                                <button type="button" class="sp-copy-btn" id="sp-copy-email" title="Copy Email Address" aria-label="Copy Email Address">
+                                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="sp-drawer-tile">
+                                            <span class="sp-field-label">WhatsApp</span>
+                                            <div class="sp-field-action-row">
+                                                <a href="#" id="sp-d-whatsapp" class="sp-field-link sp-whatsapp-link" target="_blank" rel="noopener noreferrer">-</a>
+                                                <button type="button" class="sp-copy-btn" id="sp-copy-whatsapp" title="Copy WhatsApp Number" aria-label="Copy WhatsApp Number">
+                                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <!-- Target Profession & Preferences -->
+                                <section class="sp-drawer-section">
+                                    <div class="sp-drawer-sec-header">
+                                        <span class="sp-drawer-sec-icon">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"></path><path d="M6 12v5c3 3 9 3 12 0v-5"></path></svg>
+                                        </span>
+                                        <h4 class="sp-drawer-section-title">Profession &amp; Language Preferences</h4>
+                                    </div>
+                                    <div class="sp-drawer-fields-grid">
+                                        <div class="sp-drawer-tile">
+                                            <span class="sp-field-label">Target Profession</span>
+                                            <div class="sp-field-value-line">
+                                                <strong class="sp-field-value" id="sp-d-field">-</strong>
+                                            </div>
+                                        </div>
+                                        <div class="sp-drawer-tile">
+                                            <span class="sp-field-label">German Language Level</span>
+                                            <div>
+                                                <span class="sp-pill-lang" id="sp-d-language">-</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <!-- JobScout Talent Dossier -->
+                                <section class="sp-drawer-section" id="sp-d-onboard-section">
+                                    <div class="sp-drawer-sec-header">
+                                        <span class="sp-drawer-sec-icon">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                                        </span>
+                                        <h4 class="sp-drawer-section-title">JobScout Talent Dossier</h4>
+                                    </div>
+                                    <div id="sp-d-onboard-container" class="sp-drawer-onboard-card">
+                                        <div class="sp-doc-empty">Loading dossier status...</div>
+                                    </div>
+                                </section>
+                            </div>
+
+                            <!-- TAB 2: DOCUMENTS -->
+                            <div class="sp-drawer-tab-panel" id="sp-tab-panel-documents" role="tabpanel" aria-labelledby="sp-tab-btn-documents" data-drawer-panel="documents" hidden>
+                                <section class="sp-drawer-section">
+                                    <div class="sp-drawer-sec-header sp-drawer-sec-split">
+                                        <div class="sp-drawer-sec-title-wrap">
+                                            <span class="sp-drawer-sec-icon">
+                                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                                            </span>
+                                            <div>
+                                                <h4 class="sp-drawer-section-title">Application Documents</h4>
+                                                <p class="sp-drawer-section-sub">Inspect, preview, download, or copy direct signed links to candidate files.</p>
+                                            </div>
+                                        </div>
+                                        <span class="sp-doc-counter-badge" id="sp-d-doc-count">0 Documents</span>
+                                    </div>
+                                    <div class="sp-drawer-docs-list" id="sp-d-docs-container">
+                                        <div class="sp-doc-empty">No documents uploaded for this application.</div>
+                                    </div>
+                                </section>
+                            </div>
+
+                            <!-- TAB 3: PAYMENT -->
+                            <div class="sp-drawer-tab-panel" id="sp-tab-panel-payment" role="tabpanel" aria-labelledby="sp-tab-btn-payment" data-drawer-panel="payment" hidden>
+                                <section class="sp-drawer-section">
+                                    <div class="sp-drawer-sec-header">
+                                        <span class="sp-drawer-sec-icon">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"></rect><line x1="2" y1="10" x2="22" y2="10"></line></svg>
+                                        </span>
+                                        <div>
+                                            <h4 class="sp-drawer-section-title">Payment Summary &amp; Verification</h4>
+                                            <p class="sp-drawer-section-sub">Verify invoice settlement before importing the candidate into the Talent Dossier.</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="sp-payment-summary-card" id="sp-d-pay-banner">
+                                        <div class="sp-payment-summary-top">
+                                            <div class="sp-payment-amount-block">
+                                                <span class="sp-field-label">Invoice Amount</span>
+                                                <strong class="sp-payment-hero-amount" id="sp-d-price">-</strong>
+                                            </div>
+                                            <div class="sp-payment-status-block">
+                                                <span class="sp-field-label">Payment Status</span>
+                                                <span class="sp-status-pill is-open" id="sp-d-pay-status-badge">Payment Pending</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="sp-drawer-fields-grid">
+                                            <div class="sp-drawer-tile">
+                                                <span class="sp-field-label">Application Package</span>
+                                                <strong class="sp-field-value" id="sp-d-pack">-</strong>
+                                            </div>
+                                            <div class="sp-drawer-tile">
+                                                <span class="sp-field-label">Payment Method</span>
+                                                <strong class="sp-field-value" id="sp-d-bank">-</strong>
+                                            </div>
+                                        </div>
+
+                                        <div class="sp-payment-action-box">
+                                            <div class="sp-payment-action-info">
+                                                <strong class="sp-payment-action-title" id="sp-d-pay-action-title">Payment Confirmation</strong>
+                                                <p class="sp-payment-action-desc" id="sp-d-pay-helper">Mark this application as paid once bank transfer or payment receipt is confirmed.</p>
+                                            </div>
+                                            <div class="sp-pay-toggle-wrap">
+                                                <button type="button" id="sp-d-pay-toggle-btn" class="sp-btn-pay-status">Mark as Paid</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </section>
+                            </div>
+
+                            <!-- TAB 4: ACTIVITY -->
+                            <div class="sp-drawer-tab-panel" id="sp-tab-panel-activity" role="tabpanel" aria-labelledby="sp-tab-btn-activity" data-drawer-panel="activity" hidden>
+                                <section class="sp-drawer-section">
+                                    <div class="sp-drawer-sec-header">
+                                        <span class="sp-drawer-sec-icon">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                        </span>
+                                        <div>
+                                            <h4 class="sp-drawer-section-title">System &amp; Activity</h4>
+                                            <p class="sp-drawer-section-sub">Real-time record metadata and synchronization timeline.</p>
+                                        </div>
+                                    </div>
+                                    <div class="sp-drawer-fields-grid">
+                                        <div class="sp-drawer-tile">
+                                            <span class="sp-field-label">Submitted On</span>
+                                            <strong class="sp-field-value" id="sp-d-created">-</strong>
+                                        </div>
+                                        <div class="sp-drawer-tile">
+                                            <span class="sp-field-label">Imported On</span>
+                                            <strong class="sp-field-value" id="sp-d-activity-imported">Not imported</strong>
+                                        </div>
+                                        <div class="sp-drawer-tile">
+                                            <span class="sp-field-label">Data Source</span>
+                                            <span class="sp-field-value" id="sp-d-activity-source">Supabase Cloud (public.applications)</span>
+                                        </div>
+                                        <div class="sp-drawer-tile">
+                                            <span class="sp-field-label">Record ID</span>
+                                            <code class="sp-field-code" id="sp-d-activity-id">-</code>
+                                        </div>
+                                    </div>
+                                    <div class="sp-activity-timeline" id="sp-d-activity-timeline"></div>
+                                </section>
+                            </div>
+                        </div>
+
+                        <!-- Sticky Drawer Footer Actions -->
+                        <div class="sp-drawer-footer">
+                            <div class="sp-drawer-footer-left">
+                                <button type="button" id="sp-d-edit-btn" class="sp-btn-secondary" title="Edit application">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                    <span>Edit</span>
+                                </button>
+                                <button type="button" id="sp-d-delete-btn" class="sp-btn-danger" title="Delete application">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                    <span>Delete</span>
+                                </button>
+                            </div>
+                            <div class="sp-drawer-footer-right">
+                                <button type="button" id="sp-d-onboard-btn" class="sp-btn-action-onboard">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+                                    <span>Import Candidate</span>
+                                </button>
+                                <button type="button" id="sp-d-next-step-btn" class="sp-btn-primary">
+                                    <span>Next Step (Cover Letter)</span>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </aside>
+                </section>

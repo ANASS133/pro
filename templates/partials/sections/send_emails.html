@@ -1,0 +1,801 @@
+<section id="send-emails-section" class="app-section" data-section="send-emails" {% if initial_section
+                    !="send-emails" %}hidden{% endif %}>
+                    <div class="campaign-builder-wrapper">
+                        <!-- Hero Section Header -->
+                        <div class="campaign-hero">
+                            <div class="campaign-hero-content">
+                                <div class="campaign-hero-kicker">
+                                    <span class="campaign-badge"><svg width="14" height="14" viewBox="0 0 24 24"
+                                            fill="none" stroke="currentColor" stroke-width="2">
+                                            <path
+                                                d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                                            <polyline points="22,6 12,13 2,6" />
+                                        </svg> Email Marketing</span>
+                                    <span class="campaign-pill"><span class="dot-online"></span> Draft Sync</span>
+                                </div>
+                                <h2 class="campaign-title">Bulk Email Campaign Builder</h2>
+                                <p class="campaign-desc">Create and send highly personalized email campaigns with
+                                    CSV/XLSX data in 4 guided steps.</p>
+                            </div>
+                            <div class="campaign-hero-stats">
+                                <div class="hero-stat-pill">
+                                    <span class="stat-num" id="cb-header-recipient-count">0</span>
+                                    <span class="stat-lbl">Recipients</span>
+                                </div>
+                                <div class="hero-stat-pill">
+                                    <span class="stat-num" id="cb-header-step-indicator">1 / 4</span>
+                                    <span class="stat-lbl">Current Step</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 4-Step Stepper Header -->
+                        <nav class="campaign-stepper" aria-label="Campaign Steps">
+                            <ol class="stepper-list">
+                                <li class="stepper-item active" data-step="1" id="stepper-item-1">
+                                    <button type="button" class="stepper-btn"
+                                        onclick="window.CampaignWizard && window.CampaignWizard.goToStep(1)">
+                                        <span class="stepper-node">
+                                            <span class="stepper-num">1</span>
+                                            <svg class="stepper-check" width="16" height="16" viewBox="0 0 24 24"
+                                                fill="none" stroke="currentColor" stroke-width="2.5">
+                                                <polyline points="20 6 9 17 4 12" />
+                                            </svg>
+                                        </span>
+                                        <div class="stepper-label-wrap">
+                                            <span class="stepper-step-tag">Step 1</span>
+                                            <span class="stepper-title">Recipients</span>
+                                        </div>
+                                    </button>
+                                </li>
+                                <li class="stepper-divider" aria-hidden="true"></li>
+                                <li class="stepper-item upcoming" data-step="2" id="stepper-item-2">
+                                    <button type="button" class="stepper-btn"
+                                        onclick="window.CampaignWizard && window.CampaignWizard.goToStep(2)">
+                                        <span class="stepper-node">
+                                            <span class="stepper-num">2</span>
+                                            <svg class="stepper-check" width="16" height="16" viewBox="0 0 24 24"
+                                                fill="none" stroke="currentColor" stroke-width="2.5">
+                                                <polyline points="20 6 9 17 4 12" />
+                                            </svg>
+                                        </span>
+                                        <div class="stepper-label-wrap">
+                                            <span class="stepper-step-tag">Step 2</span>
+                                            <span class="stepper-title">Message</span>
+                                        </div>
+                                    </button>
+                                </li>
+                                <li class="stepper-divider" aria-hidden="true"></li>
+                                <li class="stepper-item upcoming" data-step="3" id="stepper-item-3">
+                                    <button type="button" class="stepper-btn"
+                                        onclick="window.CampaignWizard && window.CampaignWizard.goToStep(3)">
+                                        <span class="stepper-node">
+                                            <span class="stepper-num">3</span>
+                                            <svg class="stepper-check" width="16" height="16" viewBox="0 0 24 24"
+                                                fill="none" stroke="currentColor" stroke-width="2.5">
+                                                <polyline points="20 6 9 17 4 12" />
+                                            </svg>
+                                        </span>
+                                        <div class="stepper-label-wrap">
+                                            <span class="stepper-step-tag">Step 3</span>
+                                            <span class="stepper-title">Settings</span>
+                                        </div>
+                                    </button>
+                                </li>
+                                <li class="stepper-divider" aria-hidden="true"></li>
+                                <li class="stepper-item upcoming" data-step="4" id="stepper-item-4">
+                                    <button type="button" class="stepper-btn"
+                                        onclick="window.CampaignWizard && window.CampaignWizard.goToStep(4)">
+                                        <span class="stepper-node">
+                                            <span class="stepper-num">4</span>
+                                            <svg class="stepper-check" width="16" height="16" viewBox="0 0 24 24"
+                                                fill="none" stroke="currentColor" stroke-width="2.5">
+                                                <polyline points="20 6 9 17 4 12" />
+                                            </svg>
+                                        </span>
+                                        <div class="stepper-label-wrap">
+                                            <span class="stepper-step-tag">Step 4</span>
+                                            <span class="stepper-title">Review &amp; Send</span>
+                                        </div>
+                                    </button>
+                                </li>
+                            </ol>
+                        </nav>
+
+                        <!-- Notification / Status Banner Area -->
+                        <div id="send-emails-error" class="cb-alert cb-alert-danger" hidden role="alert"></div>
+                        <div id="send-emails-transfer-box" class="cb-alert cb-alert-info" hidden role="region"></div>
+                        <div id="send-emails-campaign-box" class="cb-alert cb-alert-purple" hidden role="region"></div>
+                        <div id="send-emails-result" class="cb-alert result" hidden role="status"></div>
+
+                        <!-- The Single Bulk Form encapsulating all fields -->
+                        <form id="send-emails-bulkForm" enctype="multipart/form-data" novalidate>
+                            <input type="hidden" name="transfer_session_id" value="">
+                            <input type="hidden" name="campaign_id" value="">
+
+                            <!-- STEP 1: RECIPIENTS -->
+                            <div class="wizard-step-pane active" id="wizard-pane-1" data-step="1">
+                                <div class="cb-card">
+                                    <div class="cb-card-header">
+                                        <div class="cb-card-title-group">
+                                            <span class="cb-step-badge">Step 1 of 4</span>
+                                            <h3 class="cb-card-title">Upload Recipient List &amp; Map Columns</h3>
+                                            <p class="cb-card-subtitle">Upload a CSV or Excel spreadsheet with your
+                                                recipient data. The system automatically detects columns and email
+                                                addresses.</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="cb-card-body">
+                                        <!-- File Drop Zone -->
+                                        <div class="cb-dropzone" id="send-emails-dropzone">
+                                            <input class="file-input-hidden" type="file" id="send-emails-data_file"
+                                                name="data_file" accept=".csv,.xlsx,.xls">
+                                            <div class="cb-dropzone-content" id="cb-dropzone-prompt">
+                                                <div class="cb-dropzone-icon">
+                                                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none"
+                                                        stroke="currentColor" stroke-width="1.6">
+                                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                                        <polyline points="17 8 12 3 7 8" />
+                                                        <line x1="12" y1="3" x2="12" y2="15" />
+                                                    </svg>
+                                                </div>
+                                                <h4 class="cb-dropzone-heading">Drag and drop CSV or XLSX file here</h4>
+                                                <p class="cb-dropzone-sub">or <label for="send-emails-data_file"
+                                                        class="cb-link-btn">browse file from your computer</label></p>
+                                                <div class="cb-dropzone-meta">Supported formats: .csv, .xlsx, .xls
+                                                    &bull; Up to 25 MB</div>
+                                            </div>
+                                            <div class="cb-file-loaded-state" id="cb-file-loaded-state" hidden>
+                                                <div class="cb-loaded-file-info">
+                                                    <div class="cb-file-icon">
+                                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"
+                                                            stroke="currentColor" stroke-width="2">
+                                                            <path
+                                                                d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                                            <polyline points="14 2 14 8 20 8" />
+                                                            <line x1="16" y1="13" x2="8" y2="13" />
+                                                            <line x1="16" y1="17" x2="8" y2="17" />
+                                                        </svg>
+                                                    </div>
+                                                    <div>
+                                                        <span id="send-emails-data_file_name" class="cb-file-name">No
+                                                            file selected</span>
+                                                        <span id="cb-file-meta-summary" class="cb-file-details">Ready
+                                                            for analysis</span>
+                                                    </div>
+                                                </div>
+                                                <label for="send-emails-data_file" class="cb-btn-ghost cb-btn-sm">Choose
+                                                    another file</label>
+                                            </div>
+                                        </div>
+
+                                        <!-- Stats Badges Grid (Shown when file is parsed) -->
+                                        <div class="cb-stats-grid" id="cb-file-stats-grid" hidden>
+                                            <div class="cb-stat-card">
+                                                <div class="cb-stat-val text-primary" id="stat-total-rows">0</div>
+                                                <div class="cb-stat-label">Total Rows</div>
+                                            </div>
+                                            <div class="cb-stat-card">
+                                                <div class="cb-stat-val text-success" id="stat-valid-emails">0</div>
+                                                <div class="cb-stat-label">Valid Emails</div>
+                                            </div>
+                                            <div class="cb-stat-card">
+                                                <div class="cb-stat-val text-warning" id="stat-duplicate-emails">0</div>
+                                                <div class="cb-stat-label">Duplicates</div>
+                                            </div>
+                                            <div class="cb-stat-card">
+                                                <div class="cb-stat-val text-indigo" id="stat-total-columns">0</div>
+                                                <div class="cb-stat-label">Detected Columns</div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Column Mapping Configuration -->
+                                        <div class="cb-config-box">
+                                            <div class="cb-config-head">
+                                                <label for="send-emails-recipient_column" class="cb-label">Recipient
+                                                    Email Column</label>
+                                                <span class="cb-badge cb-badge-success"
+                                                    id="cb-auto-detect-badge">Detected</span>
+                                            </div>
+                                            <div class="cb-col-input-row">
+                                                <input type="text" id="send-emails-recipient_column"
+                                                    name="recipient_column" value="email" class="cb-input"
+                                                    placeholder="Column name e.g. email or recipient">
+                                                <div class="cb-detected-columns-chips" id="cb-column-chips">
+                                                    <!-- Injected dynamically: chips for each detected column -->
+                                                </div>
+                                            </div>
+                                            <p class="cb-helper-text">Click any of the detected columns above to set it
+                                                as the primary recipient email column.</p>
+                                        </div>
+
+                                        <!-- Data Table Preview -->
+                                        <div class="cb-table-card">
+                                            <div class="cb-table-header">
+                                                <h4 class="cb-table-title">Recipient Data Preview (First 10 Rows)</h4>
+                                                <span class="cb-table-badge" id="cb-table-row-count-badge">0 rows
+                                                    loaded</span>
+                                            </div>
+                                            <div class="cb-table-container">
+                                                <div id="cb-table-empty-state" class="cb-empty-state">
+                                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none"
+                                                        stroke="currentColor" stroke-width="1.2">
+                                                        <rect x="3" y="3" width="18" height="18" rx="2" />
+                                                        <path d="M3 9h18" />
+                                                        <path d="M9 21V9" />
+                                                    </svg>
+                                                    <p>Upload a CSV or Excel file to see a formatted preview table here.
+                                                    </p>
+                                                </div>
+                                                <table id="cb-preview-table" class="cb-preview-table" hidden>
+                                                    <thead id="cb-preview-table-head"></thead>
+                                                    <tbody id="cb-preview-table-body"></tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- STEP 2: MESSAGE -->
+                            <div class="wizard-step-pane" id="wizard-pane-2" data-step="2">
+                                <div class="cb-card">
+                                    <div class="cb-card-header">
+                                        <div class="cb-card-title-group">
+                                            <span class="cb-step-badge">Step 2 of 4</span>
+                                            <h3 class="cb-card-title">Design Email Template</h3>
+                                            <p class="cb-card-subtitle">Compose your subject and message body.
+                                                Placeholders like <code>&#123;&#123;company&#125;&#125;</code> are
+                                                automatically replaced for each recipient.</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="cb-card-body">
+                                        <!-- Template Variables Quick Bar -->
+                                        <div class="cb-variables-bar">
+                                            <div class="cb-variables-bar-label">
+                                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2">
+                                                    <path
+                                                        d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                                                </svg>
+                                                <span>Available Placeholders (Click to insert at cursor
+                                                    position):</span>
+                                            </div>
+                                            <div class="cb-var-chips-container" id="cb-template-var-chips">
+                                                <button type="button" class="cb-var-pill"
+                                                    data-var="&#123;&#123;company&#125;&#125;">+
+                                                    &#123;&#123;company&#125;&#125;</button>
+                                                <button type="button" class="cb-var-pill"
+                                                    data-var="&#123;&#123;person&#125;&#125;">+
+                                                    &#123;&#123;person&#125;&#125;</button>
+                                                <button type="button" class="cb-var-pill"
+                                                    data-var="&#123;&#123;email&#125;&#125;">+
+                                                    &#123;&#123;email&#125;&#125;</button>
+                                                <button type="button" class="cb-var-pill"
+                                                    data-var="&#123;&#123;city&#125;&#125;">+
+                                                    &#123;&#123;city&#125;&#125;</button>
+                                            </div>
+                                        </div>
+
+                                        <!-- Subject Input -->
+                                        <div class="cb-form-group">
+                                            <div class="cb-label-row">
+                                                <label for="send-emails-subject_template" class="cb-label">Subject
+                                                    Template <span class="cb-required">*</span></label>
+                                                <span class="cb-char-counter" id="cb-subject-counter">0
+                                                    characters</span>
+                                            </div>
+                                            <input type="text" id="send-emails-subject_template" name="subject_template"
+                                                class="cb-input cb-input-lg"
+                                                placeholder="e.g. Job Application / Partnership Inquiry for &#123;&#123;company&#125;&#125;"
+                                                required>
+                                        </div>
+
+                                        <!-- Email Body Textarea -->
+                                        <div class="cb-form-group">
+                                            <div class="cb-label-row">
+                                                <label for="send-emails-body_template" class="cb-label">Message Template
+                                                    <span class="cb-required">*</span></label>
+                                                <div class="cb-editor-tools">
+                                                    <span class="cb-char-counter" id="cb-body-counter">0 words | 0
+                                                        characters</span>
+                                                </div>
+                                            </div>
+                                            <div class="cb-editor-frame">
+                                                <textarea id="send-emails-body_template" name="body_template"
+                                                    class="cb-textarea cb-editor-textarea" rows="12"
+                                                    placeholder="Hello &#123;&#123;person&#125;&#125;,&#10;&#10;I am writing to express my strong interest in joining &#123;&#123;company&#125;&#125;...&#10;&#10;Best regards,&#10;Your Name"
+                                                    required></textarea>
+                                            </div>
+                                        </div>
+
+                                        <!-- Multiple Attachments Card -->
+                                        <div class="cb-subcard">
+                                            <div class="cb-subcard-head">
+                                                <div>
+                                                    <h4 class="cb-subcard-title">File Attachments (Optional)</h4>
+                                                    <p class="cb-subcard-sub">Attach your CV, certificates, or portfolio
+                                                        documents.</p>
+                                                </div>
+                                                <div class="file-upload-wrapper">
+                                                    <input class="file-input-hidden" type="file"
+                                                        id="send-emails-attachments" name="attachments" multiple>
+                                                    <label for="send-emails-attachments"
+                                                        class="cb-btn-secondary cb-btn-sm">+ Add Files</label>
+                                                </div>
+                                            </div>
+                                            <span id="send-emails-attachments_name" class="visually-hidden">No file
+                                                selected</span>
+                                            <div id="cb-attachments-chips-list" class="cb-attachments-list">
+                                                <span class="cb-attachments-empty">No attachments added yet.</span>
+                                            </div>
+                                        </div>
+
+                                        <!-- One Document Mode Collapsible -->
+                                        <div class="cb-accordion-card">
+                                            <div class="cb-accordion-toggle">
+                                                <label class="cb-checkbox-label" for="send-emails-one_document_enabled">
+                                                    <input type="checkbox" id="send-emails-one_document_enabled"
+                                                        name="one_document_enabled" value="1" class="cb-checkbox">
+                                                    <div>
+                                                        <span class="cb-checkbox-title">Enable One Document Mode</span>
+                                                        <span class="cb-checkbox-sub">Embed personalized cover letter
+                                                            directly into a base PDF (e.g. complete application
+                                                            dossier)</span>
+                                                    </div>
+                                                </label>
+                                            </div>
+                                            <div id="send-emails-oneDocumentFields" class="cb-accordion-content" hidden>
+                                                <div class="cb-grid-2">
+                                                    <div class="cb-form-group">
+                                                        <label for="send-emails-one_document_base_file"
+                                                            class="cb-label">Base PDF Document</label>
+                                                        <div class="cb-file-picker">
+                                                            <input class="file-input-hidden" type="file"
+                                                                id="send-emails-one_document_base_file"
+                                                                name="one_document_base_file" accept=".pdf">
+                                                            <label for="send-emails-one_document_base_file"
+                                                                class="cb-btn-ghost cb-btn-sm">Select PDF</label>
+                                                            <span id="send-emails-one_document_base_file_name"
+                                                                class="cb-file-name-inline">No file selected</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="cb-form-group">
+                                                        <label for="send-emails-one_document_page"
+                                                            class="cb-label">Target Page Number</label>
+                                                        <input type="number" id="send-emails-one_document_page"
+                                                            name="one_document_page" min="1" step="1" value="1"
+                                                            class="cb-input">
+                                                    </div>
+                                                </div>
+                                                <div class="cb-form-group">
+                                                    <label for="send-emails-one_document_action" class="cb-label">Insert
+                                                        Mode</label>
+                                                    <select id="send-emails-one_document_action"
+                                                        name="one_document_action" class="cb-select">
+                                                        <option value="replace">Replace - Replace existing page</option>
+                                                        <option value="add">Add - Insert as new page before this page
+                                                            number</option>
+                                                    </select>
+                                                </div>
+                                                <div class="cb-info-box">
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                                        stroke="currentColor" stroke-width="2">
+                                                        <circle cx="12" cy="12" r="10" />
+                                                        <line x1="12" y1="16" x2="12" y2="12" />
+                                                        <line x1="12" y1="8" x2="12.01" y2="8" />
+                                                    </svg>
+                                                    <span>A fresh copy of the base PDF is created per recipient and
+                                                        seamlessly merged with the personalized cover letter.</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Live Personalized Preview Card -->
+                                        <div class="cb-preview-box">
+                                            <div class="cb-preview-box-head">
+                                                <div class="cb-preview-title">
+                                                    <span class="dot-online"></span>
+                                                    <span>Real-time Preview of Personalized Email</span>
+                                                </div>
+                                                <div class="cb-preview-selector">
+                                                    <label for="cb-sample-row-select" class="cb-sample-lbl">Preview for
+                                                        row:</label>
+                                                    <select id="cb-sample-row-select" class="cb-select cb-select-sm">
+                                                        <option value="0">Row 1 (Sample)</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                            <div class="cb-preview-box-body">
+                                                <div class="cb-preview-meta-row">
+                                                    <span class="cb-preview-meta-tag">To:</span>
+                                                    <span id="cb-preview-to-val"
+                                                        class="cb-preview-meta-val">recipient@company.com</span>
+                                                </div>
+                                                <div class="cb-preview-meta-row">
+                                                    <span class="cb-preview-meta-tag">Subject:</span>
+                                                    <strong id="cb-preview-subject-val" class="cb-preview-meta-val">No
+                                                        subject entered yet</strong>
+                                                </div>
+                                                <div class="cb-preview-divider"></div>
+                                                <div id="cb-preview-body-val" class="cb-preview-body-text">Rendered
+                                                    email body preview will appear here...</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- STEP 3: SETTINGS -->
+                            <div class="wizard-step-pane" id="wizard-pane-3" data-step="3">
+                                <div class="cb-card">
+                                    <div class="cb-card-header">
+                                        <div class="cb-card-title-group">
+                                            <span class="cb-step-badge">Step 3 of 4</span>
+                                            <h3 class="cb-card-title">Sender Account &amp; Rate Limits</h3>
+                                            <p class="cb-card-subtitle">Configure your Gmail sender account and safety
+                                                intervals to ensure high deliverability and avoid spam filters.</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="cb-card-body">
+                                        <!-- Sender Credentials Card -->
+                                        <div class="cb-subcard">
+                                            <h4 class="cb-subcard-title">1. Sender Connection (Google Gmail)</h4>
+                                            <div class="cb-grid-3">
+                                                <div class="cb-form-group">
+                                                    <label for="send-emails-full_name" class="cb-label">Full Name <span
+                                                            class="cb-required">*</span></label>
+                                                    <input type="text" id="send-emails-full_name" name="full_name"
+                                                        class="cb-input" placeholder="e.g. John Doe" required>
+                                                </div>
+                                                <div class="cb-form-group">
+                                                    <label for="send-emails-sender_email" class="cb-label">Gmail Sender
+                                                        Email <span class="cb-required">*</span></label>
+                                                    <input type="email" id="send-emails-sender_email"
+                                                        name="sender_email" class="cb-input"
+                                                        placeholder="john.doe@gmail.com" required>
+                                                </div>
+                                                <div class="cb-form-group">
+                                                    <label for="send-emails-app_password" class="cb-label">Gmail App
+                                                        Password <span class="cb-required">*</span></label>
+                                                    <div class="cb-password-wrapper">
+                                                        <input type="password" id="send-emails-app_password"
+                                                            name="app_password" class="cb-input cb-password-input"
+                                                            placeholder="xxxx xxxx xxxx xxxx"
+                                                            autocomplete="new-password" required>
+                                                        <button type="button" class="cb-pw-toggle-btn" id="cb-pw-toggle"
+                                                            aria-label="Toggle password visibility">
+                                                            <svg class="eye-open" width="18" height="18"
+                                                                viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                                stroke-width="2">
+                                                                <path
+                                                                    d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                                                                <circle cx="12" cy="12" r="3" />
+                                                            </svg>
+                                                            <svg class="eye-closed" width="18" height="18"
+                                                                viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                                stroke-width="2" hidden>
+                                                                <path
+                                                                    d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                                                                <line x1="1" y1="1" x2="23" y2="23" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="cb-security-banner">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2">
+                                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                                </svg>
+                                                <span>Security Guarantee: Your App Password is never permanently stored
+                                                    in browser storage or logged. It is transmitted securely to the SMTP
+                                                    server.</span>
+                                            </div>
+                                        </div>
+
+                                        <!-- Day Presets Card -->
+                                        <div class="cb-subcard">
+                                            <div class="cb-subcard-head">
+                                                <div>
+                                                    <h4 class="cb-subcard-title">2. Sending Profiles (Recommended Daily
+                                                        Presets)</h4>
+                                                    <p class="cb-subcard-sub">Choose a preconfigured profile for optimal
+                                                        delivery rates and protection against Google sending limits.</p>
+                                                </div>
+                                                <select id="send-emails-day_preset" name="day_preset"
+                                                    class="visually-hidden">
+                                                    <option value="">Custom</option>
+                                                    <option value="day1">Day 1 - 100 Emails</option>
+                                                    <option value="day2">Day 2 - 200 Emails</option>
+                                                    <option value="day3">Day 3 - 300 Emails</option>
+                                                    <option value="day4">Day 4 - 500 Emails</option>
+                                                </select>
+                                            </div>
+                                            <div class="cb-preset-cards-grid">
+                                                <button type="button" class="cb-preset-card" data-preset="day1">
+                                                    <span class="cb-preset-tag">Day 1</span>
+                                                    <strong class="cb-preset-name">100 Emails</strong>
+                                                    <span class="cb-preset-desc">Safe warm-up start &bull; Jitter
+                                                        90–140s &bull; Batch 10</span>
+                                                </button>
+                                                <button type="button" class="cb-preset-card" data-preset="day2">
+                                                    <span class="cb-preset-tag">Day 2</span>
+                                                    <strong class="cb-preset-name">200 Emails</strong>
+                                                    <span class="cb-preset-desc">Ramping phase &bull; Jitter 85–130s
+                                                        &bull; Batch 15</span>
+                                                </button>
+                                                <button type="button" class="cb-preset-card" data-preset="day3">
+                                                    <span class="cb-preset-tag">Day 3</span>
+                                                    <strong class="cb-preset-name">300 Emails</strong>
+                                                    <span class="cb-preset-desc">Standard volume &bull; Jitter 80–120s
+                                                        &bull; Batch 20</span>
+                                                </button>
+                                                <button type="button" class="cb-preset-card" data-preset="day4">
+                                                    <span class="cb-preset-tag">Day 4</span>
+                                                    <strong class="cb-preset-name">500 Emails</strong>
+                                                    <span class="cb-preset-desc">High capacity &bull; Jitter 75–110s
+                                                        &bull; Batch 20</span>
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <!-- Rate Limits Configuration -->
+                                        <div class="cb-subcard">
+                                            <h4 class="cb-subcard-title">3. Rate Limits &amp; Row Limits</h4>
+                                            <div class="cb-grid-3">
+                                                <div class="cb-form-group">
+                                                    <label for="send-emails-limit" class="cb-label">Row Limit for This
+                                                        Run</label>
+                                                    <input type="number" id="send-emails-limit" name="limit" min="1"
+                                                        class="cb-input" placeholder="e.g. 100 (blank = all)">
+                                                    <span class="cb-field-hint">Maximum number of emails</span>
+                                                </div>
+                                                <div class="cb-form-group">
+                                                    <label for="send-emails-jitter_min_seconds" class="cb-label">Jitter
+                                                        Minimum (sec)</label>
+                                                    <input type="number" id="send-emails-jitter_min_seconds"
+                                                        name="jitter_min_seconds" min="0" step="0.1" class="cb-input"
+                                                        placeholder="e.g. 80">
+                                                    <span class="cb-field-hint">Shortest delay</span>
+                                                </div>
+                                                <div class="cb-form-group">
+                                                    <label for="send-emails-jitter_max_seconds" class="cb-label">Jitter
+                                                        Maximum (sec)</label>
+                                                    <input type="number" id="send-emails-jitter_max_seconds"
+                                                        name="jitter_max_seconds" min="0" step="0.1" class="cb-input"
+                                                        placeholder="e.g. 110">
+                                                    <span class="cb-field-hint">Longest delay</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Collapsible Advanced Batch Settings -->
+                                        <details class="cb-advanced-details">
+                                            <summary class="cb-advanced-summary">
+                                                <span>Advanced Batch Settings &amp; Cooldown Pauses</span>
+                                                <svg class="chevron" width="16" height="16" viewBox="0 0 24 24"
+                                                    fill="none" stroke="currentColor" stroke-width="2">
+                                                    <polyline points="6 9 12 15 18 9" />
+                                                </svg>
+                                            </summary>
+                                            <div class="cb-advanced-content">
+                                                <div class="cb-grid-2">
+                                                    <div class="cb-form-group">
+                                                        <label for="send-emails-batch_size" class="cb-label">Batch Size
+                                                            (Emails)</label>
+                                                        <input type="number" id="send-emails-batch_size"
+                                                            name="batch_size" min="1" step="1" class="cb-input"
+                                                            placeholder="e.g. 20">
+                                                        <span class="cb-field-hint">Emails before a longer pause</span>
+                                                    </div>
+                                                    <div class="cb-form-group">
+                                                        <label for="send-emails-batch_pause_minutes"
+                                                            class="cb-label">Batch Pause (Minutes)</label>
+                                                        <input type="number" id="send-emails-batch_pause_minutes"
+                                                            name="batch_pause_minutes" min="0" step="0.1"
+                                                            class="cb-input" placeholder="e.g. 30">
+                                                        <span class="cb-field-hint">Cooldown delay after each
+                                                            batch</span>
+                                                    </div>
+                                                </div>
+                                                <p class="cb-helper-text">Pauses after each batch of emails make sending
+                                                    activity appear natural and drastically reduce the likelihood of
+                                                    temporary SMTP throttling.</p>
+                                            </div>
+                                        </details>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- STEP 4: REVIEW & SEND -->
+                            <div class="wizard-step-pane" id="wizard-pane-4" data-step="4">
+                                <div class="cb-card">
+                                    <div class="cb-card-header">
+                                        <div class="cb-card-title-group">
+                                            <span class="cb-step-badge">Step 4 of 4</span>
+                                            <h3 class="cb-card-title">Campaign Summary &amp; Safety Check</h3>
+                                            <p class="cb-card-subtitle">Review all campaign details, send a test email
+                                                to your inbox, and launch bulk sending with explicit confirmation.</p>
+                                        </div>
+                                    </div>
+
+                                    <div class="cb-card-body">
+                                        <!-- Campaign Metrics Summary Grid -->
+                                        <div class="cb-summary-grid">
+                                            <div class="cb-summary-item">
+                                                <span class="cb-summary-label">Sender Address</span>
+                                                <strong class="cb-summary-val" id="cb-summary-sender">Not
+                                                    specified</strong>
+                                            </div>
+                                            <div class="cb-summary-item">
+                                                <span class="cb-summary-label">Recipient Count</span>
+                                                <strong class="cb-summary-val text-primary" id="cb-summary-recipients">0
+                                                    Recipients</strong>
+                                            </div>
+                                            <div class="cb-summary-item">
+                                                <span class="cb-summary-label">Attachments</span>
+                                                <strong class="cb-summary-val" id="cb-summary-attachments">No
+                                                    attachments</strong>
+                                            </div>
+                                            <div class="cb-summary-item">
+                                                <span class="cb-summary-label">Estimated Duration</span>
+                                                <strong class="cb-summary-val text-indigo" id="cb-summary-duration">~ 0
+                                                    minutes</strong>
+                                            </div>
+                                        </div>
+
+                                        <!-- Validation Checklist -->
+                                        <div class="cb-checklist-box">
+                                            <h4 class="cb-checklist-title">Pre-Flight Safety Checklist</h4>
+                                            <ul class="cb-checklist" id="cb-validation-checklist">
+                                                <li class="cb-check-item" id="check-sender">
+                                                    <span class="cb-check-icon"></span>
+                                                    <span class="cb-check-text">Sender email and Google App Password
+                                                        provided</span>
+                                                    <button type="button" class="cb-check-fix-btn"
+                                                        onclick="window.CampaignWizard && window.CampaignWizard.goToStep(3)">Fix</button>
+                                                </li>
+                                                <li class="cb-check-item" id="check-recipients">
+                                                    <span class="cb-check-icon"></span>
+                                                    <span class="cb-check-text">Recipient file uploaded and valid emails
+                                                        detected</span>
+                                                    <button type="button" class="cb-check-fix-btn"
+                                                        onclick="window.CampaignWizard && window.CampaignWizard.goToStep(1)">Fix</button>
+                                                </li>
+                                                <li class="cb-check-item" id="check-subject">
+                                                    <span class="cb-check-icon"></span>
+                                                    <span class="cb-check-text">Subject template configured</span>
+                                                    <button type="button" class="cb-check-fix-btn"
+                                                        onclick="window.CampaignWizard && window.CampaignWizard.goToStep(2)">Fix</button>
+                                                </li>
+                                                <li class="cb-check-item" id="check-body">
+                                                    <span class="cb-check-icon"></span>
+                                                    <span class="cb-check-text">Message template composed</span>
+                                                    <button type="button" class="cb-check-fix-btn"
+                                                        onclick="window.CampaignWizard && window.CampaignWizard.goToStep(2)">Fix</button>
+                                                </li>
+                                            </ul>
+                                        </div>
+
+                                        <!-- Test Email Sender Box -->
+                                        <div class="cb-test-email-box">
+                                            <div class="cb-test-email-head">
+                                                <div class="cb-test-icon">
+                                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                                                        stroke="currentColor" stroke-width="2">
+                                                        <path d="M22 2L11 13" />
+                                                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                                                    </svg>
+                                                </div>
+                                                <div>
+                                                    <h4 class="cb-test-title">Send Test Email to Your Inbox</h4>
+                                                    <p class="cb-test-sub">Check how your personalized email renders in
+                                                        a real inbox before launching the bulk campaign.</p>
+                                                </div>
+                                            </div>
+                                            <div class="cb-test-input-row">
+                                                <input type="email" id="cb-test-recipient-input" class="cb-input"
+                                                    placeholder="your.email@gmail.com">
+                                                <button type="button" class="cb-btn-secondary" id="cb-send-test-btn">
+                                                    <span id="cb-test-btn-text">Send Test Email Now</span>
+                                                    <span id="cb-test-btn-spinner" class="spinner-sm" hidden></span>
+                                                </button>
+                                            </div>
+                                            <div id="cb-test-result-msg" class="cb-test-status" hidden></div>
+                                        </div>
+
+                                        <!-- Explicit Send Confirmation -->
+                                        <div class="cb-confirmation-card">
+                                            <label class="cb-checkbox-label" for="send-emails-confirm-checkbox">
+                                                <input type="checkbox" id="send-emails-confirm-checkbox"
+                                                    class="cb-checkbox">
+                                                <div>
+                                                    <strong class="cb-checkbox-title">I have reviewed the recipient
+                                                        list, message template, and rate limits and confirm the bulk
+                                                        campaign launch.</strong>
+                                                    <span class="cb-checkbox-sub">Emails will be sent in the background
+                                                        via your configured Gmail SMTP connection.</span>
+                                                </div>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- STICKY WIZARD NAVIGATION FOOTER -->
+                            <div class="cb-wizard-footer">
+                                <div class="cb-footer-left">
+                                    <span class="cb-autosave-indicator" id="cb-autosave-indicator">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                                            <polyline points="17 21 17 13 7 13 7 21" />
+                                            <polyline points="7 3 7 8 15 8" />
+                                        </svg>
+                                        <span>Draft saved automatically</span>
+                                    </span>
+                                    <button class="cb-btn-ghost cb-btn-sm" type="button"
+                                        id="send-emails-saveTemplateBtn">
+                                        <span>Save as Template in Dashboard</span>
+                                    </button>
+                                </div>
+                                <div class="cb-footer-right">
+                                    <button type="button" class="cb-btn-secondary" id="cb-wizard-back-btn" hidden>
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <polyline points="15 18 9 12 15 6" />
+                                        </svg>
+                                        <span>Back</span>
+                                    </button>
+                                    <button type="button" class="cb-btn-primary" id="cb-wizard-next-btn">
+                                        <span>Next to Step 2</span>
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <polyline points="9 18 15 12 9 6" />
+                                        </svg>
+                                    </button>
+                                    <button class="cb-btn-primary cb-btn-send" type="submit" id="send-emails-sendBtn"
+                                        hidden disabled>
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <line x1="22" y1="2" x2="11" y2="13" />
+                                            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                                        </svg>
+                                        <span>Launch Bulk Send Now</span>
+                                    </button>
+                                    <button class="cb-btn-danger" type="button" id="send-emails-stopSendBtn"
+                                        style="display:none;">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <rect x="3" y="3" width="18" height="18" rx="2" />
+                                        </svg>
+                                        <span>Save and Stop</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- FLOATING DOCK: SEND PROGRESS MONITOR -->
+                    <div id="send-emails-sendProgressDock" class="send-progress-dock" role="region"
+                        aria-label="Send Progress">
+                        <div class="send-progress-dock-inner">
+                            <div class="send-progress-info-row">
+                                <div class="send-progress-status-badge">
+                                    <span class="pulse-dot"></span>
+                                    <span id="send-emails-sendProgressStatusText">Sending active</span>
+                                </div>
+                                <div id="send-emails-sendProgressText" class="send-progress-text">Preparing campaign...
+                                </div>
+                            </div>
+                            <div class="send-progress-track">
+                                <div id="send-emails-sendProgressFill" class="send-progress-fill"></div>
+                            </div>
+                        </div>
+                    </div>
+                </section>

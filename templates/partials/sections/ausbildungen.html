@@ -1,0 +1,217 @@
+<section id="ausbildungen-section" class="app-section" data-section="ausbildungen" {% if initial_section
+                    !="ausbildungen" %}hidden{% endif %}>
+                    <div class="section-hero ab-hero">
+                        <div class="ab-hero-copy">
+                            <span class="section-kicker">Apprenticeships &bull; Lead Datasets</span>
+                            <h2>Apprenticeship Datasets &amp; Exports</h2>
+                            <p>Organize, preview, deduplicate, and merge your scraped company lead lists.</p>
+                        </div>
+                        <div class="hero-actions ab-hero-actions">
+                            <a href="{{ url_for('index') }}" data-section-link="search" class="ab-hero-search-btn">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                <span>Find Emails (Multi-Portal Search)</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Statistics Summary Strip -->
+                    <div class="ab-stats-strip">
+                        <div class="ab-stat-card ab-stat-card--blue">
+                            <div class="ab-stat-icon-wrap ab-stat-icon-blue">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                            </div>
+                            <div class="ab-stat-content">
+                                <span class="ab-stat-label">Datasets</span>
+                                <strong class="ab-stat-value" id="ab-stat-total-files">0</strong>
+                                <span class="ab-stat-sub">Ready for outreach</span>
+                            </div>
+                        </div>
+                        <div class="ab-stat-card ab-stat-card--indigo">
+                            <div class="ab-stat-icon-wrap ab-stat-icon-indigo">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                            </div>
+                            <div class="ab-stat-content">
+                                <span class="ab-stat-label">Total Leads</span>
+                                <strong class="ab-stat-value" id="ab-stat-total-rows">0</strong>
+                                <span class="ab-stat-sub">Aggregated companies</span>
+                            </div>
+                        </div>
+                        <div class="ab-stat-card ab-stat-card--emerald">
+                            <div class="ab-stat-icon-wrap ab-stat-icon-emerald">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                            </div>
+                            <div class="ab-stat-content">
+                                <span class="ab-stat-label">Total Size</span>
+                                <strong class="ab-stat-value" id="ab-stat-total-size">0 KB</strong>
+                                <span class="ab-stat-sub">Excel &amp; CSV storage</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filter Toolbar: Search, Topic Chips, Sort & View Toggle -->
+                    <div class="ab-toolbar">
+                        <div class="ab-toolbar-left">
+                            <div class="ab-search-wrap">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                <input type="text" id="ausbildung-search-input"
+                                    placeholder="Search datasets by profession, keyword or filename...">
+                                <button type="button" id="ausbildung-search-clear" class="ab-clear-btn"
+                                    hidden>&times;</button>
+                            </div>
+                            <div class="ab-filter-controls">
+                                <div class="ab-topic-chips" id="ab-topic-chips">
+                                    <button type="button" class="ab-chip is-active" data-topic="all">All</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="ab-toolbar-right">
+                            <label class="ab-sort-wrap" title="Sort datasets">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="14" y2="12"></line><line x1="4" y1="18" x2="9" y2="18"></line></svg>
+                                <select id="ab-sort-select" class="ab-sort-select" aria-label="Sort datasets">
+                                    <option value="newest">Newest first</option>
+                                    <option value="rows">Most leads</option>
+                                    <option value="size">Largest size</option>
+                                    <option value="name">Name (A–Z)</option>
+                                </select>
+                            </label>
+                            <div class="ab-view-toggle" role="group" aria-label="View mode">
+                                <button type="button" id="ab-view-grid" class="ab-view-btn is-active" data-view="grid" title="Card grid view">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg>
+                                </button>
+                                <button type="button" id="ab-view-table" class="ab-view-btn" data-view="table" title="Compact table view">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Batch Actions Bar (Shows when files selected) -->
+                    <div id="ab-batch-bar" class="ab-batch-bar" hidden>
+                        <div class="ab-batch-left">
+                            <label class="ab-checkbox-label">
+                                <input type="checkbox" id="ab-select-all-checkbox">
+                                <span>Select All Visible</span>
+                            </label>
+                            <span class="ab-batch-sep">|</span>
+                            <span class="ab-batch-count-text" id="ab-batch-selected-count">0 files selected</span>
+                            <span class="ab-batch-sub" id="ab-batch-rows-preview">(~0 leads)</span>
+                        </div>
+                        <div class="ab-batch-actions">
+                            <label class="ab-delete-sources-toggle" title="Delete small files after successful merge">
+                                <input type="checkbox" id="ab-delete-sources-checkbox" checked>
+                                <span>Delete source files after merge</span>
+                            </label>
+                            <button type="button" id="btn-batch-merge" class="ab-btn-merge">
+                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <path
+                                        d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3">
+                                    </path>
+                                </svg>
+                                <span>Merge &amp; Deduplicate</span>
+                            </button>
+                            <button type="button" id="btn-clear-selection" class="ab-btn-text">Deselect</button>
+                        </div>
+                    </div>
+
+                    <!-- Export Files Grid & Updates Panel -->
+                    <div id="panel-ausbildung-files" class="ausbildung-panel is-active">
+                        <div id="ausbildungen-status" class="section-status" hidden></div>
+                        <div id="ausbildungen-empty" class="empty-state" hidden>No exported apprenticeship files match
+                            the current filter.</div>
+                        <div id="ausbildungen-files" class="ab-files-grid"></div>
+                    </div>
+
+                    <!-- Lead Preview Modal -->
+                    <div id="ausbildung-preview-modal" class="ab-modal-backdrop" hidden>
+                        <div class="ab-modal-dialog" id="ab-modal-dialog">
+                            <div class="ab-modal-header">
+                                <div class="ab-modal-title-group">
+                                    <div class="ab-modal-icon">📊</div>
+                                    <div>
+                                        <h3 id="ab-preview-title">Dataset Preview</h3>
+                                        <div class="ab-modal-meta">
+                                            <span id="ab-preview-filename">filename.xlsx</span>
+                                            <span class="ab-meta-dot">•</span>
+                                            <span id="ab-preview-stats">0 Rows • 0 Emails</span>
+                                            <span class="ab-meta-dot">•</span>
+                                            <span id="ab-preview-col-count" class="ab-col-badge">0 Columns</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="ab-modal-header-actions">
+                                    <button type="button" id="ab-preview-maximize-btn" class="ab-btn-secondary-sm" title="Toggle Fullscreen Width">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"></path>
+                                        </svg>
+                                        <span id="ab-maximize-label">Expand</span>
+                                    </button>
+                                    <a id="ab-preview-download-btn" href="#" class="ab-btn-secondary-sm" download>
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                            <polyline points="7 10 12 15 17 10"></polyline>
+                                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                                        </svg>
+                                        <span>Download</span>
+                                    </a>
+                                    <button type="button" id="ab-preview-close-btn" class="ab-modal-close"
+                                        aria-label="Close modal">&times;</button>
+                                </div>
+                            </div>
+                            <div class="ab-modal-filter-row">
+                                <div class="ab-search-wrap">
+                                    <svg class="ab-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                    <input type="text" id="ab-preview-search" class="ab-modal-search"
+                                        placeholder="Filter rows inside preview (company, title, email, location)...">
+                                </div>
+                                <div class="ab-col-controls">
+                                    <div class="ab-col-pills-group">
+                                        <button type="button" id="ab-col-mode-all" class="ab-col-pill active" title="Show all columns in the dataset">All Columns</button>
+                                        <button type="button" id="ab-col-mode-compact" class="ab-col-pill" title="Show 6 essential columns">Compact (6)</button>
+                                        <div class="ab-col-dropdown-wrap">
+                                            <button type="button" id="ab-col-dropdown-btn" class="ab-col-pill ab-col-dropdown-trigger" title="Select specific columns to show or hide">
+                                                <span>Choose Columns</span>
+                                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+                                            </button>
+                                            <div id="ab-col-dropdown-menu" class="ab-col-dropdown-menu" hidden>
+                                                <div class="ab-col-dropdown-header">
+                                                    <span>Select Columns</span>
+                                                    <div class="ab-col-quick-actions">
+                                                        <button type="button" id="ab-col-select-all" class="ab-link-btn">All</button>
+                                                        <span>•</span>
+                                                        <button type="button" id="ab-col-select-reset" class="ab-link-btn">Reset</button>
+                                                    </div>
+                                                </div>
+                                                <div id="ab-col-checkbox-list" class="ab-col-checkbox-list"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span class="ab-preview-row-counter" id="ab-preview-counter">Showing 0 rows</span>
+                                </div>
+                            </div>
+                            <div class="ab-modal-body">
+                                <div class="ab-preview-table-wrap">
+                                    <table class="ab-preview-table" id="ab-preview-table">
+                                        <thead id="ab-preview-thead"></thead>
+                                        <tbody id="ab-preview-tbody"></tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div class="ab-modal-footer">
+                                <div class="ab-footer-info">
+                                    <span class="ab-footer-note" id="ab-preview-note">Preview shows up to 100 entries. Full dataset available via Download.</span>
+                                    <span class="ab-scroll-hint">↔ Horizontal scroll enabled to view all columns</span>
+                                </div>
+                                <button type="button" id="ab-preview-footer-close" class="ab-btn-subtle">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </section>

@@ -13,6 +13,9 @@
         const searchInput = document.getElementById("ausbildung-search-input");
         const searchClearBtn = document.getElementById("ausbildung-search-clear");
         const topicChipsRoot = document.getElementById("ab-topic-chips");
+        const sortSelect = document.getElementById("ab-sort-select");
+        const viewGridBtn = document.getElementById("ab-view-grid");
+        const viewTableBtn = document.getElementById("ab-view-table");
 
         const batchBar = document.getElementById("ab-batch-bar");
         const selectAllCheckbox = document.getElementById("ab-select-all-checkbox");
@@ -24,9 +27,13 @@
 
         // Preview Modal elements
         const previewModal = document.getElementById("ausbildung-preview-modal");
+        const modalDialog = document.getElementById("ab-modal-dialog");
         const previewTitle = document.getElementById("ab-preview-title");
         const previewFilename = document.getElementById("ab-preview-filename");
         const previewStats = document.getElementById("ab-preview-stats");
+        const previewColCount = document.getElementById("ab-preview-col-count");
+        const previewMaximizeBtn = document.getElementById("ab-preview-maximize-btn");
+        const maximizeLabel = document.getElementById("ab-maximize-label");
         const previewDownloadBtn = document.getElementById("ab-preview-download-btn");
         const previewCloseBtn = document.getElementById("ab-preview-close-btn");
         const previewFooterClose = document.getElementById("ab-preview-footer-close");
@@ -34,6 +41,13 @@
         const previewCounter = document.getElementById("ab-preview-counter");
         const previewThead = document.getElementById("ab-preview-thead");
         const previewTbody = document.getElementById("ab-preview-tbody");
+        const colModeAllBtn = document.getElementById("ab-col-mode-all");
+        const colModeCompactBtn = document.getElementById("ab-col-mode-compact");
+        const colDropdownBtn = document.getElementById("ab-col-dropdown-btn");
+        const colDropdownMenu = document.getElementById("ab-col-dropdown-menu");
+        const colCheckboxList = document.getElementById("ab-col-checkbox-list");
+        const colSelectAllBtn = document.getElementById("ab-col-select-all");
+        const colSelectResetBtn = document.getElementById("ab-col-select-reset");
 
         if (!filesRoot || !emptyState || !statusNode) {
             return {
@@ -52,6 +66,8 @@
         let allFiles = [];
         let activeTopic = "all";
         let searchQuery = "";
+        let sortBy = "newest";
+        let viewMode = "grid";
         const selectedFiles = new Set();
 
         // Preview state
@@ -74,9 +90,12 @@
 
         function setIdleState(card) {
             const updateButton = card.querySelector("[data-update-button]");
+            const updateSplit = card.querySelector("[data-update-split]");
             const stopButton = card.querySelector("[data-stop-button]");
             const solverLink = card.querySelector("[data-solver-link]");
+            const progressWrap = card.querySelector("[data-update-progress]");
 
+            if (updateSplit) updateSplit.hidden = false;
             if (updateButton) {
                 updateButton.hidden = false;
                 updateButton.disabled = false;
@@ -90,13 +109,21 @@
             if (solverLink) {
                 solverLink.hidden = true;
             }
+            if (progressWrap) {
+                progressWrap.hidden = true;
+            }
+            card.classList.remove("is-updating");
             card.dataset.jobId = "";
         }
 
         function setRunningState(card) {
             const updateButton = card.querySelector("[data-update-button]");
+            const updateSplit = card.querySelector("[data-update-split]");
+            const updateMenu = card.querySelector("[data-update-menu]");
             const stopButton = card.querySelector("[data-stop-button]");
 
+            if (updateMenu) updateMenu.hidden = true;
+            if (updateSplit) updateSplit.hidden = true;
             if (updateButton) {
                 updateButton.hidden = true;
                 updateButton.disabled = true;
@@ -106,19 +133,34 @@
                 stopButton.disabled = false;
                 stopButton.textContent = "Stop updating";
             }
+            card.classList.add("is-updating");
         }
 
         function buildStatusText(job) {
             const phase = String(job.phase || "");
+            const mode = String(job.mode || "incremental");
+            if (phase === "cleaning") {
+                return "Bereinige & dedupliziere bestehende Zeilen...";
+            }
             if (phase === "searching") {
+                const page = Number(job.search_page || 0);
+                const fetched = Number(job.search_fetched || 0);
+                if (fetched > 0) {
+                    return `Suche nach neuen Stellen (Seite ${page} • ${fetched} gefunden)...`;
+                }
                 return "Suche nach neuen Stellen...";
             }
             if (phase === "extracting") {
                 const current = Number(job.current_index || 0);
                 const total = Number(job.total_jobs || 0);
                 const found = Number(job.emails_found || 0);
-                const duplicates = Number(job.duplicate_emails || 0);
-                return `Suche ${current}/${total} | neue E-Mails: ${found} | Duplikate: ${duplicates}`;
+                const skipped = Number(job.skipped_known || 0);
+                const enriched = Number(job.rows_enriched || 0);
+                if (mode === "enrich") {
+                    return `Anreicherung ${current}/${total} • +${found} E-Mails • ${enriched} ergänzt`;
+                }
+                const skipPart = skipped > 0 ? ` • ${skipped} bekannt übersprungen` : "";
+                return `Extraktion ${current}/${total} • +${found} E-Mails${skipPart}`;
             }
             if (phase === "saving") {
                 return "Datei wird aktualisiert...";
@@ -133,6 +175,51 @@
                 return "Update gestoppt.";
             }
             return "Update läuft...";
+        }
+
+        function computeJobPercent(job) {
+            if (!job) return 0;
+            if (typeof job.percent === "number" && job.percent > 0) {
+                return Math.min(100, Math.max(4, Math.round(job.percent)));
+            }
+            const phase = String(job.phase || "");
+            if (phase === "searching") return 15;
+            if (phase === "extracting") {
+                const cur = Number(job.current_index || 0);
+                const tot = Math.max(Number(job.total_jobs || 0), 1);
+                return Math.min(95, 20 + Math.round((cur / tot) * 75));
+            }
+            if (phase === "saving") return 96;
+            if (phase === "completed") return 100;
+            return 8;
+        }
+
+        function renderUpdateSplitControl(isRunning) {
+            return `
+                <div class="ab-update-split" data-update-split ${isRunning ? "hidden" : ""}>
+                    <button type="button" class="ab-btn-card-action update-btn" data-update-button ${isRunning ? "hidden" : ""} title="Find new leads (skips already-known listings)">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                        <span>Update</span>
+                    </button>
+                    <button type="button" class="ab-btn-update-caret" data-update-menu-toggle title="Choose update mode" aria-label="Update options">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                    <div class="ab-update-menu" data-update-menu hidden>
+                        <button type="button" class="ab-update-menu-item" data-update-mode="incremental">
+                            <span class="ab-menu-item-title">Find New Leads</span>
+                            <span class="ab-menu-item-sub">Crawl portals &amp; skip known rows</span>
+                        </button>
+                        <button type="button" class="ab-update-menu-item" data-update-mode="enrich">
+                            <span class="ab-menu-item-title">Enrich Missing Contacts</span>
+                            <span class="ab-menu-item-sub">Re-crawl incomplete rows in file</span>
+                        </button>
+                        <button type="button" class="ab-update-menu-item" data-update-mode="clean">
+                            <span class="ab-menu-item-title">Clean &amp; Deduplicate</span>
+                            <span class="ab-menu-item-sub">Instant repair &amp; deduplication</span>
+                        </button>
+                    </div>
+                </div>
+            `;
         }
 
         // Formatting and topic calculation
@@ -187,7 +274,7 @@
         }
 
         function getFilteredFiles() {
-            return allFiles.filter(item => {
+            const filtered = allFiles.filter(item => {
                 // Search query match
                 if (searchQuery) {
                     const q = searchQuery.toLowerCase();
@@ -205,6 +292,22 @@
                 }
 
                 return true;
+            });
+
+            return filtered.slice().sort((a, b) => {
+                if (sortBy === "rows") {
+                    return (Number(b.row_count) || 0) - (Number(a.row_count) || 0);
+                }
+                if (sortBy === "size") {
+                    return (Number(b.size_kb) || 0) - (Number(a.size_kb) || 0);
+                }
+                if (sortBy === "name") {
+                    return formatDomainTitle(a.domain_name).localeCompare(formatDomainTitle(b.domain_name));
+                }
+                // "newest": compare modified_at or filename timestamp descending
+                const fa = String(a.filename || "");
+                const fb = String(b.filename || "");
+                return fb.localeCompare(fa);
             });
         }
 
@@ -283,63 +386,187 @@
             if (btnBatchMerge) btnBatchMerge.disabled = selectedFiles.size < 2;
         }
 
+        function getFileExtension(filename) {
+            const parts = String(filename || "").split(".");
+            return parts.length > 1 ? parts.pop().toUpperCase() : "XLSX";
+        }
+
+        function formatShortId(filename) {
+            const name = String(filename || "").replace(/\.[^.]+$/, "");
+            const hashMatch = name.match(/_([a-f0-9]{6,10})$/i);
+            if (hashMatch) return `#${hashMatch[1]}`;
+            const timeMatch = name.match(/^\d{8}_(\d{6})/);
+            if (timeMatch) {
+                const t = timeMatch[1];
+                return `${t.slice(0, 2)}:${t.slice(2, 4)}:${t.slice(4, 6)}`;
+            }
+            return "";
+        }
+
+        function formatRowCount(item) {
+            const num = Number(item.row_count);
+            if (!Number.isNaN(num) && num >= 0 && item.row_count !== null && item.row_count !== undefined && item.row_count !== "") {
+                return num.toLocaleString();
+            }
+            return item.row_count_display || "N/A";
+        }
+
         function renderFileCard(item) {
             const activeJob = item.active_job || null;
             const isRunning = Boolean(activeJob && activeJob.is_running);
             const isSelected = selectedFiles.has(item.filename);
             const domainTitle = formatDomainTitle(item.domain_name);
+            const ext = getFileExtension(item.filename);
+            const shortId = formatShortId(item.filename);
+            const rowsFormatted = formatRowCount(item);
+            const topicKey = getTopicKey(item.domain_name);
+            const topicLabel = topicKey ? (topicKey.charAt(0).toUpperCase() + topicKey.slice(1)) : "Dataset";
 
             return `
                 <article
-                    class="file-card ${isSelected ? "is-selected" : ""}"
+                    class="ab-file-card file-card ${isSelected ? "is-selected" : ""} ${isRunning ? "is-updating" : ""}"
                     data-export-card
                     data-filename="${escapeHtml(item.filename || "")}"
                     data-job-id="${escapeHtml((activeJob && activeJob.job_id) || "")}"
                 >
-                    <div class="file-top">
-                        <label class="ab-card-checkbox-wrap" title="Select for merge">
-                            <input
-                                type="checkbox"
-                                class="ab-card-checkbox"
-                                data-select-card
-                                ${isSelected ? "checked" : ""}
-                            >
-                            <span class="file-pill">XLSX</span>
-                        </label>
-                        <div class="ab-pill-group">
-                            <span class="line-count" data-line-count>${escapeHtml(item.row_count_display || "N/A")} rows</span>
+                    <div class="ab-card-top">
+                        <div class="ab-card-top-left">
+                            <label class="ab-card-checkbox-wrap" title="Select for merge">
+                                <input
+                                    type="checkbox"
+                                    class="ab-card-checkbox"
+                                    data-select-card
+                                    ${isSelected ? "checked" : ""}
+                                >
+                            </label>
+                            <span class="ab-format-pill">${escapeHtml(ext)}</span>
+                            <span class="ab-topic-pill">${escapeHtml(topicLabel)}</span>
+                            ${shortId ? `<span class="ab-short-id" title="${escapeHtml(item.filename || "")}">${escapeHtml(shortId)}</span>` : ""}
+                        </div>
+                        <button type="button" class="ab-icon-delete-btn" data-delete-btn title="Delete dataset" aria-label="Delete dataset">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
+                    </div>
+
+                    <div class="ab-card-body">
+                        <h2 class="ab-card-title" title="${escapeHtml(item.domain_name || "")}">${escapeHtml(domainTitle)}</h2>
+                        <div class="ab-card-metric-row">
+                            <div class="ab-lead-metric">
+                                <span class="ab-lead-number" data-line-count>${escapeHtml(rowsFormatted)}</span>
+                                <span class="ab-lead-unit">leads</span>
+                            </div>
+                            <span class="ab-size-badge">${escapeHtml(item.size_kb || 0)} KB</span>
                         </div>
                     </div>
 
-                    <h2 title="${escapeHtml(item.domain_name || "")}">${escapeHtml(domainTitle)}</h2>
-                    <div class="ab-filename-sub" title="${escapeHtml(item.filename || "")}">${escapeHtml(item.filename || "")}</div>
-
-                    <div class="file-meta">
-                        <span>📅 ${escapeHtml(item.modified_at || "N/A")}</span>
-                        <span>💾 ${escapeHtml(item.size_kb || 0)} KB</span>
+                    <div class="ab-card-meta-row">
+                        <span class="ab-meta-item" title="Last modified">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                            ${escapeHtml(item.modified_at || "N/A")}
+                        </span>
+                        <span class="ab-meta-filename" title="${escapeHtml(item.filename || "")}">${escapeHtml(item.filename || "")}</span>
                     </div>
 
-                    <div class="file-actions">
+                    <div class="ab-card-actions">
                         <button type="button" class="ab-btn-card-action ab-btn-preview" data-preview-btn title="Preview dataset in table">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
                             <span>Preview</span>
                         </button>
                         <a href="/api/ausbildungen/file/${encodeURIComponent(item.filename || "")}/download" class="ab-btn-card-action ab-btn-download" title="Download dataset file" download>
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                             <span>Export</span>
                         </a>
-                        <button type="button" class="update-btn" data-update-button ${isRunning ? "hidden" : ""} title="Run web crawler for new emails">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-                            <span>Update</span>
-                        </button>
-                        <button type="button" class="stop-btn" data-stop-button ${isRunning ? "" : "hidden"}>Stop</button>
-                        <button type="button" class="ab-btn-card-action ab-btn-delete" data-delete-btn title="Delete dataset">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                        </button>
+                        ${renderUpdateSplitControl(isRunning)}
+                        <button type="button" class="stop-btn" data-stop-button ${isRunning ? "" : "hidden"}>Stop updating</button>
                         <a href="/captcha_solve" target="_blank" rel="noopener noreferrer" class="solver-link" data-solver-link hidden>Open CAPTCHA</a>
                     </div>
-                    <div class="update-status" data-update-status>${isRunning ? escapeHtml(buildStatusText(activeJob)) : ""}</div>
+                    <div class="ab-update-progress" data-update-progress ${isRunning ? "" : "hidden"}>
+                        <div class="ab-progress-track">
+                            <div class="ab-progress-fill" data-progress-fill style="width: ${isRunning ? computeJobPercent(activeJob) : 0}%"></div>
+                        </div>
+                    </div>
+                    <div class="update-status" data-update-status ${isRunning ? "" : "hidden"}>${isRunning ? escapeHtml(buildStatusText(activeJob)) : ""}</div>
                 </article>
+            `;
+        }
+
+        function renderTableView(items) {
+            const rowsHtml = items.map(item => {
+                const activeJob = item.active_job || null;
+                const isRunning = Boolean(activeJob && activeJob.is_running);
+                const isSelected = selectedFiles.has(item.filename);
+                const domainTitle = formatDomainTitle(item.domain_name);
+                const ext = getFileExtension(item.filename);
+                const rowsFormatted = formatRowCount(item);
+
+                return `
+                    <tr
+                        class="ab-table-row ${isSelected ? "is-selected" : ""}"
+                        data-export-card
+                        data-filename="${escapeHtml(item.filename || "")}"
+                        data-job-id="${escapeHtml((activeJob && activeJob.job_id) || "")}"
+                    >
+                        <td class="ab-td-check">
+                            <input type="checkbox" class="ab-card-checkbox" data-select-card ${isSelected ? "checked" : ""} aria-label="Select ${escapeHtml(item.filename || "")}">
+                        </td>
+                        <td class="ab-td-name">
+                            <div class="ab-table-title-wrap">
+                                <span class="ab-format-pill">${escapeHtml(ext)}</span>
+                                <div>
+                                    <div class="ab-table-title">${escapeHtml(domainTitle)}</div>
+                                    <div class="ab-table-sub" title="${escapeHtml(item.filename || "")}">${escapeHtml(item.filename || "")}</div>
+                                    <div class="ab-update-progress" data-update-progress ${isRunning ? "" : "hidden"}>
+                                        <div class="ab-progress-track">
+                                            <div class="ab-progress-fill" data-progress-fill style="width: ${isRunning ? computeJobPercent(activeJob) : 0}%"></div>
+                                        </div>
+                                    </div>
+                                    <div class="update-status" data-update-status>${isRunning ? escapeHtml(buildStatusText(activeJob)) : ""}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="ab-td-leads">
+                            <span class="ab-table-leads-pill" data-line-count>${escapeHtml(rowsFormatted)}</span>
+                        </td>
+                        <td class="ab-td-size">${escapeHtml(item.size_kb || 0)} KB</td>
+                        <td class="ab-td-date">${escapeHtml(item.modified_at || "N/A")}</td>
+                        <td class="ab-td-actions">
+                            <div class="ab-table-actions">
+                                <button type="button" class="ab-btn-card-action ab-btn-preview" data-preview-btn title="Preview dataset">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                    <span>Preview</span>
+                                </button>
+                                <a href="/api/ausbildungen/file/${encodeURIComponent(item.filename || "")}/download" class="ab-btn-card-action ab-btn-download" title="Download" download>
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                    <span>Export</span>
+                                </a>
+                                ${renderUpdateSplitControl(isRunning)}
+                                <button type="button" class="stop-btn" data-stop-button ${isRunning ? "" : "hidden"}>Stop</button>
+                                <a href="/captcha_solve" target="_blank" rel="noopener noreferrer" class="solver-link" data-solver-link hidden>CAPTCHA</a>
+                                <button type="button" class="ab-icon-delete-btn" data-delete-btn title="Delete dataset">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join("");
+
+            return `
+                <div class="ab-table-card">
+                    <table class="ab-datasets-table">
+                        <thead>
+                            <tr>
+                                <th class="ab-th-check"></th>
+                                <th>Dataset</th>
+                                <th>Leads</th>
+                                <th>Size</th>
+                                <th>Last Updated</th>
+                                <th class="ab-th-actions">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowsHtml}</tbody>
+                    </table>
+                </div>
             `;
         }
 
@@ -353,7 +580,15 @@
                     emptyState.textContent = "No exported apprenticeship datasets found.";
                 }
             }
-            filesRoot.innerHTML = filtered.map(renderFileCard).join("");
+            if (viewMode === "table") {
+                filesRoot.classList.remove("ab-files-grid");
+                filesRoot.classList.add("ab-files-table-wrap");
+                filesRoot.innerHTML = filtered.length ? renderTableView(filtered) : "";
+            } else {
+                filesRoot.classList.remove("ab-files-table-wrap");
+                filesRoot.classList.add("ab-files-grid");
+                filesRoot.innerHTML = filtered.map(renderFileCard).join("");
+            }
             updateStatsAndChips();
             updateBatchBar();
         }
@@ -370,29 +605,49 @@
             const lineCount = card.querySelector("[data-line-count]");
             const stopButton = card.querySelector("[data-stop-button]");
             const solverLink = card.querySelector("[data-solver-link]");
+            const progressWrap = card.querySelector("[data-update-progress]");
+            const progressFill = card.querySelector("[data-progress-fill]");
 
             if (!statusNodeLocal) return;
+            statusNodeLocal.hidden = false;
 
             if (lineCount && Number(job.result_rows || 0) > 0) {
-                lineCount.textContent = `${Number(job.result_rows || 0)} rows`;
+                const countFormatted = Number(job.result_rows || 0).toLocaleString();
+                lineCount.textContent = countFormatted;
             }
 
             card.dataset.jobId = String(job.job_id || "");
+            const mode = String(job.mode || "incremental");
 
             if (job.phase === "completed" && !job.is_running) {
                 const newRows = Number(job.new_rows_added || 0);
+                const enriched = Number(job.rows_enriched || 0);
+                const deduped = Number(job.duplicates_removed || 0);
+                const skipped = Number(job.skipped_known || 0);
                 statusNodeLocal.className = "update-status success";
-                statusNodeLocal.textContent = `Fertig. ${newRows} neue E-Mails hinzugefügt.`;
+                if (mode === "clean") {
+                    statusNodeLocal.textContent = `Bereinigt: ${deduped} Duplikate entfernt • ${enriched} Zeilen repariert.`;
+                } else if (mode === "enrich") {
+                    statusNodeLocal.textContent = `Fertig: ${enriched} Zeilen angereichert (+${Number(job.emails_found || 0)} E-Mails).`;
+                } else {
+                    const skipNote = skipped > 0 ? ` (${skipped} bekannt übersprungen)` : "";
+                    statusNodeLocal.textContent = `Fertig. ${newRows} neue Leads hinzugefügt${skipNote}.`;
+                }
                 setIdleState(card);
                 return;
             }
 
             if (job.phase === "stopped" && !job.is_running) {
                 const newRows = Number(job.new_rows_added || 0);
+                const enriched = Number(job.rows_enriched || 0);
                 statusNodeLocal.className = "update-status";
-                statusNodeLocal.textContent = newRows > 0
-                    ? `Gestoppt. ${newRows} neue E-Mails gespeichert.`
-                    : "Update gestoppt.";
+                if (mode === "enrich" && enriched > 0) {
+                    statusNodeLocal.textContent = `Gestoppt. ${enriched} Zeilen angereichert.`;
+                } else {
+                    statusNodeLocal.textContent = newRows > 0
+                        ? `Gestoppt. ${newRows} neue E-Mails gespeichert.`
+                        : "Update gestoppt.";
+                }
                 setIdleState(card);
                 return;
             }
@@ -405,6 +660,12 @@
             }
 
             setRunningState(card);
+            if (progressWrap) {
+                progressWrap.hidden = false;
+                if (progressFill) {
+                    progressFill.style.width = `${computeJobPercent(job)}%`;
+                }
+            }
             if (stopButton && job.phase === "stopping") {
                 stopButton.disabled = true;
                 stopButton.textContent = "Stoppen...";
@@ -501,14 +762,93 @@
             }
         }
 
+        // Preview state
+        let activeCols = [];
+        let colDisplayMode = "all"; // 'all' | 'compact' | 'custom'
+        let currentFilteredRows = [];
+
+        const CANONICAL_COL_ORDER = [
+            "title",
+            "company",
+            "location",
+            "city",
+            "email",
+            "phone",
+            "contact_person",
+            "arbeitsgeber",
+            "anrede",
+            "application_method",
+            "bewerbung_art",
+            "direct_application_url",
+            "employer_website",
+            "employer_website_url",
+            "job_listing_url",
+            "apply_url",
+            "form_link",
+            "bewerbung_link",
+            "source",
+            "start_date",
+            "published_date",
+            "vacancies",
+            "salary",
+            "validation_status",
+            "validation_reason",
+            "application_url_type",
+            "has_form",
+            "required_documents",
+            "extraction_status",
+            "postal_code",
+        ];
+
+        const COMPACT_PREFERRED_COLS = [
+            "title",
+            "company",
+            "location",
+            "email",
+            "application_method",
+            "direct_application_url",
+            "apply_url",
+            "job_listing_url",
+        ];
+
+        function sortColumnsByCanonical(rawCols) {
+            const rawSet = new Set(rawCols || []);
+            const ordered = [];
+            for (const col of CANONICAL_COL_ORDER) {
+                if (rawSet.has(col)) {
+                    ordered.push(col);
+                    rawSet.delete(col);
+                }
+            }
+            // Append any other columns in the dataset not in canonical list
+            for (const col of rawCols || []) {
+                if (rawSet.has(col)) {
+                    ordered.push(col);
+                }
+            }
+            return ordered;
+        }
+
+        function getCompactCols(orderedCols) {
+            const compact = [];
+            for (const col of COMPACT_PREFERRED_COLS) {
+                if (orderedCols.includes(col) && !compact.includes(col)) {
+                    compact.push(col);
+                    if (compact.length >= 6) break;
+                }
+            }
+            return compact.length > 0 ? compact : orderedCols.slice(0, 6);
+        }
+
         // Preview Modal functionality
         async function openPreview(filename) {
             if (!previewModal) return;
             previewTitle.textContent = "Loading preview...";
             previewFilename.textContent = filename;
             previewStats.textContent = "";
+            if (previewColCount) previewColCount.textContent = "";
             previewThead.innerHTML = "";
-            previewTbody.innerHTML = '<tr><td colspan="6" class="ab-table-empty">Lade Datensätze...</td></tr>';
+            previewTbody.innerHTML = '<tr><td colspan="8" class="ab-table-empty">Lade Datensätze...</td></tr>';
             previewModal.hidden = false;
             if (previewDownloadBtn) {
                 previewDownloadBtn.href = `/api/ausbildungen/file/${encodeURIComponent(filename)}/download`;
@@ -520,65 +860,220 @@
                     throw new Error(res.message || "Failed to load preview");
                 }
 
-                currentPreviewCols = res.columns || [];
+                currentPreviewCols = sortColumnsByCanonical(res.columns || []);
                 currentPreviewRows = res.rows || [];
+                currentFilteredRows = currentPreviewRows;
+
+                // Default to ALL columns so user can see every single column
+                colDisplayMode = "all";
+                activeCols = [...currentPreviewCols];
 
                 previewTitle.textContent = "Dataset Preview";
                 previewStats.textContent = `${res.total_rows} rows • ${res.email_count} with email`;
-                if (previewCounter) {
-                    previewCounter.textContent = `Showing ${currentPreviewRows.length} of ${res.total_rows} entries`;
-                }
 
+                syncColumnModeButtons();
+                buildColumnDropdownMenu();
+                updateCounterText();
                 renderPreviewRows(currentPreviewRows);
             } catch (err) {
-                previewTbody.innerHTML = `<tr><td colspan="6" class="ab-table-empty is-error">Failed to load preview: ${escapeHtml(err.message)}</td></tr>`;
+                previewTbody.innerHTML = `<tr><td colspan="8" class="ab-table-empty is-error">Failed to load preview: ${escapeHtml(err.message)}</td></tr>`;
             }
+        }
+
+        function syncColumnModeButtons() {
+            if (colModeAllBtn) colModeAllBtn.classList.toggle("active", colDisplayMode === "all");
+            if (colModeCompactBtn) colModeCompactBtn.classList.toggle("active", colDisplayMode === "compact");
+            if (previewColCount) {
+                previewColCount.textContent = `${activeCols.length} of ${currentPreviewCols.length} Columns`;
+            }
+        }
+
+        function updateCounterText() {
+            if (!previewCounter) return;
+            const q = previewSearch ? previewSearch.value.trim() : "";
+            if (q) {
+                previewCounter.textContent = `Filtered: ${currentFilteredRows.length} of ${currentPreviewRows.length} entries (${activeCols.length} cols)`;
+            } else {
+                previewCounter.textContent = `Showing ${currentPreviewRows.length} entries (${activeCols.length} cols)`;
+            }
+        }
+
+        function buildColumnDropdownMenu() {
+            if (!colCheckboxList) return;
+            colCheckboxList.innerHTML = currentPreviewCols.map(col => {
+                const checked = activeCols.includes(col) ? "checked" : "";
+                const label = formatColHeader(col);
+                return `
+                    <label class="ab-col-checkbox-item">
+                        <input type="checkbox" data-col="${escapeHtml(col)}" ${checked}>
+                        <span>${escapeHtml(label)}</span>
+                    </label>
+                `;
+            }).join("");
+
+            // Attach checkbox change handlers
+            colCheckboxList.querySelectorAll('input[type="checkbox"]').forEach(input => {
+                input.addEventListener("change", (e) => {
+                    const col = e.target.dataset.col;
+                    if (e.target.checked) {
+                        if (!activeCols.includes(col)) {
+                            // Maintain canonical ordering
+                            const next = new Set([...activeCols, col]);
+                            activeCols = currentPreviewCols.filter(c => next.has(c));
+                        }
+                    } else {
+                        if (activeCols.length <= 1) {
+                            e.target.checked = true;
+                            return; // keep at least 1 column
+                        }
+                        activeCols = activeCols.filter(c => c !== col);
+                    }
+                    colDisplayMode = "custom";
+                    syncColumnModeButtons();
+                    updateCounterText();
+                    renderPreviewRows(currentFilteredRows);
+                });
+            });
+        }
+
+        function updateDropdownCheckboxes() {
+            if (!colCheckboxList) return;
+            colCheckboxList.querySelectorAll('input[type="checkbox"]').forEach(input => {
+                input.checked = activeCols.includes(input.dataset.col);
+            });
+        }
+
+        function formatUrlCell(val, col) {
+            if (!val || typeof val !== "string") return "-";
+            const trimmed = val.trim();
+            if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+                return escapeHtml(trimmed);
+            }
+            let label = "Open ↗";
+            try {
+                const u = new URL(trimmed);
+                if (col === "direct_application_url") {
+                    label = "Apply URL ↗";
+                } else if (col === "form_link") {
+                    label = "Form ↗";
+                } else if (col === "employer_website" || col === "employer_website_url") {
+                    label = u.hostname.replace(/^www\./, "");
+                } else if (col === "job_listing_url") {
+                    label = "Job Ad ↗";
+                } else {
+                    label = u.hostname.replace(/^www\./, "");
+                }
+            } catch {
+                label = "Open ↗";
+            }
+            return `<a href="${escapeHtml(trimmed)}" target="_blank" rel="noopener noreferrer" class="ab-cell-link-pill" title="${escapeHtml(trimmed)}"><span>${escapeHtml(label)}</span> ↗</a>`;
         }
 
         function renderPreviewRows(rows) {
             if (!previewThead || !previewTbody) return;
 
-            // Preferred columns display
-            const targetCols = ["title", "company", "location", "email", "application_method", "apply_url"];
-            const availableCols = targetCols.filter(col => currentPreviewCols.includes(col));
-            const colsToShow = availableCols.length > 0 ? availableCols : currentPreviewCols.slice(0, 6);
+            const colsToShow = activeCols.length > 0 ? activeCols : currentPreviewCols;
 
-            // Render Header
+            // Render Header with Sticky Index (#)
             previewThead.innerHTML = `
                 <tr>
-                    <th style="width: 40px;">#</th>
+                    <th class="ab-col-idx">#</th>
                     ${colsToShow.map(c => `<th>${escapeHtml(formatColHeader(c))}</th>`).join("")}
                 </tr>
             `;
 
-            if (rows.length === 0) {
+            if (!rows || rows.length === 0) {
                 previewTbody.innerHTML = `<tr><td colspan="${colsToShow.length + 1}" class="ab-table-empty">No matching rows in preview.</td></tr>`;
                 return;
             }
 
             previewTbody.innerHTML = rows.map((r, idx) => {
                 const email = String(r.email || "").trim();
-                const hasEmail = Boolean(email && email.includes("@"));
-                const appMethod = String(r.application_method || r.bewerbung_art || "email").toLowerCase();
+                const hasEmail = Boolean(email && email.includes("@") && !email.toLowerCase().includes("failed"));
+                const appMethod = String(r.application_method || r.bewerbung_art || "").toLowerCase().trim();
 
                 return `
                     <tr>
                         <td class="ab-row-idx">${idx + 1}</td>
                         ${colsToShow.map(col => {
-                            const val = String(r[col] || "").trim();
+                            const val = String(r[col] !== undefined && r[col] !== null ? r[col] : "").trim();
+
                             if (col === "email") {
                                 return hasEmail
-                                    ? `<td><span class="ab-email-badge">✉️ ${escapeHtml(val)}</span></td>`
+                                    ? `<td><span class="ab-email-badge" title="${escapeHtml(val)}">✉️ ${escapeHtml(val)}</span></td>`
                                     : `<td><span class="ab-no-email">No email</span></td>`;
                             }
-                            if (col === "application_method") {
-                                const pillClass = appMethod.includes("form") ? "method-form" : (appMethod.includes("portal") ? "method-portal" : "method-email");
-                                return `<td><span class="ab-method-pill ${pillClass}">${escapeHtml(val || appMethod)}</span></td>`;
+
+                            if (col === "phone") {
+                                return val
+                                    ? `<td><a href="tel:${escapeHtml(val)}" class="ab-phone-badge" title="${escapeHtml(val)}">📞 ${escapeHtml(val)}</a></td>`
+                                    : `<td><span class="ab-no-email">-</span></td>`;
                             }
-                            if (col === "apply_url" || col === "form_link" || col === "bewerbung_link") {
-                                return val ? `<td><a href="${escapeHtml(val)}" target="_blank" rel="noopener noreferrer" class="ab-cell-link">Open ↗</a></td>` : "<td>-</td>";
+
+                            if (col === "application_method" || col === "bewerbung_art") {
+                                const m = val.toLowerCase() || appMethod || "unknown";
+                                let pillClass = "method-unknown";
+                                if (m.includes("form") || m === "direct_application_form") pillClass = "method-form";
+                                else if (m.includes("portal") || m.includes("login")) pillClass = "method-portal";
+                                else if (m.includes("both")) pillClass = "method-both";
+                                else if (m.includes("email") || m.includes("e-mail")) pillClass = "method-email";
+                                else if (m.includes("link") || m.includes("external")) pillClass = "method-external";
+                                return `<td><span class="ab-method-pill ${pillClass}">${escapeHtml(val || appMethod || "-")}</span></td>`;
                             }
-                            return `<td class="ab-cell-text" title="${escapeHtml(val)}">${escapeHtml(val || "-")}</td>`;
+
+                            if (col === "validation_status" || col === "extraction_status") {
+                                const st = val.toLowerCase();
+                                let stClass = "status-no-contact";
+                                let stLabel = val || "No Status";
+                                if (st.includes("verified_email") || st === "email") {
+                                    stClass = "status-verified-email";
+                                    stLabel = "✓ Verified Email";
+                                } else if (st.includes("verified_form") || st.includes("application_form")) {
+                                    stClass = "status-verified-form";
+                                    stLabel = "✓ Verified Form";
+                                } else if (st.includes("verified_application_link") || st.includes("verified_link")) {
+                                    stClass = "status-verified-link";
+                                    stLabel = "✓ Verified Link";
+                                } else if (st.includes("portal_login") || st.includes("portal")) {
+                                    stClass = "status-portal";
+                                    stLabel = "Portal Login";
+                                } else if (st.includes("region_restricted")) {
+                                    stClass = "status-region";
+                                    stLabel = "Region Restricted";
+                                } else if (st.includes("manual_review") || st.includes("manual_required")) {
+                                    stClass = "status-manual-review";
+                                    stLabel = "⚠ Manual Review";
+                                } else if (st.includes("no_contact")) {
+                                    stClass = "status-no-contact";
+                                    stLabel = "No Contact";
+                                }
+                                return `<td><span class="ab-status-badge ${stClass}">${escapeHtml(stLabel)}</span></td>`;
+                            }
+
+                            if (col === "source") {
+                                return `<td><span class="ab-source-pill" title="${escapeHtml(val)}">${escapeHtml(val || "-")}</span></td>`;
+                            }
+
+                            if (col === "has_form") {
+                                const isTrue = val === "True" || val === "true" || val === "1" || r[col] === true;
+                                return `<td><span class="ab-bool-badge ${isTrue ? 'is-true' : 'is-false'}">${isTrue ? 'Yes' : 'No'}</span></td>`;
+                            }
+
+                            if (
+                                col === "direct_application_url" ||
+                                col === "employer_website" ||
+                                col === "employer_website_url" ||
+                                col === "job_listing_url" ||
+                                col === "apply_url" ||
+                                col === "form_link" ||
+                                col === "bewerbung_link" ||
+                                col === "url"
+                            ) {
+                                return `<td>${formatUrlCell(val, col)}</td>`;
+                            }
+
+                            const cellClass = `ab-cell-text is-${col}`;
+                            return `<td class="${cellClass}" title="${escapeHtml(val)}">${escapeHtml(val || "-")}</td>`;
                         }).join("")}
                     </tr>
                 `;
@@ -592,35 +1087,142 @@
                 location: "Location",
                 city: "City",
                 email: "Email Address",
+                phone: "Telephone",
+                contact_person: "Contact Person",
+                arbeitsgeber: "Contact Person",
+                anrede: "Salutation",
                 application_method: "Application Method",
-                apply_url: "Link / Portal",
-                source: "Source",
+                bewerbung_art: "Method",
+                direct_application_url: "Direct Application URL",
+                employer_website: "Employer Website",
+                employer_website_url: "Employer Website",
+                job_listing_url: "Job Listing Link",
+                apply_url: "Apply Link",
+                form_link: "Form Link",
+                bewerbung_link: "Application Link",
+                source: "Source Portal",
+                start_date: "Start Date",
+                published_date: "Published Date",
+                vacancies: "Vacancies",
+                salary: "Salary",
+                validation_status: "Validation Status",
+                validation_reason: "Validation Reason",
+                application_url_type: "URL Type",
+                has_form: "Has Online Form",
+                required_documents: "Documents",
+                extraction_status: "Status",
+                postal_code: "PLZ",
             };
-            return map[col] || col.charAt(0).toUpperCase() + col.slice(1);
+            return map[col] || col.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
         }
 
         function closePreview() {
             if (previewModal) previewModal.hidden = true;
             if (previewSearch) previewSearch.value = "";
+            if (modalDialog) modalDialog.classList.remove("is-maximized");
+            if (maximizeLabel) maximizeLabel.textContent = "Expand";
+            if (colDropdownMenu) colDropdownMenu.hidden = true;
             currentPreviewRows = [];
+            currentFilteredRows = [];
         }
 
-        // Search inside preview
+        // Search inside preview across all columns
         if (previewSearch) {
             previewSearch.addEventListener("input", (e) => {
                 const q = e.target.value.toLowerCase().trim();
                 if (!q) {
+                    currentFilteredRows = currentPreviewRows;
                     renderPreviewRows(currentPreviewRows);
-                    if (previewCounter) previewCounter.textContent = `Showing ${currentPreviewRows.length} entries`;
+                    updateCounterText();
                     return;
                 }
-                const filtered = currentPreviewRows.filter(row => {
+                currentFilteredRows = currentPreviewRows.filter(row => {
                     return Object.values(row).some(v => String(v || "").toLowerCase().includes(q));
                 });
-                renderPreviewRows(filtered);
-                if (previewCounter) previewCounter.textContent = `Filtered: ${filtered.length} of ${currentPreviewRows.length} entries`;
+                renderPreviewRows(currentFilteredRows);
+                updateCounterText();
             });
         }
+
+        // Maximize / Expand button handler
+        if (previewMaximizeBtn) {
+            previewMaximizeBtn.addEventListener("click", () => {
+                if (!modalDialog) return;
+                const isMax = modalDialog.classList.toggle("is-maximized");
+                if (maximizeLabel) {
+                    maximizeLabel.textContent = isMax ? "Collapse" : "Expand";
+                }
+            });
+        }
+
+        // Column View Mode Toggle: All Columns
+        if (colModeAllBtn) {
+            colModeAllBtn.addEventListener("click", () => {
+                colDisplayMode = "all";
+                activeCols = [...currentPreviewCols];
+                syncColumnModeButtons();
+                updateDropdownCheckboxes();
+                updateCounterText();
+                renderPreviewRows(currentFilteredRows);
+            });
+        }
+
+        // Column View Mode Toggle: Compact (6)
+        if (colModeCompactBtn) {
+            colModeCompactBtn.addEventListener("click", () => {
+                colDisplayMode = "compact";
+                activeCols = getCompactCols(currentPreviewCols);
+                syncColumnModeButtons();
+                updateDropdownCheckboxes();
+                updateCounterText();
+                renderPreviewRows(currentFilteredRows);
+            });
+        }
+
+        // Column Dropdown Toggle
+        if (colDropdownBtn) {
+            colDropdownBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                if (colDropdownMenu) {
+                    colDropdownMenu.hidden = !colDropdownMenu.hidden;
+                }
+            });
+        }
+
+        // Column Quick Actions: Select All
+        if (colSelectAllBtn) {
+            colSelectAllBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                colDisplayMode = "all";
+                activeCols = [...currentPreviewCols];
+                syncColumnModeButtons();
+                updateDropdownCheckboxes();
+                updateCounterText();
+                renderPreviewRows(currentFilteredRows);
+            });
+        }
+
+        // Column Quick Actions: Reset (Compact)
+        if (colSelectResetBtn) {
+            colSelectResetBtn.addEventListener("click", (e) => {
+                e.stopPropagation();
+                colDisplayMode = "compact";
+                activeCols = getCompactCols(currentPreviewCols);
+                syncColumnModeButtons();
+                updateDropdownCheckboxes();
+                updateCounterText();
+                renderPreviewRows(currentFilteredRows);
+            });
+        }
+
+        // Close column dropdown on outside click
+        document.addEventListener("click", (e) => {
+            if (colDropdownMenu && !colDropdownMenu.hidden) {
+                if (!colDropdownMenu.contains(e.target) && !colDropdownBtn.contains(e.target)) {
+                    colDropdownMenu.hidden = true;
+                }
+            }
+        });
 
         if (previewCloseBtn) previewCloseBtn.addEventListener("click", closePreview);
         if (previewFooterClose) previewFooterClose.addEventListener("click", closePreview);
@@ -702,22 +1304,35 @@
         }
 
         // Crawler Update actions
-        async function startUpdate(button) {
+        async function startUpdate(button, mode = "incremental") {
             const card = button.closest("[data-export-card]");
             const filename = String((card && card.dataset.filename) || "").trim();
             const statusNodeLocal = card && card.querySelector("[data-update-status]");
+            const progressWrap = card && card.querySelector("[data-update-progress]");
+            const progressFill = card && card.querySelector("[data-progress-fill]");
 
             if (!card || !filename || !statusNodeLocal) return;
 
             setRunningState(card);
+            statusNodeLocal.hidden = false;
             statusNodeLocal.className = "update-status";
-            statusNodeLocal.textContent = "Starting update...";
+            if (mode === "clean") {
+                statusNodeLocal.textContent = "Bereinige & dedupliziere...";
+            } else if (mode === "enrich") {
+                statusNodeLocal.textContent = "Starte Anreicherung unvollständiger Zeilen...";
+            } else {
+                statusNodeLocal.textContent = "Suche nach neuen Stellen...";
+            }
+            if (progressWrap) {
+                progressWrap.hidden = false;
+                if (progressFill) progressFill.style.width = "6%";
+            }
 
             try {
                 const payload = await fetchJson("/api/ausbildungen/update", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ filename }),
+                    body: JSON.stringify({ filename, mode }),
                 });
                 if (!payload.success || !payload.job_id) {
                     throw new Error(payload.message || "Failed to start update");
@@ -765,6 +1380,28 @@
             const card = event.target.closest("[data-export-card]");
             const filename = card ? card.dataset.filename : "";
 
+            // Update mode dropdown toggle
+            const menuToggle = event.target.closest("[data-update-menu-toggle]");
+            if (menuToggle && card) {
+                event.stopPropagation();
+                const menu = card.querySelector("[data-update-menu]");
+                const wasOpen = menu && !menu.hidden;
+                filesRoot.querySelectorAll("[data-update-menu]").forEach(m => { m.hidden = true; });
+                if (menu) menu.hidden = Boolean(wasOpen);
+                return;
+            }
+
+            // Update mode option click
+            const modeItem = event.target.closest("[data-update-mode]");
+            if (modeItem && card) {
+                event.stopPropagation();
+                const chosenMode = modeItem.dataset.updateMode || "incremental";
+                const menu = card.querySelector("[data-update-menu]");
+                if (menu) menu.hidden = true;
+                startUpdate(modeItem, chosenMode).catch(() => {});
+                return;
+            }
+
             // Checkbox click
             const checkbox = event.target.closest("[data-select-card]");
             if (checkbox && filename) {
@@ -793,10 +1430,10 @@
                 return;
             }
 
-            // Update button
+            // Update button (default incremental mode)
             const updateButton = event.target.closest("[data-update-button]");
             if (updateButton) {
-                startUpdate(updateButton).catch(() => {});
+                startUpdate(updateButton, "incremental").catch(() => {});
                 return;
             }
 
@@ -804,6 +1441,12 @@
             const stopButton = event.target.closest("[data-stop-button]");
             if (stopButton) {
                 stopUpdate(stopButton).catch(() => {});
+            }
+        });
+
+        document.addEventListener("click", (event) => {
+            if (!event.target.closest("[data-update-split]")) {
+                filesRoot.querySelectorAll("[data-update-menu]").forEach(m => { m.hidden = true; });
             }
         });
 
@@ -832,6 +1475,28 @@
                 activeTopic = chip.dataset.topic || "all";
                 renderGrid();
             });
+        }
+
+        if (sortSelect) {
+            sortSelect.addEventListener("change", (e) => {
+                sortBy = e.target.value || "newest";
+                renderGrid();
+            });
+        }
+
+        function setViewMode(mode) {
+            viewMode = mode === "table" ? "table" : "grid";
+            if (viewGridBtn) viewGridBtn.classList.toggle("is-active", viewMode === "grid");
+            if (viewTableBtn) viewTableBtn.classList.toggle("is-active", viewMode === "table");
+            renderGrid();
+        }
+
+        if (viewGridBtn) {
+            viewGridBtn.addEventListener("click", () => setViewMode("grid"));
+        }
+
+        if (viewTableBtn) {
+            viewTableBtn.addEventListener("click", () => setViewMode("table"));
         }
 
         // 3. Batch Merge Bar

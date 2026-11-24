@@ -10,6 +10,8 @@ from .supabase_onboarding import supabase_onboarding_bp
 from .ai_settings import ai_settings_bp
 from .whatsapp import whatsapp_bp
 from .conductor import conductor_bp
+from .cover_letters import cover_letters_bp
+from .search import search_bp
 
 __all__ = [
     "health_bp",
@@ -23,5 +25,6 @@ __all__ = [
     "ai_settings_bp",
     "whatsapp_bp",
     "conductor_bp",
+    "cover_letters_bp",
+    "search_bp",
 ]
-

@@ -1352,9 +1352,9 @@
                         </div>
 
                         <div class="sp-card-actions">
-                            <button type="button" class="sp-btn-action-ghost sp-btn-action-details" data-action="details" data-app-id="${escapeHtml(app.id)}">
-                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
-                                <span>Details</span>
+                            <button type="button" class="sp-btn-action-ghost sp-btn-action-documents" data-action="documents" data-app-id="${escapeHtml(app.id)}" title="View candidate documents">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                                <span>Documents</span>
                             </button>
                             <button type="button" class="sp-btn-action-primary" data-action="next-step" data-app-id="${escapeHtml(app.id)}">Next Step</button>
                             ${renderOnboardingAction(app)}
@@ -1406,7 +1406,7 @@
                             ` : ""}
                             ${vis.language ? `<span class="sp-tag-pill sp-pill-lang">${escapeHtml(app.language_level)}</span>` : ""}
                             ${vis.pack ? `<strong class="sp-price-val">${escapeHtml(app.price)}</strong>` : ""}
-                            ${vis.documents ? `<span class="sp-tag-pill sp-pill-doc">${app.document_count} ${app.document_count === 1 ? "Doc" : "Docs"}</span>` : ""}
+                            ${vis.documents ? `<span class="sp-tag-pill sp-pill-doc" data-action="documents" data-app-id="${escapeHtml(app.id)}" style="cursor:pointer;" title="View candidate documents">${app.document_count} ${app.document_count === 1 ? "Doc" : "Docs"}</span>` : ""}
                             ${vis.date ? `<span class="sp-compact-sub">${escapeHtml(app.created_at_display)}</span>` : ""}
                         </div>
 
@@ -1416,7 +1416,7 @@
                             ${!app.is_payed ? `
                                 <button type="button" class="sp-btn-action-ghost" data-action="pay" data-app-id="${escapeHtml(app.id)}" title="Mark as Paid">✓ Mark Paid</button>
                             ` : ""}
-                            <button type="button" class="sp-btn-action-ghost" data-action="details" data-app-id="${escapeHtml(app.id)}">Details</button>
+                            <button type="button" class="sp-btn-action-ghost" data-action="documents" data-app-id="${escapeHtml(app.id)}" title="View candidate documents">Documents</button>
                             <button type="button" class="sp-btn-action-primary" data-action="next-step" data-app-id="${escapeHtml(app.id)}">Next Step</button>
                         </div>
                     </div>
@@ -1472,7 +1472,7 @@
                         </td>
                         <td data-col="bank">${escapeHtml(app.bank)}</td>
                         <td data-col="status">${statusBadge}</td>
-                        <td data-col="documents"><span class="sp-tag-pill sp-pill-doc">${app.document_count} ${app.document_count === 1 ? "Doc" : "Docs"}</span></td>
+                        <td data-col="documents"><span class="sp-tag-pill sp-pill-doc" data-action="documents" data-app-id="${escapeHtml(app.id)}" style="cursor:pointer;" title="View candidate documents">${app.document_count} ${app.document_count === 1 ? "Doc" : "Docs"}</span></td>
                         <td data-col="date"><small>${escapeHtml(app.created_at_display)}</small></td>
                         <td class="td-actions">
                             <div style="display: flex; gap: 6px; justify-content: flex-end; align-items: center;">
@@ -1480,7 +1480,7 @@
                                 ${!app.is_payed ? `
                                     <button type="button" class="sp-btn-action-ghost" data-action="pay" data-app-id="${escapeHtml(app.id)}" title="Mark as Paid">✓ Mark Paid</button>
                                 ` : ""}
-                                <button type="button" class="sp-btn-action-ghost" data-action="details" data-app-id="${escapeHtml(app.id)}">Details</button>
+                                <button type="button" class="sp-btn-action-ghost" data-action="documents" data-app-id="${escapeHtml(app.id)}" title="View candidate documents">Documents</button>
                                 <button type="button" class="sp-btn-action-primary" data-action="next-step" data-app-id="${escapeHtml(app.id)}">Next Step</button>
                             </div>
                         </td>
@@ -2495,6 +2495,7 @@
             if (!id) return;
 
             if (action === "details") openDetailsDrawer(id);
+            if (action === "documents") openDetailsDrawer(id, "documents");
             if (action === "next-step") nextStep(id);
             if (action === "pay") markAsPayed(id);
             if (action === "onboard") handleOnboardCandidate(id);

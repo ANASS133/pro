@@ -1,0 +1,987 @@
+<section id="create-anschreibens-section" class="app-section" data-section="create-anschreibens" {% if
+                    initial_section !="create-anschreibens" %}hidden{% endif %}>
+                    <div id="create-anschreibens-error" class="section-status is-error" hidden></div>
+
+                    <div class="as-studio-wrapper" id="create-anschreibens-studio" data-display-mode="split">
+                        <!-- Top Experience Mode Switcher (Simple Generator vs Advanced Studio) -->
+                        <div class="as-experience-toggle-bar">
+                            <button type="button" class="as-exp-tab is-active" id="as-exp-quick-tab">
+                                <span class="as-exp-icon">⚡</span>
+                                <span>Quick Generator (Client &amp; CV)</span>
+                            </button>
+                            <button type="button" class="as-exp-tab" id="as-exp-advanced-tab">
+                                <span class="as-exp-icon">🛠️</span>
+                                <span>Advanced Studio &amp; Templates</span>
+                            </button>
+                        </div>
+
+                        <!-- Top Application Context (shown when loaded from candidate link) -->
+                        <div id="create-anschreibens-applicationSummary" class="as-applicant-banner" hidden>
+                            <div class="as-applicant-avatar">AS</div>
+                            <div class="as-applicant-info">
+                                <div class="as-applicant-name-row">
+                                    <strong id="create-anschreibens-summaryName">Candidate</strong>
+                                    <span class="as-badge-soft" id="create-anschreibens-summaryBereich">Field</span>
+                                </div>
+                                <div class="as-applicant-meta-row">
+                                    <span id="create-anschreibens-summaryEmail">email@example.com</span>
+                                    <span class="as-stat-sep">•</span>
+                                    <span id="create-anschreibens-summaryWhatsapp">+49 ...</span>
+                                    <span class="as-stat-sep">•</span>
+                                    <span id="create-anschreibens-summaryBewerbungen">0 Applications</span>
+                                    <span class="as-stat-sep">•</span>
+                                    <span id="create-anschreibens-summaryDocuments">0 Documents</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 1. STUDIO HEADER -->
+                        <header class="as-header">
+                            <div class="as-header-main">
+                                <div class="as-title-group">
+                                    <div class="as-title-row">
+                                        <span class="as-kicker-badge">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2.5">
+                                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z">
+                                                </path>
+                                                <polyline points="14 2 14 8 20 8"></polyline>
+                                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                            </svg>
+                                            Cover Letter Studio
+                                        </span>
+                                        <h2 class="as-main-title">Bulk Cover Letters &amp; PDF Generator</h2>
+                                        <div class="as-save-indicator" id="create-anschreibens-saveStatusPill">
+                                            <span class="as-save-dot"></span>
+                                            <span class="as-save-text">Ready</span>
+                                        </div>
+                                    </div>
+                                    <p class="as-subtitle">Create personalized cover letters with dynamic placeholders,
+                                        AI enhancements, and print-ready PDF stationery.</p>
+                                </div>
+
+                                <!-- Display Mode Switcher (Segmented Control) -->
+                                <div class="as-mode-switcher" role="radiogroup" aria-label="Display mode">
+                                    <button type="button" class="as-mode-btn" data-mode="editor"
+                                        title="Full editor width for focused writing">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <path d="M12 20h9"></path>
+                                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                                        </svg>
+                                        <span>Editor</span>
+                                    </button>
+                                    <button type="button" class="as-mode-btn is-active" data-mode="split"
+                                        title="Split view: Editor &amp; Live PDF Preview">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                            <line x1="12" y1="3" x2="12" y2="21"></line>
+                                        </svg>
+                                        <span>Split</span>
+                                    </button>
+                                    <button type="button" class="as-mode-btn" data-mode="preview"
+                                        title="Full preview of generated PDF">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                            <circle cx="12" cy="12" r="3"></circle>
+                                        </svg>
+                                        <span>Preview</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Header Subbar: Source Selector & Quick Data Drawers -->
+                            <div class="as-header-subbar">
+                                <div class="as-source-control">
+                                    <div class="as-source-label-wrap">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                                            <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+                                            <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+                                        </svg>
+                                        <label for="create-anschreibens-exportSelect">Data Source:</label>
+                                    </div>
+                                    <select id="create-anschreibens-exportSelect" class="as-source-select">
+                                        <option value="">Please select export file...</option>
+                                    </select>
+                                    <button id="create-anschreibens-loadExportBtn" class="as-btn-load" type="button">
+                                        <span>Load</span>
+                                    </button>
+
+                                    <!-- Active File Info Pill -->
+                                    <div id="create-anschreibens-fileInfo" class="as-file-info-pill" hidden>
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                            <polyline points="14 2 14 8 20 8"></polyline>
+                                        </svg>
+                                        <span id="create-anschreibens-fileName" class="as-file-name"></span>
+                                        <span class="as-file-count"><b id="create-anschreibens-rowCount">0</b>
+                                            Contacts</span>
+                                    </div>
+                                </div>
+
+                                <!-- Studio Candidate Selector -->
+                                <div class="as-candidate-control" style="display:flex; align-items:center; gap:8px;">
+                                    <div class="as-source-label-wrap"
+                                        style="display:flex; align-items:center; gap:6px; font-weight:600; color:#475569; font-size:13px;">
+                                        <span>👤</span>
+                                        <label for="create-anschreibens-clientSelect">Candidate:</label>
+                                    </div>
+                                    <select id="create-anschreibens-clientSelect" class="as-source-select"
+                                        style="min-width:180px;">
+                                        <option value="">Select candidate profile...</option>
+                                    </select>
+                                </div>
+
+                                <!-- Quick Inspect Drawers -->
+                                <div class="as-header-drawers">
+                                    <details class="as-drawer-dropdown" id="as-drawer-columns">
+                                        <summary class="as-drawer-btn">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2">
+                                                <line x1="18" y1="20" x2="18" y2="10"></line>
+                                                <line x1="12" y1="20" x2="12" y2="4"></line>
+                                                <line x1="6" y1="20" x2="6" y2="14"></line>
+                                            </svg>
+                                            <span>Columns &amp; Data</span>
+                                        </summary>
+                                        <div class="as-drawer-panel">
+                                            <div class="as-drawer-panel-head">Available Data Columns</div>
+                                            <div id="create-anschreibens-columnList"
+                                                class="anschreiben-column-list-compact"></div>
+                                            <div id="create-anschreibens-dataPreview"
+                                                class="anschreiben-data-preview-compact" hidden>
+                                                <div id="create-anschreibens-previewTable"
+                                                    class="anschreiben-preview-table-compact"></div>
+                                            </div>
+                                        </div>
+                                    </details>
+
+                                    <details class="as-drawer-dropdown" id="create-anschreibens-viewerPanel">
+                                        <summary class="as-drawer-btn">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2">
+                                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z">
+                                                </path>
+                                                <polyline points="14 2 14 8 20 8"></polyline>
+                                            </svg>
+                                            <span>Source PDF</span>
+                                            <span id="create-anschreibens-documentViewerTitle"
+                                                class="as-active-doc-badge"></span>
+                                        </summary>
+                                        <div class="as-drawer-panel as-doc-panel">
+                                            <div id="create-anschreibens-sourcePrompt" class="drawer-empty-text">No
+                                                source document selected yet.</div>
+                                            <div id="create-anschreibens-pdfContainer"
+                                                class="anschreiben-viewer-compact" hidden>
+                                                <div class="anschreiben-viewer-subbar">
+                                                    <div id="create-anschreibens-documentList"
+                                                        class="anschreiben-document-list-compact"></div>
+                                                    <a id="create-anschreibens-documentOpenLink" href="#"
+                                                        target="_blank" class="as-doc-open-link">
+                                                        <span>Open in new tab ↗</span>
+                                                    </a>
+                                                </div>
+                                                <iframe id="create-anschreibens-pdfIframe" class="compact-doc-iframe"
+                                                    title="PDF Preview"></iframe>
+                                            </div>
+                                        </div>
+                                    </details>
+                                </div>
+                            </div>
+                        </header>
+
+                        <!-- 2. INTELLIGENT TOOLBAR (3 Groupings) - Shown in Advanced Studio -->
+                        <nav class="as-smart-toolbar" id="as-advanced-toolbar" aria-label="Editor Tools" hidden>
+                            <!-- Group 1: KI-Assistent -->
+                            <div class="as-tool-group">
+                                <span class="as-group-title">AI Assistant</span>
+                                <div class="as-group-items">
+                                    <button id="create-anschreibens-aiTemplatizeBtn" type="button"
+                                        class="as-tool-btn as-btn-ai"
+                                        title="Detects text and automatically inserts {{Unternehmen}}, {{salutation}} etc.">
+                                        <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2.2">
+                                            <path
+                                                d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z" />
+                                        </svg>
+                                        <span>AI Placeholders</span>
+                                    </button>
+                                    <button id="create-anschreibens-atsTailorBtn" type="button"
+                                        class="as-tool-btn as-btn-luna"
+                                        title="Optimize ATS keywords with GPT Luna (~$0.00003)">
+                                        <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2.2">
+                                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                                        </svg>
+                                        <span>ATS Tailor</span>
+                                    </button>
+                                    <button id="create-anschreibens-goldenHookBtn" type="button"
+                                        class="as-tool-btn as-btn-golden"
+                                        title="Why this company? Golden Hook opening (~$0.000015)">
+                                        <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2.2">
+                                            <path
+                                                d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z">
+                                            </path>
+                                        </svg>
+                                        <span>Golden Hook</span>
+                                    </button>
+                                    <span id="create-anschreibens-aiTemplatizeStatus" class="tool-status-inline"
+                                        hidden>AI in progress...</span>
+                                </div>
+                            </div>
+
+                            <div class="as-tool-sep"></div>
+
+                            <!-- Group 2: Datenimport -->
+                            <div class="as-tool-group">
+                                <span class="as-group-title">Data Import</span>
+                                <div class="as-group-items">
+                                    <span class="as-tool-subtext">From PDF p.:</span>
+                                    <input type="number" id="create-anschreibens-extractPageInput" min="1" value="1"
+                                        class="as-page-input">
+                                    <button id="create-anschreibens-extractBtn" type="button"
+                                        class="as-tool-btn as-btn-subtle"
+                                        title="Extract text from specific PDF page">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                            <polyline points="7 10 12 15 17 10"></polyline>
+                                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                                        </svg>
+                                        <span>Extract</span>
+                                    </button>
+                                    <span id="create-anschreibens-extractStatus" class="tool-status-inline"
+                                        hidden>...</span>
+                                </div>
+                            </div>
+
+                            <div class="as-tool-sep"></div>
+
+                            <!-- Group 3: Dokumentdesign -->
+                            <div class="as-tool-group">
+                                <span class="as-group-title">Document Design</span>
+                                <div class="as-group-items">
+                                    <button type="button" id="create-anschreibens-bgTemplatesBtn"
+                                        class="as-tool-btn as-btn-templates"
+                                        title="Choose Pre-Made Stationery Templates">
+                                        <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <path
+                                                d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z">
+                                            </path>
+                                        </svg>
+                                        <span>🎨 Templates</span>
+                                    </button>
+                                    <div id="create-anschreibens-designDropZone" class="as-drop-zone-pill"
+                                        title="Upload Custom Background PDF">
+                                        <input type="file" id="create-anschreibens-designFileInput" accept=".pdf"
+                                            hidden>
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                                            <polyline points="21 15 16 10 5 21"></polyline>
+                                        </svg>
+                                        <span>Custom PDF</span>
+                                    </div>
+                                    <div id="create-anschreibens-designFileInfo" class="as-design-active-pill" hidden>
+                                        <span id="create-anschreibens-designFileName"></span>
+                                        <button type="button" id="create-anschreibens-removeDesignBtn"
+                                            class="as-file-remove" title="Remove background">&times;</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </nav>
+
+                        <!-- 3. MAIN WORKSPACE AREA (Editor + Collapsible Placeholder Drawer + Split/Preview Panel) -->
+                        <div class="as-workspace">
+                            <!-- Left Workspace: Variants + Placeholder Drawer + Document Editor -->
+                            <div class="as-editor-pane">
+
+                                <!-- SIMPLE QUICK GENERATOR PANEL (Active & Default) -->
+                                <div class="as-quick-generator-panel" id="as-quick-generator-panel">
+                                    <div class="as-simple-card-header">
+                                        <div class="as-simple-step-badge">1</div>
+                                        <div>
+                                            <h3 class="as-simple-card-title">Select Client</h3>
+                                            <p class="as-simple-card-desc">Choose a candidate from your applications to load their uploaded CV</p>
+                                        </div>
+                                    </div>
+                                    <div class="as-simple-field-group">
+                                        <select id="as-quick-client-select" class="as-simple-select">
+                                            <option value="">Select candidate profile...</option>
+                                        </select>
+                                    </div>
+
+                                    <!-- Detected CV Details Card (Loaded automatically upon selection) -->
+                                    <div id="as-quick-cv-card" class="as-quick-cv-card" hidden>
+                                        <div class="as-cv-header">
+                                            <div class="as-cv-avatar" id="as-quick-cv-avatar">👤</div>
+                                            <div class="as-cv-meta">
+                                                <div class="as-cv-name-row">
+                                                    <strong id="as-quick-cv-name" class="as-cv-name">Candidate</strong>
+                                                    <span class="as-cv-badge" id="as-quick-cv-badge">✓ CV Parsed</span>
+                                                </div>
+                                                <div class="as-cv-field" id="as-quick-cv-field">Field / Role</div>
+                                            </div>
+                                        </div>
+                                        <div class="as-cv-details-grid">
+                                            <div class="as-cv-detail-item">
+                                                <span class="as-cv-label">📍 Location:</span>
+                                                <span class="as-cv-val" id="as-quick-cv-location">—</span>
+                                            </div>
+                                            <div class="as-cv-detail-item">
+                                                <span class="as-cv-label">📧 Email:</span>
+                                                <span class="as-cv-val" id="as-quick-cv-email">—</span>
+                                            </div>
+                                            <div class="as-cv-detail-item">
+                                                <span class="as-cv-label">💼 Experience:</span>
+                                                <span class="as-cv-val" id="as-quick-cv-exp">—</span>
+                                            </div>
+                                            <div class="as-cv-detail-item">
+                                                <span class="as-cv-label">🎯 Target Role:</span>
+                                                <span class="as-cv-val" id="as-quick-cv-target">—</span>
+                                            </div>
+                                        </div>
+                                        <div class="as-cv-skills-row" id="as-quick-cv-skills-row"></div>
+                                    </div>
+
+                                    <!-- Step 2: Target Vacancy / Employer -->
+                                    <div class="as-simple-card-header" style="margin-top:16px;">
+                                        <div class="as-simple-step-badge">2</div>
+                                        <div>
+                                            <h3 class="as-simple-card-title">Target Position &amp; Company</h3>
+                                            <p class="as-simple-card-desc">Auto-matched from your current search or enter directly</p>
+                                        </div>
+                                    </div>
+                                    <div class="as-simple-target-row">
+                                        <div class="as-simple-field" style="flex:1;">
+                                            <label class="as-simple-label" for="as-quick-company-input">Company / Employer:</label>
+                                            <input type="text" id="as-quick-company-input" class="as-simple-input" placeholder="e.g. Bechtle AG">
+                                        </div>
+                                        <div class="as-simple-field" style="flex:1;">
+                                            <label class="as-simple-label" for="as-quick-position-input">Position / Apprenticeship:</label>
+                                            <input type="text" id="as-quick-position-input" class="as-simple-input" placeholder="e.g. Ausbildung Fachinformatiker">
+                                        </div>
+                                    </div>
+                                    <div class="as-simple-target-row" style="margin-top:8px;">
+                                        <div class="as-simple-field" style="flex:1;">
+                                            <label class="as-simple-label" for="as-quick-city-input">City / Location:</label>
+                                            <input type="text" id="as-quick-city-input" class="as-simple-input" placeholder="e.g. Köln">
+                                        </div>
+                                        <div class="as-simple-field" style="flex:1;">
+                                            <label class="as-simple-label" for="as-quick-contact-input">Contact Person (Optional):</label>
+                                            <input type="text" id="as-quick-contact-input" class="as-simple-input" placeholder="e.g. Frau Schmidt / Personalabteilung">
+                                        </div>
+                                    </div>
+
+                                    <!-- Step 3: Big Generate Action Button & AI Studio Refinements -->
+                                    <div class="as-simple-action-area">
+                                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                            <span class="as-simple-label" style="margin:0; font-weight:700;">3. Generate Anschreiben</span>
+                                            <div id="as-ai-engine-pill" class="as-ai-status-pill" title="AI Provider and Model Status">🤖 AI Engine: Initializing...</div>
+                                        </div>
+                                        <button type="button" id="as-quick-generate-btn" class="as-btn-generate-magic">
+                                            <span class="as-magic-icon">⚡</span>
+                                            <span id="as-quick-generate-text">Generate Anschreiben (AI)</span>
+                                        </button>
+                                        <div id="as-quick-gen-status" class="as-gen-status-text" hidden>Generating tailored DIN 5008 cover letter...</div>
+
+                                        <!-- Refinement Action Toolbar -->
+                                        <div id="as-quick-refine-bar" class="as-refine-toolbar" style="display:none;">
+                                            <button type="button" id="as-btn-regenerate" class="as-refine-btn" title="Generate fresh variation">🔄 Regenerate</button>
+                                            <button type="button" id="as-btn-improve" class="as-refine-btn" title="Enhance German B2-C1 phrasing &amp; persuasiveness">✨ Improve Writing</button>
+                                            <button type="button" id="as-btn-concise" class="as-refine-btn" title="Make more concise and punchy">✂️ Make More Concise</button>
+                                            <button type="button" id="as-btn-formal" class="as-refine-btn" title="Use formal traditional tone">🏛️ More Formal</button>
+                                            <button type="button" id="as-btn-natural" class="as-refine-btn" title="Use modern, agile &amp; natural German">🌿 More Natural</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Subtle Toggle to open advanced studio -->
+                                    <div class="as-advanced-accordion-toggle" id="as-toggle-advanced-editor">
+                                        <span>⚙️ Open Advanced Editor &amp; Custom Placeholders</span>
+                                        <span id="as-adv-toggle-arrow">▾</span>
+                                    </div>
+                                </div>
+
+                                <!-- ADVANCED STUDIO WRAPPER (Hidden by default in Simple Mode) -->
+                                <div id="as-advanced-editor-wrapper" hidden>
+                                <!-- Variants Tab Bar (Enhanced Notion/Linear style) -->
+                                <div class="as-variants-bar">
+                                    <div class="as-variants-tabs" id="create-anschreibens-templateList" role="tablist">
+                                        <!-- Variant tabs dynamically populated -->
+                                    </div>
+                                    <div class="as-variants-actions">
+                                        <button id="create-anschreibens-addTemplateBtn" class="as-var-action-btn"
+                                            type="button" title="Add new variation">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2.5">
+                                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                                            </svg>
+                                            <span>New</span>
+                                        </button>
+                                        <button id="create-anschreibens-duplicateTemplateBtn" class="as-var-action-btn"
+                                            type="button" title="Duplicate active variation">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2">
+                                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1">
+                                                </path>
+                                            </svg>
+                                            <span>Duplicate</span>
+                                        </button>
+                                        <button id="create-anschreibens-renameTemplateBtn" class="as-var-action-btn"
+                                            type="button" title="Rename variation">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2">
+                                                <path d="M12 20h9"></path>
+                                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z">
+                                                </path>
+                                            </svg>
+                                            <span>Rename</span>
+                                        </button>
+                                        <button id="create-anschreibens-deleteTemplateBtn"
+                                            class="as-var-action-btn as-var-del" type="button"
+                                            title="Delete active variation">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2">
+                                                <polyline points="3 6 5 6 21 6"></polyline>
+                                                <path
+                                                    d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2">
+                                                </path>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Collapsible Placeholder Library Accordion -->
+                                <div class="as-placeholder-section" id="as-placeholder-accordion">
+                                    <div class="as-placeholder-header" id="as-placeholder-toggle">
+                                        <div class="as-placeholder-header-left">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2">
+                                                <polyline points="4 7 4 4 20 4 20 7"></polyline>
+                                                <line x1="9" y1="20" x2="15" y2="20"></line>
+                                                <line x1="12" y1="4" x2="12" y2="20"></line>
+                                            </svg>
+                                            <span class="as-placeholder-title">Placeholder Library</span>
+                                            <span class="as-placeholder-count" id="as-placeholder-counter">Click to
+                                                insert</span>
+                                        </div>
+                                        <div class="as-placeholder-header-right">
+                                            <input type="text" id="as-placeholder-search"
+                                                class="as-placeholder-search-input"
+                                                placeholder="🔍 Search placeholders..."
+                                                onclick="event.stopPropagation();">
+                                            <span class="as-accordion-arrow">▾</span>
+                                        </div>
+                                    </div>
+                                    <div class="as-placeholder-body" id="as-placeholder-body">
+                                        <!-- Categorized Tokens Rendered Here -->
+                                        <div id="create-anschreibens-placeholderTags"
+                                            class="as-placeholder-categorized"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Document Editor Container (Notion/Docs style) -->
+                                <div class="as-editor-card">
+                                    <div class="as-editor-card-header">
+                                        <div class="as-editor-doc-meta">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2">
+                                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z">
+                                                </path>
+                                                <polyline points="14 2 14 8 20 8"></polyline>
+                                            </svg>
+                                            <span id="as-active-variant-title" class="as-doc-title">Variation 1</span>
+                                        </div>
+
+                                        <!-- Formatting Toolbar -->
+                                        <div class="as-editor-format-bar" id="create-anschreibens-formatToolbar">
+                                            <button type="button" class="as-fmt-btn" data-prefix="<b>"
+                                                data-suffix="</b>" title="Bold (Ctrl+B)"><b>B</b></button>
+                                            <button type="button" class="as-fmt-btn" data-prefix="<i>"
+                                                data-suffix="</i>" title="Italic (Ctrl+I)"><i>I</i></button>
+                                            <button type="button" class="as-fmt-btn" data-prefix="<u>"
+                                                data-suffix="</u>" title="Underline"><u>U</u></button>
+                                            <button type="button" class="as-fmt-btn" data-prefix="<br><br>"
+                                                data-suffix="" title="New Paragraph">↵</button>
+                                            <div class="as-fmt-sep"></div>
+                                            <button type="button" class="as-fmt-btn" id="as-editor-undo"
+                                                title="Undo (Ctrl+Z)">↺</button>
+                                            <button type="button" class="as-fmt-btn" id="as-editor-redo"
+                                                title="Redo (Ctrl+Y)">↻</button>
+                                        </div>
+
+                                        <!-- Word & Character Count -->
+                                        <div class="as-editor-stats">
+                                            <span id="as-word-count">0 words</span>
+                                            <span class="as-stat-dot">•</span>
+                                            <span id="as-char-count">0 characters</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- AI Polish Toolbar for Direct Editing -->
+                                    <div class="as-editor-ai-tools" style="padding:6px 14px; background:#F8FAFC; border-bottom:1px solid #E2E8F0; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                        <span style="font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase; letter-spacing:0.5px;">AI Polish:</span>
+                                        <button type="button" class="as-refine-btn as-btn-refine-action" data-action="improve" style="font-size:11px; padding:4px 9px;">✨ Improve Writing</button>
+                                        <button type="button" class="as-refine-btn as-btn-refine-action" data-action="concise" style="font-size:11px; padding:4px 9px;">✂️ Make Concise</button>
+                                        <button type="button" class="as-refine-btn as-btn-refine-action" data-action="formal" style="font-size:11px; padding:4px 9px;">🏛️ More Formal</button>
+                                        <button type="button" class="as-refine-btn as-btn-refine-action" data-action="natural" style="font-size:11px; padding:4px 9px;">🌿 More Natural</button>
+                                        <span id="as-editor-refine-status" style="font-size:11px; color:#4F46E5; font-weight:600; margin-left:auto;" hidden>Polishing letter...</span>
+                                    </div>
+
+                                    <!-- Editor Textarea -->
+                                    <div class="as-editor-sheet">
+                                        <textarea id="create-anschreibens-templateEditor" class="as-document-textarea"
+                                            rows="16"
+                                            placeholder="Write your cover letter here. Click above on placeholders like {{Unternehmen}}, {{salutation}} or use the AI tools..."
+                                            spellcheck="false"></textarea>
+                                    </div>
+
+                                    <!-- Editor Footer -->
+                                    <div class="as-editor-footer">
+                                        <div class="as-footer-left">
+                                            <button id="create-anschreibens-saveTemplateBtn"
+                                                class="as-btn-save-template" type="button">
+                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2">
+                                                    <path
+                                                        d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z">
+                                                    </path>
+                                                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                                    <polyline points="7 3 7 8 15 8"></polyline>
+                                                </svg>
+                                                <span>Save Template</span>
+                                            </button>
+                                            <button id="create-anschreibens-resetTemplateBtn"
+                                                class="as-btn-clear-template" type="button">Clear</button>
+                                            <div id="create-anschreibens-validationResult"
+                                                class="anschreiben-validation-compact" hidden></div>
+                                        </div>
+                                        <div class="as-footer-right">
+                                            <span class="as-auto-save-note" id="as-auto-draft-note">Draft synced
+                                                locally</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                </div><!-- End as-advanced-editor-wrapper -->
+                            </div>
+
+                            <!-- Right Workspace: Preview & Generation Workspace (Split & Preview Mode) -->
+                            <aside class="as-preview-pane">
+                                <!-- Quick PDF Actions Toolbar -->
+                                <div class="as-quick-pdf-actions" id="as-quick-pdf-actions">
+                                    <button type="button" class="as-quick-act-btn is-primary" id="as-quick-download-pdf-btn">
+                                        <span>📥 Download PDF</span>
+                                    </button>
+                                    <button type="button" class="as-quick-act-btn" id="as-quick-copy-text-btn">
+                                        <span>📋 Copy Text</span>
+                                    </button>
+                                    <button type="button" class="as-quick-act-btn" id="as-quick-preview-win-btn">
+                                        <span>🔍 Fullscreen</span>
+                                    </button>
+                                    <span style="margin-left:auto; font-size:11.5px; color:#10B981; font-weight:600; display:flex; align-items:center; gap:4px;">
+                                        <span style="font-size:14px;">✓</span> DIN 5008 Compliant
+                                    </span>
+                                </div>
+
+                                <!-- Generation & Primary Actions Card -->
+                                <div class="as-action-card">
+                                    <div class="as-action-card-header">
+                                        <h4>
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2.2">
+                                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                                            </svg>
+                                            <span>Generation &amp; Delivery</span>
+                                        </h4>
+                                    </div>
+
+                                    <div class="as-action-card-body">
+                                        <button id="create-anschreibens-generateBtn" class="as-btn-generate-hero"
+                                            type="button">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2.2">
+                                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z">
+                                                </path>
+                                                <polyline points="14 2 14 8 20 8"></polyline>
+                                                <line x1="12" y1="18" x2="12" y2="12"></line>
+                                                <line x1="9" y1="15" x2="15" y2="15"></line>
+                                            </svg>
+                                            <span>Generate All PDFs</span>
+                                        </button>
+
+                                        <div class="as-action-subrow">
+                                            <button id="create-anschreibens-previewBtn" class="as-btn-preview-sub"
+                                                type="button" title="Open Fullscreen Preview">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2">
+                                                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                                    <circle cx="12" cy="12" r="3"></circle>
+                                                </svg>
+                                                <span>Preview Window</span>
+                                            </button>
+                                            <button id="create-anschreibens-toEmailBtn" class="as-btn-next-step"
+                                                type="button" hidden>
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2">
+                                                    <path
+                                                        d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z">
+                                                    </path>
+                                                    <polyline points="22,6 12,13 2,6"></polyline>
+                                                </svg>
+                                                <span>Go to Campaigns →</span>
+                                            </button>
+                                        </div>
+
+                                        <!-- Progress Bar Container -->
+                                        <div id="create-anschreibens-progressArea" class="anschreiben-progress-compact"
+                                            hidden>
+                                            <div class="progress-bar-mini">
+                                                <div id="create-anschreibens-progressFill" class="progress-fill-mini">
+                                                </div>
+                                            </div>
+                                            <p id="create-anschreibens-progressText" class="progress-text-mini">
+                                                Generating PDFs...</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Live Document Preview Card (Embedded directly in Split/Preview Mode!) -->
+                                <div class="as-live-preview-card">
+                                    <div class="as-live-preview-header">
+                                        <div class="as-live-preview-title-row">
+                                            <span class="as-live-badge">Live PDF</span>
+                                            <span class="as-live-doc-name" id="as-live-doc-name">Recipient
+                                                Preview</span>
+                                        </div>
+                                        <div class="as-live-nav">
+                                            <button type="button" id="as-record-prev" class="as-nav-step"
+                                                title="Previous record">&larr;</button>
+                                            <span id="as-record-indicator" class="as-record-text">0 / 0</span>
+                                            <button type="button" id="as-record-next" class="as-nav-step"
+                                                title="Next record">&rarr;</button>
+                                            <button type="button" id="as-refresh-preview" class="as-nav-refresh"
+                                                title="Update Preview">🔄</button>
+                                        </div>
+                                    </div>
+                                    <div class="as-live-preview-viewport">
+                                        <iframe id="as-live-preview-iframe" class="as-preview-iframe"
+                                            title="Real-time PDF Preview"></iframe>
+                                        <div id="as-preview-placeholder" class="as-preview-empty">
+                                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="1.5">
+                                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z">
+                                                </path>
+                                                <polyline points="14 2 14 8 20 8"></polyline>
+                                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                            </svg>
+                                            <p>Load a data source to see the live PDF preview for each recipient.</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Document Readiness & Quality Check Card -->
+                                <div class="as-readiness-card">
+                                    <div class="as-readiness-header">
+                                        <h5>Document Review</h5>
+                                        <span class="as-readiness-pill ready" id="as-readiness-pill">Ready</span>
+                                    </div>
+                                    <div class="as-readiness-list">
+                                        <div class="as-readiness-item">
+                                            <span class="as-item-label">Recipient records:</span>
+                                            <span class="as-item-val" id="as-check-records">0 Contacts</span>
+                                        </div>
+                                        <div class="as-readiness-item">
+                                            <span class="as-item-label">Text variations:</span>
+                                            <span class="as-item-val" id="as-check-variants">1 Variation</span>
+                                        </div>
+                                        <div class="as-readiness-item">
+                                            <span class="as-item-label">Stationery:</span>
+                                            <span class="as-item-val" id="as-check-design">Standard</span>
+                                        </div>
+                                        <div class="as-readiness-item">
+                                            <span class="as-item-label">Placeholder status:</span>
+                                            <span class="as-item-val is-ok" id="as-check-placeholders">Valid</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Collapsible Layout Settings -->
+                                <div class="as-layout-box">
+                                    <input type="hidden" id="create-anschreibens-filenameFormat"
+                                        value="Auto from Company">
+                                    <details class="as-layout-drawer">
+                                        <summary class="as-layout-summary">
+                                            <div class="as-layout-summary-left">
+                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2">
+                                                    <line x1="4" y1="21" x2="4" y2="14"></line>
+                                                    <line x1="4" y1="10" x2="4" y2="3"></line>
+                                                    <line x1="12" y1="21" x2="12" y2="12"></line>
+                                                    <line x1="12" y1="8" x2="12" y2="3"></line>
+                                                    <line x1="20" y1="21" x2="20" y2="16"></line>
+                                                    <line x1="20" y1="12" x2="20" y2="3"></line>
+                                                    <line x1="1" y1="14" x2="7" y2="14"></line>
+                                                    <line x1="9" y1="8" x2="15" y2="8"></line>
+                                                    <line x1="17" y1="16" x2="23" y2="16"></line>
+                                                </svg>
+                                                <span>Typography &amp; Margins</span>
+                                            </div>
+                                            <span class="as-drawer-arrow">▾</span>
+                                        </summary>
+                                        <div class="as-layout-body">
+                                            <div class="as-layout-grid">
+                                                <div class="as-input-group">
+                                                    <label for="create-anschreibens-fontSizeInput">Font (pt)</label>
+                                                    <input type="number" id="create-anschreibens-fontSizeInput" min="6"
+                                                        max="48" step="1" value="11">
+                                                </div>
+                                                <div class="as-input-group">
+                                                    <label for="create-anschreibens-lineHeightInput">Line (mm)</label>
+                                                    <input type="number" id="create-anschreibens-lineHeightInput"
+                                                        min="2" max="30" step="0.5" value="5">
+                                                </div>
+                                                <div class="as-input-group">
+                                                    <label for="create-anschreibens-marginTopInput">Top (mm)</label>
+                                                    <input type="number" id="create-anschreibens-marginTopInput" min="0"
+                                                        max="250" step="1" value="20">
+                                                </div>
+                                                <div class="as-input-group">
+                                                    <label for="create-anschreibens-marginBottomInput">Bottom
+                                                        (mm)</label>
+                                                    <input type="number" id="create-anschreibens-marginBottomInput"
+                                                        min="0" max="250" step="1" value="20">
+                                                </div>
+                                                <div class="as-input-group">
+                                                    <label for="create-anschreibens-marginLeftInput">Left (mm)</label>
+                                                    <input type="number" id="create-anschreibens-marginLeftInput"
+                                                        min="0" max="200" step="1" value="20">
+                                                </div>
+                                                <div class="as-input-group">
+                                                    <label for="create-anschreibens-marginRightInput">Right
+                                                        (mm)</label>
+                                                    <input type="number" id="create-anschreibens-marginRightInput"
+                                                        min="0" max="200" step="1" value="20">
+                                                </div>
+                                                <div class="as-input-group">
+                                                    <label for="create-anschreibens-textWidthInput">Width (mm)</label>
+                                                    <input type="number" id="create-anschreibens-textWidthInput"
+                                                        min="20" max="210" step="1" value="170">
+                                                </div>
+                                                <div class="as-input-group">
+                                                    <label for="create-anschreibens-textHeightInput">Height (mm)</label>
+                                                    <input type="number" id="create-anschreibens-textHeightInput"
+                                                        min="20" max="297" step="1" value="257">
+                                                </div>
+                                            </div>
+                                            <div class="as-layout-footer">
+                                                <button id="create-anschreibens-resetLayoutBtn"
+                                                    class="as-btn-reset-layout" type="button">Reset Defaults</button>
+                                            </div>
+                                        </div>
+                                    </details>
+                                </div>
+                            </aside>
+                        </div>
+
+                        <!-- 4. MODALS PRESERVED INTACT -->
+                        <!-- Fullscreen Preview Modal -->
+                        <div id="create-anschreibens-previewModal" class="anschreiben-modal" hidden>
+                            <div class="anschreiben-modal-content as-full-preview-modal">
+                                <div class="anschreiben-modal-header">
+                                    <div class="as-preview-modal-title">
+                                        <h3>Print &amp; PDF Preview</h3>
+                                        <span class="as-preview-subtitle">Accurate preview of generated cover
+                                            letter</span>
+                                    </div>
+                                    <button class="anschreiben-close-btn" id="create-anschreibens-closeModalBtn"
+                                        type="button">&times;</button>
+                                </div>
+                                <div class="anschreiben-modal-body">
+                                    <iframe id="create-anschreibens-pdfPreview" title="PDF Preview"></iframe>
+                                </div>
+                                <div class="anschreiben-modal-footer">
+                                    <button class="anschreiben-btn-subtle-sm" id="create-anschreibens-closeFooterBtn"
+                                        type="button">Close</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ATS Tailor Modal -->
+                        <div id="create-anschreibens-atsModal" class="anschreiben-modal" hidden>
+                            <div class="anschreiben-modal-content ats-modal-content">
+                                <div class="anschreiben-modal-header">
+                                    <div class="ats-header-meta">
+                                        <div class="ats-icon-badge">⚡</div>
+                                        <div>
+                                            <h3>ATS Keyword Optimizer (GPT Luna)</h3>
+                                            <p class="ats-header-sub">Optimizes profile experience with key phrases from
+                                                the job listing (~$0.00003).</p>
+                                        </div>
+                                    </div>
+                                    <button class="anschreiben-close-btn" id="create-anschreibens-closeAtsModalBtn"
+                                        type="button">&times;</button>
+                                </div>
+                                <div class="anschreiben-modal-body ats-modal-body">
+                                    <div class="ats-field-grid">
+                                        <div class="ats-field-col">
+                                            <label for="create-anschreibens-atsJobTitle">Target Position / Role:</label>
+                                            <input type="text" id="create-anschreibens-atsJobTitle"
+                                                placeholder="e.g. Full Stack Developer">
+                                        </div>
+                                        <div class="ats-field-col">
+                                            <label for="create-anschreibens-atsCompanyName">Company:</label>
+                                            <input type="text" id="create-anschreibens-atsCompanyName"
+                                                placeholder="e.g. TechCorp GmbH">
+                                        </div>
+                                    </div>
+                                    <div class="ats-field-block">
+                                        <label for="create-anschreibens-atsRequirements">Job Requirements / Text (or
+                                            keywords):</label>
+                                        <textarea id="create-anschreibens-atsRequirements" rows="3"
+                                            placeholder="Paste job requirements or listing text here..."></textarea>
+                                    </div>
+                                    <div class="ats-field-block">
+                                        <label for="create-anschreibens-atsCustomBullets">Candidate work experience (or
+                                            leave blank for profile default):</label>
+                                        <textarea id="create-anschreibens-atsCustomBullets" rows="2"
+                                            placeholder="Leave blank to auto-fill from profile"></textarea>
+                                    </div>
+                                    <div class="ats-action-row">
+                                        <button type="button" id="create-anschreibens-atsRunBtn"
+                                            class="anschreiben-btn-primary-sm btn-luna-run">
+                                            <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2.2">
+                                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                                            </svg>
+                                            <span>Generate Optimized Bullet Points (~$0.00003)</span>
+                                        </button>
+                                        <div id="create-anschreibens-atsCostBadge" class="ats-cost-badge" hidden>
+                                            <span id="create-anschreibens-atsCostText">⚡ 0.00003 USD</span>
+                                        </div>
+                                    </div>
+                                    <div id="create-anschreibens-atsResultArea" class="ats-result-area" hidden>
+                                        <label class="ats-result-label">Generated ATS-optimized bullet points:</label>
+                                        <div id="create-anschreibens-atsResultBullets" class="ats-bullets-container">
+                                        </div>
+                                        <div class="ats-result-actions">
+                                            <button type="button" id="create-anschreibens-atsInsertBtn"
+                                                class="anschreiben-btn-primary-sm">Insert into cover letter</button>
+                                            <button type="button" id="create-anschreibens-atsCopyBtn"
+                                                class="anschreiben-btn-subtle-sm">Copy</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Golden Hook Modal -->
+                        <div id="create-anschreibens-goldenHookModal" class="anschreiben-modal" hidden>
+                            <div class="anschreiben-modal-content ats-modal-content">
+                                <div class="anschreiben-modal-header">
+                                    <div class="ats-header-meta">
+                                        <div class="ats-icon-badge badge-golden">✨</div>
+                                        <div>
+                                            <h3>Golden Hook — Why Your Company?</h3>
+                                            <p class="ats-header-sub">Generates a compelling opening sentence tailored
+                                                specifically to the target company (~$0.000015).</p>
+                                        </div>
+                                    </div>
+                                    <button class="anschreiben-close-btn"
+                                        id="create-anschreibens-closeGoldenHookModalBtn" type="button">&times;</button>
+                                </div>
+                                <div class="anschreiben-modal-body ats-modal-body">
+                                    <div class="ats-field-grid">
+                                        <div class="ats-field-col">
+                                            <label for="create-anschreibens-hookCompanyName">Company:</label>
+                                            <input type="text" id="create-anschreibens-hookCompanyName"
+                                                placeholder="e.g. BMW Group or Siemens AG">
+                                        </div>
+                                        <div class="ats-field-col">
+                                            <label for="create-anschreibens-hookJobTitle">Target Role:</label>
+                                            <input type="text" id="create-anschreibens-hookJobTitle"
+                                                placeholder="e.g. Cloud Engineer">
+                                        </div>
+                                    </div>
+                                    <div class="ats-field-block">
+                                        <label for="create-anschreibens-hookContext">Company Focus / Mission
+                                            (optional):</label>
+                                        <textarea id="create-anschreibens-hookContext" rows="2"
+                                            placeholder="e.g. Leading company in autonomous driving and clean mobility..."></textarea>
+                                    </div>
+                                    <div class="ats-action-row">
+                                        <button type="button" id="create-anschreibens-hookRunBtn"
+                                            class="anschreiben-btn-primary-sm btn-golden-run">
+                                            <svg class="btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2.2">
+                                                <path
+                                                    d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z">
+                                                </path>
+                                            </svg>
+                                            <span>Generate Golden Hook (~$0.000015)</span>
+                                        </button>
+                                        <div id="create-anschreibens-hookCostBadge" class="ats-cost-badge" hidden>
+                                            <span id="create-anschreibens-hookCostText">⚡ 0.000015 USD</span>
+                                        </div>
+                                    </div>
+                                    <div id="create-anschreibens-hookResultArea" class="ats-result-area" hidden>
+                                        <label class="ats-result-label">Generated opening hook:</label>
+                                        <div id="create-anschreibens-hookResultText"
+                                            class="ats-bullet-item hook-highlight"></div>
+                                        <div class="ats-result-actions">
+                                            <button type="button" id="create-anschreibens-hookInsertBtn"
+                                                class="anschreiben-btn-primary-sm">Insert as opening hook</button>
+                                            <button type="button" id="create-anschreibens-hookCopyBtn"
+                                                class="anschreiben-btn-subtle-sm">Copy</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Background PDF Templates Modal -->
+                        <div id="create-anschreibens-bgTemplatesModal" class="anschreiben-modal" hidden>
+                            <div class="anschreiben-modal-content bg-templates-modal-content">
+                                <div class="anschreiben-modal-header">
+                                    <div>
+                                        <div class="bg-modal-header-top">
+                                            <span class="bg-modal-badge">Design Stationery</span>
+                                            <h3>🎨 Professional Background Templates</h3>
+                                        </div>
+                                        <p class="modal-sub">Select high-quality stationery templates with clean DIN
+                                            5008 layouts and subtle color accents.</p>
+                                    </div>
+                                    <button class="anschreiben-close-btn" id="create-anschreibens-closeBgTemplatesBtn"
+                                        type="button" aria-label="Close">&times;</button>
+                                </div>
+                                <div class="anschreiben-modal-body bg-modal-body">
+                                    <div id="create-anschreibens-bgTemplatesList" class="bg-templates-grid"></div>
+                                </div>
+                                <div class="anschreiben-modal-footer bg-templates-footer">
+                                    <button type="button" id="create-anschreibens-clearBgTemplateBtn"
+                                        class="anschreiben-btn-subtle-sm" title="Remove current background">
+                                        <span>✕ Standard (No Background)</span>
+                                    </button>
+                                    <button type="button" id="create-anschreibens-cancelBgModalBtn"
+                                        class="anschreiben-btn-primary-sm">
+                                        Done
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 5. Toast Notification -->
+                        <div id="create-anschreibens-toast" class="anschreiben-toast" hidden></div>
+                    </div>
+                </section>

@@ -58,9 +58,34 @@ PORTAL_DOMAINS = {
     "funkeworks.de",
     "funke-digital.de",
     "funke.de",
+    "funkemedien.de",
+    "funke-medien.de",
     "azubister.net",
     "schuelerkarriere.de",
     "talentsconnect.com",
+    "studyflix.de",
+    "azubi.de",
+    "ausbildungsstellen.de",
+    "karriere.de",
+    "jobvector.de",
+    "absolventa.de",
+    "get-in-it.de",
+    "stellenonline.de",
+    "backinjob.de",
+    "experteer.de",
+    "monster.com",
+    "glassdoor.de",
+    "glassdoor.com",
+    "kununu.com",
+    "stepstone.com",
+    "joblift.de",
+    "adzuna.de",
+    "jooble.org",
+    "careerjet.de",
+    "gigajob.com",
+    "mein-ausbildungsplatz.de",
+    "ausbildungsplatz.de",
+    "lehrstellen-radar.de",
 }
 
 # 2. URL shortener & redirect domains that MUST NEVER be used as employer identifiers
@@ -115,6 +140,8 @@ SHARED_ATS_DOMAINS = {
     "factorialhr.com",
     "jobylon.com",
     "teamtailor.com",
+    "info-online.org",
+    "iventajobdata.eu",
 }
 
 # Generic placeholder company names that cannot identify a unique employer
@@ -152,6 +179,9 @@ def _extract_clean_domain(url_or_domain: str) -> str:
     if raw.startswith("www."):
         raw = raw[4:]
     return raw
+
+
+extract_registrable_domain = _extract_clean_domain
 
 
 def is_portal_domain(domain_or_url: str) -> bool:

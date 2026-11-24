@@ -190,10 +190,19 @@ class CandidateOnboardingService:
 
                 if cv_bytes:
                     try:
-                        cv_extracted_text = self.cv_parser.extract_text_from_pdf(cv_bytes)
-                        if cv_extracted_text:
-                            parsed_cv_data = self.cv_parser.parse_cv_text(cv_extracted_text)
-                            cv_parsed = True
+                        if hasattr(self.cv_parser, "parse_pdf_dossier"):
+                            parsed_cv_data = self.cv_parser.parse_pdf_dossier(cv_bytes)
+                            meta = parsed_cv_data.get("extraction_metadata") or {}
+                            # Consider CV successfully parsed only if meaningful content was extracted
+                            has_name = bool(parsed_cv_data.get("personal", {}).get("full_name") and parsed_cv_data["personal"]["full_name"] not in ["Bewerber", "Firstname Lastname"])
+                            has_history = bool(parsed_cv_data.get("work_experience") or parsed_cv_data.get("education"))
+                            has_skills = bool(parsed_cv_data.get("skills", {}).get("technologies_from_cv"))
+                            cv_parsed = bool(has_name or has_history or has_skills or meta.get("confidence", 0) >= 0.8)
+                        else:
+                            cv_extracted_text = self.cv_parser.extract_text_from_pdf(cv_bytes)
+                            if cv_extracted_text and len(cv_extracted_text.strip()) > 20:
+                                parsed_cv_data = self.cv_parser.parse_cv_text(cv_extracted_text)
+                                cv_parsed = True
                     except Exception as parse_err:
                         logger.warning("Error parsing CV for application %s: %s", clean_app_id, parse_err)
 
@@ -455,14 +464,19 @@ class CandidateOnboardingService:
         house_number = cv_address.get("house_number", "")
         postal_code = cv_address.get("postal_code", "")
 
-        # Target profession / title
-        current_title = ""
+        # Target profession vs actual candidate title
+        clean_field = ""
         if field_label:
-            # Clean up field string (e.g. "ausbildung als Fachmann..." -> "Fachmann...")
             clean_field = re.sub(r"(?i)^ausbildung\s+als\s+", "", field_label).strip()
-            current_title = clean_field
-        if not current_title:
-            current_title = cv_prof.get("current_title") or "Bewerber"
+
+        # Candidate's documented professional title (never overwritten with target occupation)
+        current_title = cv_prof.get("current_title") or ""
+        if not current_title or current_title in ["Bewerber", "fachinformatiker", "serfahrung"]:
+            current_title = clean_field.capitalize() if clean_field else "Bewerber"
+
+        target_occupation = clean_field.capitalize() if clean_field else current_title
+        years_exp = cv_prof.get("years_of_experience", 0)
+        exp_level = cv_prof.get("experience_level") or ("Berufserfahren" if years_exp > 0 else "Berufseinstieg")
 
         # Languages array compilation
         languages = copy.deepcopy(cv_languages)
@@ -516,9 +530,9 @@ class CandidateOnboardingService:
                         "street": street,
                         "house_number": house_number,
                         "postal_code": postal_code,
-                        "city": city or "Koeln",
-                        "country": cv_address.get("country", "Deutschland"),
-                        "country_code": cv_address.get("country_code", "DE"),
+                        "city": city or "Casablanca",
+                        "country": cv_address.get("country", "Marokko"),
+                        "country_code": cv_address.get("country_code", "MA"),
                     },
                     "linkedin": cv_contact.get("linkedin", {}),
                     "portfolio": cv_contact.get("portfolio", {}),
@@ -526,10 +540,17 @@ class CandidateOnboardingService:
                 },
                 "professional_profile": {
                     "current_title": current_title,
+                    "target_occupation": target_occupation,
                     "headline": cv_prof.get("headline") or f"{full_name} | {current_title}",
-                    "summary_de": cv_prof.get("summary_de") or f"Motivierter Bewerber für {current_title}.",
+                    "summary_de": cv_prof.get("summary_de") or f"Motivierter Bewerber ({current_title}) für Zielberuf {target_occupation}.",
                     "primary_fields": cv_prof.get("primary_fields") or [current_title],
+                    "years_of_experience": years_exp,
+                    "experience_level": exp_level,
                 },
+                "work_experience": parsed_cv.get("work_experience", []),
+                "education": parsed_cv.get("education", []),
+                "certifications": parsed_cv.get("certifications", []),
+                "extraction_metadata": parsed_cv.get("extraction_metadata", {}),
                 "skills": cv_skills,
                 "languages": languages,
             },

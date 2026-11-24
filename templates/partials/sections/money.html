@@ -1,0 +1,173 @@
+<section id="money-section" class="app-section" data-section="money" {% if initial_section !="money"
+                    %}hidden{% endif %}>
+                    <div class="section-hero money-hero">
+                        <div>
+                            <span class="section-kicker money-kicker">Revenue</span>
+                            <h2>Payments Dashboard</h2>
+                            <p>Real-time verified client payments and revenue tracking from Supabase.</p>
+                        </div>
+                        <div class="hero-actions">
+                            <button type="button" id="money-refresh" class="money-refresh-btn">Refresh</button>
+                            <button type="button" id="money-export" class="money-export-btn">Export CSV</button>
+                        </div>
+                    </div>
+
+                    <div id="money-status" class="section-status" hidden></div>
+
+                    <!-- Skeleton -->
+                    <div id="money-skeleton" class="money-skeleton" hidden>
+                        <div class="money-skeleton-summary">
+                            <div class="money-skel-card"></div>
+                            <div class="money-skel-card"></div>
+                            <div class="money-skel-card"></div>
+                            <div class="money-skel-card"></div>
+                        </div>
+                        <div class="money-skel-chart"></div>
+                        <div class="money-skel-table">
+                            <div class="money-skel-row"></div>
+                            <div class="money-skel-row"></div>
+                            <div class="money-skel-row"></div>
+                            <div class="money-skel-row"></div>
+                        </div>
+                    </div>
+
+                    <div id="money-dashboard" class="money-dashboard-body" hidden>
+
+                        <!-- Smart Insights -->
+                        <div id="money-insights" class="money-insights-box" hidden></div>
+
+                        <!-- KPI Strip -->
+                        <div class="money-kpi-strip">
+                            <article class="money-kpi-card">
+                                <span>Total Paid</span>
+                                <strong id="money-kpi-total">0 DH</strong>
+                            </article>
+                            <article class="money-kpi-card">
+                                <span>Average</span>
+                                <strong id="money-kpi-avg">0 DH</strong>
+                            </article>
+                            <article class="money-kpi-card">
+                                <span>Highest</span>
+                                <strong id="money-kpi-highest">0 DH</strong>
+                            </article>
+                            <article class="money-kpi-card">
+                                <span>Today</span>
+                                <strong id="money-kpi-today">0 DH</strong>
+                                <small id="money-kpi-today-count">0 payments</small>
+                            </article>
+                        </div>
+
+                        <!-- Month-over-Month -->
+                        <div class="money-mom-grid">
+                            <article class="money-mom-card">
+                                <span>Total Amount</span>
+                                <strong id="money-mom-total">0 DH</strong>
+                                <small id="money-mom-total-change">&mdash;</small>
+                            </article>
+                            <article class="money-mom-card">
+                                <span>Number of Payments</span>
+                                <strong id="money-mom-count">0</strong>
+                                <small id="money-mom-count-change">&mdash;</small>
+                            </article>
+                            <article class="money-mom-card">
+                                <span>Average Payment</span>
+                                <strong id="money-mom-avg">0 DH</strong>
+                                <small id="money-mom-avg-change">&mdash;</small>
+                            </article>
+                        </div>
+
+                        <!-- Filters & Search -->
+                        <div class="money-controls">
+                            <div class="money-search-wrap">
+                                <input type="text" id="money-search" class="money-search"
+                                    placeholder="Search by name...">
+                            </div>
+                            <select id="money-sort" class="money-sort">
+                                <option value="date-desc">Neueste zuerst</option>
+                                <option value="date-asc">&Auml;lteste zuerst</option>
+                                <option value="amount-desc">H&ouml;chster Betrag</option>
+                                <option value="amount-asc">Niedrigster Betrag</option>
+                            </select>
+                        </div>
+
+                        <!-- Chart: Monthly Trend -->
+                        <div class="money-chart-panel">
+                            <h3>Monthly Trend</h3>
+                            <div id="money-chart-bars" class="money-chart-bars"></div>
+                        </div>
+
+                        <!-- Recent Activity -->
+                        <div class="money-side-panel">
+                            <h3>Recent Activity</h3>
+                            <div id="money-timeline" class="money-timeline-list"></div>
+                        </div>
+
+                        <!-- Health Indicators -->
+                        <div class="money-health-grid">
+                            <article class="money-health-card">
+                                <span>&#9888; Large Payments</span>
+                                <strong id="money-health-large">0</strong>
+                                <small>Payments &gt; 5.000 DH</small>
+                            </article>
+                            <article class="money-health-card">
+                                <span>&#128200; Daily Avg</span>
+                                <strong id="money-health-daily">0 DH</strong>
+                                <small>Last 30 days</small>
+                            </article>
+                            <article class="money-health-card">
+                                <span>&#128064; Unusual Spikes</span>
+                                <strong id="money-health-spikes">0</strong>
+                                <small>Days &gt; 2x avg</small>
+                            </article>
+                        </div>
+
+                        <!-- Goal Panel -->
+                        <div class="money-goal-panel">
+                            <div class="money-goal-head">
+                                <h3>Monthly Target</h3>
+                                <div class="money-goal-input-wrap">
+                                    <input type="number" id="money-goal-input" class="money-goal-input" value="10000"
+                                        min="0" step="100">
+                                    <span>DH</span>
+                                </div>
+                            </div>
+                            <div class="money-goal-track">
+                                <div id="money-goal-fill" class="money-goal-fill"></div>
+                            </div>
+                            <div class="money-goal-stats">
+                                <span id="money-goal-current">0 DH</span>
+                                <span id="money-goal-percent">0%</span>
+                                <span id="money-goal-target">/ 10.000 DH</span>
+                            </div>
+                        </div>
+
+                        <!-- Table -->
+                        <div class="money-table-wrapper">
+                            <table class="money-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Amount (DH)</th>
+                                        <th>Created At</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="money-table-body"></tbody>
+                            </table>
+                        </div>
+
+                    </div>
+
+                    <!-- Empty State -->
+                    <div id="money-empty" class="money-empty" hidden>
+                        <div class="money-empty-icon">&#128184;</div>
+                        <h3>No payment records found</h3>
+                        <p>Sobald Zahlungen in der Supabase-Tabelle &quot;payed&quot; erscheinen, werden sie hier
+                            angezeigt.</p>
+                    </div>
+
+                    <div id="money-no-results" class="money-empty" hidden>
+                        <div class="money-empty-icon">&#128269;</div>
+                        <h3>Keine Ergebnisse</h3>
+                        <p>Keine Zahlungen entsprechen den aktuellen Filtern.</p>
+                    </div>
+                </section>

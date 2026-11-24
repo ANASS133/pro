@@ -1,0 +1,276 @@
+<section id="ai-settings-section" class="app-section" data-section="ai-settings" {% if initial_section != "ai-settings" %}hidden{% endif %}>
+                    <div class="ai-settings-wrapper">
+                        <!-- Alert Banner -->
+                        <div id="ai-settings-alert" class="ai-alert" hidden></div>
+
+                        <!-- Compact Header -->
+                        <div class="ai-header-card">
+                            <div class="ai-header-left">
+                                <div class="ai-header-title-wrap">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"></path>
+                                        <circle cx="12" cy="12" r="3"></circle>
+                                        <path d="M12 7v2m0 6v2m-5-5h2m6 0h2"></path>
+                                    </svg>
+                                    <h1>AI Settings</h1>
+                                </div>
+                                <p>Official OpenAI GPT &amp; Google Gemini connectivity, models, and usage monitoring.</p>
+                            </div>
+                            <div class="ai-header-right">
+                                <span class="ai-status-pill pill-active" id="ai-active-provider-pill">Active: OpenAI GPT-6 Luna</span>
+                            </div>
+                        </div>
+
+                        <!-- Card 1: Provider Selection -->
+                        <div class="ai-card ai-provider-card">
+                            <div class="ai-card-header">
+                                <div class="ai-card-title-group">
+                                    <h3 class="ai-card-title">Primary AI Provider</h3>
+                                    <p class="ai-card-subtitle">Active engine for CV parsing, ATS scoring, and letter generation</p>
+                                </div>
+                            </div>
+
+                            <div class="ai-provider-selector">
+                                <label class="ai-provider-option">
+                                    <input type="radio" name="ai_primary_provider" value="openai" checked>
+                                    <div class="ai-provider-card-inner">
+                                        <div class="ai-provider-top">
+                                            <div class="ai-provider-brand">
+                                                <span class="ai-provider-icon">⚡</span>
+                                                <span class="ai-provider-name">OpenAI GPT</span>
+                                            </div>
+                                            <span class="ai-badge-recommend">Recommended</span>
+                                        </div>
+                                        <p class="ai-provider-desc">Direct OpenAI API with highest semantic precision for applications.</p>
+                                    </div>
+                                </label>
+
+                                <label class="ai-provider-option">
+                                    <input type="radio" name="ai_primary_provider" value="gemini">
+                                    <div class="ai-provider-card-inner">
+                                        <div class="ai-provider-top">
+                                            <div class="ai-provider-brand">
+                                                <span class="ai-provider-icon">✨</span>
+                                                <span class="ai-provider-name">Google Gemini</span>
+                                            </div>
+                                            <span class="ai-badge-subtle">High Volume</span>
+                                        </div>
+                                        <p class="ai-provider-desc">Google AI Studio API with high rate limits and fast generation.</p>
+                                    </div>
+                                </label>
+
+                                <label class="ai-provider-option">
+                                    <input type="radio" name="ai_primary_provider" value="offline">
+                                    <div class="ai-provider-card-inner">
+                                        <div class="ai-provider-top">
+                                            <div class="ai-provider-brand">
+                                                <span class="ai-provider-icon">🔒</span>
+                                                <span class="ai-provider-name">Offline Mode</span>
+                                            </div>
+                                            <span class="ai-badge-subtle">0 Tokens</span>
+                                        </div>
+                                        <p class="ai-provider-desc">Rule-based local heuristics. 100% private, zero external API cost.</p>
+                                    </div>
+                                </label>
+                            </div>
+
+                            <div class="ai-fallback-bar">
+                                <label class="ai-fallback-toggle-label" for="ai-gemini-fallback-toggle">
+                                    <input type="checkbox" id="ai-gemini-fallback-toggle">
+                                    <span class="ai-fallback-text">
+                                        <strong>Auto-failover to Gemini:</strong> Automatically switch if OpenAI experiences temporary timeouts.
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- 2-Column: OpenAI Configuration & Google Gemini Configuration -->
+                        <div class="ai-grid-2">
+                            <!-- OpenAI Card -->
+                            <div class="ai-card ai-api-card">
+                                <div class="ai-card-header">
+                                    <div class="ai-card-title-group">
+                                        <div class="ai-title-with-icon">
+                                            <span class="ai-card-icon">⚡</span>
+                                            <h3 class="ai-card-title">OpenAI API</h3>
+                                        </div>
+                                        <p class="ai-card-subtitle">Official GPT-4o / Luna direct connectivity</p>
+                                    </div>
+                                    <span id="ai-openai-status-badge" class="ai-status-pill pill-untested">Untested</span>
+                                </div>
+
+                                <div class="ai-card-body">
+                                    <div class="ai-form-group">
+                                        <div class="ai-label-row">
+                                            <label class="ai-label" for="ai-openai-key-input">API Key</label>
+                                            <span id="ai-openai-key-badge" class="ai-status-pill pill-inactive">Checking...</span>
+                                        </div>
+                                        <div class="ai-input-wrap">
+                                            <input type="password" id="ai-openai-key-input" class="ai-input" placeholder="sk-proj-..." autocomplete="off">
+                                            <button type="button" id="ai-openai-toggle-key" class="ai-btn-input-action" title="Toggle visibility">Show</button>
+                                        </div>
+                                        <span class="ai-help-text">Securely encrypted on server. Never exposed to browser.</span>
+                                    </div>
+
+                                    <div class="ai-form-group">
+                                        <label class="ai-label" for="ai-openai-model-select">Model Selection</label>
+                                        <select id="ai-openai-model-select" class="ai-select">
+                                            <option value="gpt-6-luna">GPT-6 Luna (Default / High Precision)</option>
+                                            <option value="gpt-6-luna-pro">GPT-6 Luna Pro</option>
+                                            <option value="gpt-5.6-luna">GPT-5.6 Luna</option>
+                                            <option value="gpt-4o-mini">GPT-4o Mini (Cost-efficient)</option>
+                                            <option value="gpt-4o">GPT-4o (Full version)</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="ai-actions-row">
+                                        <button type="button" id="ai-openai-save-btn" class="ai-btn-primary">Save Settings</button>
+                                        <button type="button" id="ai-openai-test-btn" class="ai-btn-secondary" title="Tests key via GET /v1/models (zero cost)">Test Connection</button>
+                                    </div>
+                                </div>
+
+                                <div class="ai-card-footer">
+                                    <div class="ai-status-info">
+                                        <span class="ai-status-dot"></span>
+                                        <span>Status: <strong id="ai-openai-status-msg">Ready</strong></span>
+                                    </div>
+                                    <div class="ai-last-tested">
+                                        <span>Last Test: <strong id="ai-openai-last-tested">-</strong></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Gemini Card -->
+                            <div class="ai-card ai-api-card">
+                                <div class="ai-card-header">
+                                    <div class="ai-card-title-group">
+                                        <div class="ai-title-with-icon">
+                                            <span class="ai-card-icon">✨</span>
+                                            <h3 class="ai-card-title">Google Gemini API</h3>
+                                        </div>
+                                        <p class="ai-card-subtitle">Google AI Studio Flash model integration</p>
+                                    </div>
+                                    <span id="ai-gemini-status-badge" class="ai-status-pill pill-untested">Untested</span>
+                                </div>
+
+                                <div class="ai-card-body">
+                                    <div class="ai-form-group">
+                                        <div class="ai-label-row">
+                                            <label class="ai-label" for="ai-gemini-key-input">API Key</label>
+                                            <span id="ai-gemini-key-badge" class="ai-status-pill pill-inactive">Checking...</span>
+                                        </div>
+                                        <div class="ai-input-wrap">
+                                            <input type="password" id="ai-gemini-key-input" class="ai-input" placeholder="AIzaSy..." autocomplete="off">
+                                            <button type="button" id="ai-gemini-toggle-key" class="ai-btn-input-action" title="Toggle visibility">Show</button>
+                                        </div>
+                                        <span class="ai-help-text">From Google AI Studio. Free tier up to 500 RPD.</span>
+                                    </div>
+
+                                    <div class="ai-form-group">
+                                        <label class="ai-label" for="ai-gemini-model-select">Model Selection</label>
+                                        <select id="ai-gemini-model-select" class="ai-select">
+                                            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                                            <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite (500 RPD Free)</option>
+                                            <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite (500 RPD Free)</option>
+                                            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="ai-actions-row">
+                                        <button type="button" id="ai-gemini-save-btn" class="ai-btn-primary">Save Settings</button>
+                                        <button type="button" id="ai-gemini-test-btn" class="ai-btn-secondary">Test Connection</button>
+                                    </div>
+                                </div>
+
+                                <div class="ai-card-footer">
+                                    <div class="ai-status-info">
+                                        <span class="ai-status-dot"></span>
+                                        <span>Status: <strong id="ai-gemini-status-msg">Ready</strong></span>
+                                    </div>
+                                    <div class="ai-last-tested">
+                                        <span>Last Test: <strong id="ai-gemini-last-tested">-</strong></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Card 3: Usage Dashboard & Cost Tracking -->
+                        <div class="ai-card ai-usage-card">
+                            <div class="ai-card-header">
+                                <div class="ai-card-title-group">
+                                    <div class="ai-title-with-icon">
+                                        <span class="ai-card-icon">📊</span>
+                                        <h3 class="ai-card-title">AI Usage Monitoring &amp; Cost Estimation</h3>
+                                    </div>
+                                    <p class="ai-card-subtitle">Aggregated inference requests, token volume, and response cache efficiency</p>
+                                </div>
+                                <div class="ai-header-actions">
+                                    <button type="button" id="ai-btn-refresh-usage" class="ai-btn-secondary ai-btn-sm">Refresh</button>
+                                    <button type="button" id="ai-btn-reset-cache" class="ai-btn-secondary ai-btn-sm" title="Clears the local response cache">Clear Cache</button>
+                                </div>
+                            </div>
+
+                            <div class="ai-metrics-grid">
+                                <div class="ai-metric-box">
+                                    <span class="ai-metric-label">Active Model</span>
+                                    <span class="ai-metric-val" id="ai-usage-model">gpt-6-luna</span>
+                                    <span class="ai-metric-sub" id="ai-usage-provider">Official OpenAI</span>
+                                </div>
+                                <div class="ai-metric-box">
+                                    <span class="ai-metric-label">Total Requests</span>
+                                    <div class="ai-metric-val-group">
+                                        <span class="ai-metric-val" id="ai-usage-total-requests">0</span>
+                                        <span class="ai-metric-split">(<span id="ai-usage-success-requests" class="text-success">0</span> / <span id="ai-usage-failed-requests" class="text-error">0</span>)</span>
+                                    </div>
+                                    <span class="ai-metric-sub">Success / Error ratio</span>
+                                </div>
+                                <div class="ai-metric-box">
+                                    <span class="ai-metric-label">Tokens</span>
+                                    <span class="ai-metric-val" id="ai-usage-total-tokens">0</span>
+                                    <span class="ai-metric-sub"><span id="ai-usage-input-tokens">0</span> In • <span id="ai-usage-output-tokens">0</span> Out</span>
+                                </div>
+                                <div class="ai-metric-box">
+                                    <span class="ai-metric-label">Estimated Cost</span>
+                                    <span class="ai-metric-val ai-cost-tag" id="ai-usage-estimated-cost">$0.0000 USD</span>
+                                    <span class="ai-metric-sub">Credit: approx. $4.97</span>
+                                </div>
+                                <div class="ai-metric-box">
+                                    <span class="ai-metric-label">Cache Hit Rate</span>
+                                    <span class="ai-metric-val ai-cache-tag" id="ai-usage-cache-rate">0% (Zero Cost)</span>
+                                    <span class="ai-metric-sub"><span id="ai-usage-cache-hits">0</span> cached calls</span>
+                                </div>
+                            </div>
+
+                            <!-- Daily Breakdown Table -->
+                            <div class="ai-table-wrap">
+                                <div class="ai-table-header">
+                                    <h4 class="ai-table-title">Daily History (Last 7 Days)</h4>
+                                </div>
+                                <div class="ai-table-container">
+                                    <table class="ai-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Requests</th>
+                                                <th>Input Tokens</th>
+                                                <th>Output Tokens</th>
+                                                <th>Estimated Cost</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="ai-usage-daily-body">
+                                            <tr>
+                                                <td colspan="5" class="ai-table-empty">No calls recorded.</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p class="ai-table-note">
+                                    ℹ️ Local estimation based on actual tokens processed. Official balances are tracked directly in provider consoles.
+                                </p>
+                            </div>
+                        </div>
+
+                    </div>
+                </section>
+
+                <!-- WhatsApp AI Center Section -->

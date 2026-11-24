@@ -52,8 +52,19 @@ GERMAN_STOP_WORDS = {
     "praktikum",
     "praktikant",
     "trainee",
+    "praxisintegrierte",
+    "praxisintegrierter",
+    "praxisintegrierten",
+    "pia",
+    "staatlich",
+    "anerkannte",
+    "anerkannter",
+    "anerkannten",
+    "anerkannt",
     "zum",
     "zur",
+    "zum/r",
+    "zur/m",
     "als",
     "für",
     "fuer",
@@ -102,6 +113,7 @@ GERMAN_STOP_WORDS = {
 # Known profession synonyms, variants, and conflicting professions
 PROFESSION_KNOWLEDGE_BASE = {
     "koch": {
+        "canonical": "Koch/Köchin",
         "variants": {
             "koch",
             "köchin",
@@ -109,8 +121,6 @@ PROFESSION_KNOWLEDGE_BASE = {
             "köche",
             "koeche",
             "kochs",
-            "kueche",
-            "küche",
             "beikoch",
             "beiköchin",
             "beikoechin",
@@ -122,6 +132,17 @@ PROFESSION_KNOWLEDGE_BASE = {
             "küchenchef",
             "diätkoch",
             "diaetkoch",
+            "commis de cuisine",
+        },
+        "probable_cues": {
+            "küche",
+            "kueche",
+            "küchenteam",
+            "kochen",
+            "speisen",
+            "zubereitung",
+            "culinary",
+            "cook",
         },
         "conflicts": {
             "kaufmann",
@@ -129,15 +150,19 @@ PROFESSION_KNOWLEDGE_BASE = {
             "kaufleute",
             "verkäufer",
             "verkaeufer",
+            "verkäuferin",
             "versicherungen",
             "finanzanlagen",
             "bankkaufmann",
             "industriekaufmann",
             "industriekauffrau",
             "fachinformatiker",
+            "fachinformatikerin",
             "informatik",
             "mechatroniker",
+            "mechatronikerin",
             "elektroniker",
+            "elektronikerin",
             "mechaniker",
             "schreiner",
             "tischler",
@@ -153,17 +178,71 @@ PROFESSION_KNOWLEDGE_BASE = {
             "großhandel",
             "grosshandel",
             "speditionskaufmann",
+            "hotelfachmann",
+            "hotelfachfrau",
+            "hotelfachleute",
+            "restaurantfachmann",
+            "restaurantfachfrau",
+            "restaurantfachleute",
+            "systemgastronomie",
+            "fachkraft im gastgewerbe",
+            "fachkraft für gastronomie",
+            "hauswirtschafter",
+            "hauswirtschafterin",
+            "bäcker",
+            "bäckerin",
+            "konditor",
+            "konditorin",
+            "fleischer",
+            "metzger",
         },
     },
+    "hotelfachmann": {
+        "canonical": "Hotelfachmann/-frau",
+        "variants": {"hotelfachmann", "hotelfachfrau", "hotelfachleute", "hotelfach"},
+        "conflicts": {"koch", "köchin", "fachinformatiker", "elektroniker", "mechatroniker", "versicherungen"},
+    },
+    "restaurantfachmann": {
+        "canonical": "Restaurantfachmann/-frau",
+        "variants": {"restaurantfachmann", "restaurantfachfrau", "restaurantfachleute", "restaurantfach"},
+        "conflicts": {"koch", "köchin", "fachinformatiker", "elektroniker", "mechatroniker", "versicherungen"},
+    },
     "industriekaufmann": {
+        "canonical": "Industriekaufmann/-frau",
         "variants": {
             "industriekaufmann",
             "industriekauffrau",
             "industriekaufleute",
         },
-        "conflicts": {"koch", "köchin", "fachinformatiker", "mechatroniker", "friseur"},
+        "conflicts": {"koch", "köchin", "fachinformatiker", "mechatroniker", "friseur", "einzelhandel", "versicherungen"},
+    },
+    "büromanagement": {
+        "canonical": "Kaufmann/-frau für Büromanagement",
+        "variants": {
+            "büromanagement",
+            "bueromanagement",
+            "kaufmann für büromanagement",
+            "kauffrau für büromanagement",
+            "bürokaufmann",
+            "bürokauffrau",
+            "buerokaufmann",
+            "buerokauffrau",
+        },
+        "conflicts": {
+            "koch",
+            "köchin",
+            "versicherungen",
+            "finanzanlagen",
+            "einzelhandel",
+            "großhandel",
+            "fachinformatiker",
+            "elektroniker",
+            "mechatroniker",
+            "pflegefachmann",
+        },
     },
     "kaufmann": {
+        "canonical": "Kaufmann/-frau",
         "variants": {
             "kaufmann",
             "kauffrau",
@@ -171,13 +250,13 @@ PROFESSION_KNOWLEDGE_BASE = {
             "kaufmännisch",
             "kaufmaennisch",
         },
-        "conflicts": {"koch", "köchin", "bäcker", "metzger", "schornsteinfeger"},
+        "conflicts": {"koch", "köchin", "bäcker", "metzger", "schornsteinfeger", "elektroniker", "mechatroniker", "pflegefachmann"},
     },
     "fachinformatiker": {
+        "canonical": "Fachinformatiker/in",
         "variants": {
             "fachinformatiker",
             "fachinformatikerin",
-            "informatik",
             "informatiker",
             "informatikerin",
             "anwendungsentwicklung",
@@ -192,9 +271,24 @@ PROFESSION_KNOWLEDGE_BASE = {
             "it-systemkaufmann",
             "informatikkaufmann",
         },
-        "conflicts": {"koch", "köchin", "industriekaufmann", "einzelhandel", "friseur"},
+        "conflicts": {
+            "koch",
+            "köchin",
+            "industriekaufmann",
+            "einzelhandel",
+            "friseur",
+            "versicherungen",
+            "finanzanlagen",
+            "hotelfachmann",
+            "restaurantfachmann",
+            "pflegefachmann",
+            "pflegefachfrau",
+            "bäcker",
+            "metzger",
+        },
     },
     "informatik": {
+        "canonical": "Fachinformatiker/in",
         "variants": {
             "informatik",
             "fachinformatiker",
@@ -207,9 +301,23 @@ PROFESSION_KNOWLEDGE_BASE = {
             "softwareentwickler",
             "informatikkaufmann",
         },
-        "conflicts": {"koch", "köchin", "friseur"},
+        "conflicts": {"koch", "köchin", "friseur", "versicherungen", "hotelfachmann", "pflegefachmann"},
+    },
+    "elektroniker": {
+        "canonical": "Elektroniker/in",
+        "variants": {
+            "elektroniker",
+            "elektronikerin",
+            "industrieelektroniker",
+            "energie- und gebäudetechnik",
+            "betriebstechnik",
+            "automatisierungstechnik",
+            "elektronik",
+        },
+        "conflicts": {"koch", "köchin", "kaufmann", "kauffrau", "fachinformatiker", "pflegefachmann", "friseur", "verkäufer"},
     },
     "mechatroniker": {
+        "canonical": "Mechatroniker/in",
         "variants": {
             "mechatroniker",
             "mechatronikerin",
@@ -217,9 +325,25 @@ PROFESSION_KNOWLEDGE_BASE = {
             "kfz-mechatronikerin",
             "kraftfahrzeugmechatroniker",
         },
-        "conflicts": {"koch", "köchin", "kaufmann", "kauffrau", "erzieher"},
+        "conflicts": {"koch", "köchin", "kaufmann", "kauffrau", "erzieher", "fachinformatiker", "pflegefachmann"},
+    },
+    "pflegefachmann": {
+        "canonical": "Pflegefachmann/-frau",
+        "variants": {
+            "pflegefachmann",
+            "pflegefachfrau",
+            "pflegefachkraft",
+            "pflegefachleute",
+            "altenpfleger",
+            "altenpflegerin",
+            "krankenpfleger",
+            "krankenpflegerin",
+            "gesundheits- und krankenpfleger",
+        },
+        "conflicts": {"koch", "köchin", "kaufmann", "kauffrau", "fachinformatiker", "elektroniker", "mechatroniker"},
     },
     "bäcker": {
+        "canonical": "Bäcker/in",
         "variants": {
             "bäcker",
             "bäckerin",
@@ -229,7 +353,79 @@ PROFESSION_KNOWLEDGE_BASE = {
             "konditorin",
             "bäckerei",
         },
-        "conflicts": {"kaufmann", "fachinformatiker", "mechatroniker"},
+        "conflicts": {"kaufmann", "fachinformatiker", "mechatroniker", "koch", "köchin"},
+    },
+    "erzieher": {
+        "canonical": "Erzieher/in",
+        "variants": {
+            "erzieher",
+            "erzieherin",
+            "erzieherinnen",
+            "erziehern",
+            "staatlich anerkannter erzieher",
+            "staatlich anerkannte erzieherin",
+            "staatlich anerkannten erzieher",
+            "jugend- und heimerzieher",
+            "jugend- und heimerzieherin",
+            "heimerzieher",
+            "heimerzieherin",
+            "arbeitserzieher",
+            "arbeitserzieherin",
+            "kinderpfleger",
+            "kinderpflegerin",
+            "sozialassistent",
+            "sozialassistentin",
+            "sozialpädagogische assistenz",
+            "sozialpaedagogische assistenz",
+        },
+        "probable_cues": {
+            "kita",
+            "kindergarten",
+            "kindertagesstätte",
+            "kindertagesstaette",
+            "krippe",
+            "hort",
+            "pädagogik",
+            "paedagogik",
+            "sozialpädagogik",
+            "sozialpaedagogik",
+            "elementarpädagogik",
+        },
+        "conflicts": {
+            "koch",
+            "köchin",
+            "kaufmann",
+            "kauffrau",
+            "fachinformatiker",
+            "fachinformatikerin",
+            "mechatroniker",
+            "elektroniker",
+            "bäcker",
+            "metzger",
+            "friseur",
+            "verkäufer",
+            "hotelfachmann",
+            "restaurantfachmann",
+        },
+    },
+    "friseur": {
+        "canonical": "Friseur/in",
+        "variants": {"friseur", "friseurin", "friseure", "friseurinnen", "frisör", "frisörin"},
+        "conflicts": {"koch", "köchin", "kaufmann", "fachinformatiker", "mechatroniker", "elektroniker", "erzieher"},
+    },
+    "verkäufer": {
+        "canonical": "Verkäufer/in",
+        "variants": {
+            "verkäufer",
+            "verkäuferin",
+            "verkaeufer",
+            "verkaeuferin",
+            "kaufmann im einzelhandel",
+            "kauffrau im einzelhandel",
+            "einzelhandelskaufmann",
+            "einzelhandelskauffrau",
+        },
+        "conflicts": {"koch", "köchin", "fachinformatiker", "mechatroniker", "elektroniker", "erzieher", "pflegefachmann"},
     },
 }
 
@@ -304,6 +500,141 @@ def normalize_umlauts(text: str) -> str:
     )
 
 
+def normalize_gender_inclusive_text(text: str) -> str:
+    """
+    Expands German gender-inclusive punctuation in job titles and queries so both
+    the base and gendered forms are explicitly searchable as whole words.
+    Examples:
+    - 'Erzieher/in' -> 'Erzieher Erzieherin'
+    - 'Erzieher/-in' -> 'Erzieher Erzieherin'
+    - 'Erzieher*in' -> 'Erzieher Erzieherin'
+    - 'Erzieher:in' -> 'Erzieher Erzieherin'
+    - 'Erzieher_in' -> 'Erzieher Erzieherin'
+    - 'ErzieherIn' -> 'Erzieher Erzieherin'
+    - 'Kaufmann/-frau' -> 'Kaufmann Kauffrau'
+    - 'Pflegefachmann*Pflegefachfrau' -> 'Pflegefachmann Pflegefachfrau'
+    - 'zum/r' -> 'zum zur'
+    """
+    if not text:
+        return ""
+    s = str(text)
+    # Handle Binnen-I (e.g. ErzieherIn, ErzieherInnen) before lowercasing
+    s = re.sub(
+        r"\b([A-ZÄÖÜ][a-zäöüß]{2,})I(n|nnen)\b",
+        lambda m: f"{m.group(1)} {m.group(1)}i{m.group(2)}",
+        s,
+    )
+    s_low = s.lower()
+    # Strip common gender-inclusive preposition slashes
+    s_low = re.sub(r"\bzum\s*/\s*-?\s*r\b", "zum zur", s_low)
+    s_low = re.sub(r"\bzur\s*/\s*-?\s*m\b", "zur zum", s_low)
+
+    # Expand -mann/-frau, -mann*frau, -mann:frau, -mann/frau
+    s_low = re.sub(
+        r"\b([a-zäöüß]{2,}?)mann\s*(?:/-|-/|/|\*|:|_)\s*frau(en)?\b",
+        lambda m: f"{m.group(1)}mann {m.group(1)}frau{m.group(2) or ''}",
+        s_low,
+    )
+    # Expand -frau/-mann, -frau*mann
+    s_low = re.sub(
+        r"\b([a-zäöüß]{2,}?)frau\s*(?:/-|-/|/|\*|:|_)\s*mann\b",
+        lambda m: f"{m.group(1)}frau {m.group(1)}mann",
+        s_low,
+    )
+    # Expand <stem>(/in, /-in, *in, :in, _in, /innen, *innen, :innen, _innen)
+    s_low = re.sub(
+        r"\b([a-zäöüß]{3,}?)\s*(?:/-|-/|/|\*|:|_)\s*(innen|in)\b",
+        lambda m: f"{m.group(1)} {m.group(1)}{m.group(2)}",
+        s_low,
+    )
+    # Replace remaining *, :, /, _ between letters with spaces so tokens split cleanly
+    s_low = re.sub(r"(?<=[a-zäöüß])[/*:_]+(?=[a-zäöüß])", " ", s_low)
+    return s_low
+
+
+def _deumlaut_stem(stem: str) -> str:
+    """Reverses German i-umlaut in occupation roots (e.g. köch -> koch, bäcker -> backer)."""
+    return (
+        stem.replace("äu", "au")
+        .replace("ä", "a")
+        .replace("ö", "o")
+        .replace("ü", "u")
+    )
+
+
+def generate_german_occupation_variants(word: str) -> Set[str]:
+    """
+    Bidirectional German morphological generator for occupation nouns.
+    Maps masculine, feminine, plural, dative, and gender-neutral forms to a unified variant set:
+    - 'erzieherin' <-> 'erzieher', 'erzieherin', 'erzieherinnen', 'erziehern'
+    - 'kauffrau' <-> 'kaufmann', 'kauffrau', 'kaufleute', 'kaufkraft'
+    - 'pflegefachfrau' <-> 'pflegefachmann', 'pflegefachfrau', 'pflegefachkraft', 'pflegefachleute'
+    - 'köchin' <-> 'koch', 'köchin', 'koechin', 'köche'
+    """
+    out: Set[str] = set()
+    w = str(word or "").strip().lower()
+    if not w or len(w) <= 1:
+        return out
+
+    out.add(w)
+    out.add(normalize_umlauts(w))
+
+    # 1. -erinnen / -erin <-> -er (e.g. erzieherin <-> erzieher, verkäuferin <-> verkäufer)
+    if w.endswith("erinnen") and len(w) > 8:
+        base_er = w[:-5]  # ends with 'er'
+        out.update({base_er, base_er + "in", base_er + "innen", base_er + "n", base_er + "s"})
+    elif w.endswith("erin") and len(w) > 5:
+        base_er = w[:-2]  # ends with 'er'
+        out.update({base_er, base_er + "in", base_er + "innen", base_er + "n", base_er + "s"})
+        deum = _deumlaut_stem(base_er)
+        if deum != base_er:
+            out.update({deum, deum + "in", deum + "innen"})
+    elif w.endswith("ern") and len(w) > 5:
+        base_er = w[:-1]  # ends with 'er'
+        out.update({base_er, base_er + "in", base_er + "innen", base_er + "n"})
+    elif w.endswith("er") and len(w) > 3:
+        out.update({w, w + "in", w + "innen", w + "n", w + "s"})
+
+    # 2. -frau / -frauen <-> -mann / -leute / -kraft
+    if w.endswith("frauen") and len(w) > 7:
+        stem = w[:-6]
+        out.update({stem + "mann", stem + "frau", stem + "frauen", stem + "leute", stem + "kraft", stem + "kräfte"})
+    elif w.endswith("frau") and len(w) > 5:
+        stem = w[:-4]
+        out.update({stem + "mann", stem + "frau", stem + "frauen", stem + "leute", stem + "kraft", stem + "kräfte"})
+    elif w.endswith("mann") and len(w) > 5:
+        stem = w[:-4]
+        out.update({stem + "mann", stem + "frau", stem + "frauen", stem + "leute", stem + "kraft", stem + "kräfte"})
+    elif w.endswith("leute") and len(w) > 6:
+        stem = w[:-5]
+        out.update({stem + "mann", stem + "frau", stem + "frauen", stem + "leute", stem + "kraft"})
+    elif w.endswith("kraft") and len(w) > 6:
+        stem = w[:-5]
+        out.update({stem + "kraft", stem + "kräfte", stem + "mann", stem + "frau", stem + "leute"})
+
+    # 3. General -innen / -in (when not -erin, e.g. köchin -> koch, assistentin -> assistent, laborantin -> laborant)
+    if w.endswith("innen") and not w.endswith("erinnen") and len(w) > 7:
+        root = w[:-5]
+        out.update({root, root + "in", root + "innen", root + "e", root + "en"})
+        deum = _deumlaut_stem(root)
+        if deum != root:
+            out.update({deum, deum + "e"})
+    elif w.endswith("in") and not w.endswith("erin") and len(w) > 4:
+        root = w[:-2]
+        out.update({root, root + "in", root + "innen", root + "e", root + "en"})
+        deum = _deumlaut_stem(root)
+        if deum != root:
+            out.update({deum, deum + "e"})
+    elif any(w.endswith(suf) for suf in ("ist", "ant", "ent", "eut", "eur", "ör", "oer", "arzt", "wirt")) and len(w) > 4:
+        out.update({w + "in", w + "innen"})
+
+    # Add umlaut-normalized forms for every generated variant
+    for v in list(out):
+        out.add(normalize_umlauts(v))
+
+    return out
+
+
 def extract_profession_tokens(search_keyword: str) -> Dict[str, Any]:
     """
     Strips generic words ("Ausbildung", "zum", "als", "für", etc.) and extracts
@@ -317,9 +648,11 @@ def extract_profession_tokens(search_keyword: str) -> Dict[str, Any]:
     cleaned = re.sub(r"[\(\[\{]\s*[a-zA-Z0-9/\-\+\.\s]{1,10}\s*[\)\]\}]", " ", raw)
     # Remove standalone gender tokens
     cleaned = re.sub(r"\b(m/w/d|w/m/d|d/m/w|m/f/d|gn|mwd|wmd|dmw|mfd)\b", " ", cleaned)
+    # Expand gender-inclusive slash/star/colon forms (e.g. Erzieher*in -> Erzieher Erzieherin)
+    cleaned = normalize_gender_inclusive_text(cleaned)
     # Split into words
     words = [w for w in re.split(r"[^a-zA-ZäöüÄÖÜß0-9\-]+", cleaned) if w]
-    core_words = [w for w in words if w not in GERMAN_STOP_WORDS and len(w) > 1]
+    core_words = [w for w in words if w not in GERMAN_STOP_WORDS and len(w) > 1 and not w.isdigit()]
 
     if not core_words:
         # User searched only "Ausbildung" or generic term
@@ -327,90 +660,529 @@ def extract_profession_tokens(search_keyword: str) -> Dict[str, Any]:
 
     core_tokens: Set[str] = set()
     variants: Set[str] = set()
+    probable_cues: Set[str] = set()
     conflicts: Set[str] = set()
+    canonical_name: str = ""
 
     for word in core_words:
         core_tokens.add(word)
-        variants.add(word)
-        variants.add(normalize_umlauts(word))
+        morph_variants = generate_german_occupation_variants(word)
+        variants.update(morph_variants)
 
-        # Check knowledge base
+        # Check knowledge base using full morphological variant set
         for kb_key, kb_data in PROFESSION_KNOWLEDGE_BASE.items():
-            if kb_key == word or word in kb_data["variants"] or kb_key in word or word in kb_key:
-                variants.update(kb_data["variants"])
-                for v in kb_data["variants"]:
-                    variants.add(normalize_umlauts(v))
+            kb_variants = kb_data["variants"]
+            if (
+                kb_key in morph_variants
+                or bool(morph_variants & kb_variants)
+                or kb_key in word
+                or word in kb_key
+            ):
+                if not canonical_name and kb_data.get("canonical"):
+                    canonical_name = kb_data["canonical"]
+                variants.update(kb_variants)
+                for v in kb_variants:
+                    variants.update(generate_german_occupation_variants(v))
+                probable_cues.update(kb_data.get("probable_cues", set()))
                 conflicts.update(kb_data["conflicts"])
 
-        # Automatic German morphological variants (e.g. -er -> -erin, -mann -> -frau)
-        if word.endswith("er") and len(word) > 3:
-            base = word[:-2]
-            variants.add(base + "erin")
-            variants.add(base + "erinnen")
-            variants.add(base + "er")
-        elif word.endswith("mann") and len(word) > 4:
-            base = word[:-4]
-            variants.add(base + "frau")
-            variants.add(base + "frauen")
-            variants.add(base + "leute")
-            variants.add(base + "männlich")
+    # Never allow a generated variant of the requested occupation to remain in conflicts
+    conflicts -= variants
+    conflicts -= core_tokens
+
+    if not canonical_name:
+        canonical_name = " ".join(core_words)
 
     return {
         "core_tokens": core_tokens,
         "variants": variants,
+        "probable_cues": probable_cues,
         "conflicts": conflicts,
+        "canonical": canonical_name,
+        "normalized_occupation": " ".join(core_words),
         "is_generic": False,
     }
 
 
-def is_profession_relevant(title: str, hauptberuf: str, search_keyword: str) -> bool:
+def normalize_occupation_term(text: str) -> str:
     """
-    Checks if a job's title or hauptberuf matches the searched profession.
-    Rejects clearly unrelated professions (e.g., Industriekaufmann for Koch).
-    Accepts legitimate German synonyms and morphological variations (Koch, Köchin, etc.).
+    Normalizes German search queries and job titles into their core occupation term:
+    - Lowercases and trims whitespace
+    - Strips gender markers (m/w/d, w/m/d, d/m/w, gn)
+    - Expands gender-inclusive notation (*in, :in, /in, /-in)
+    - Strips generic wrapper words (ausbildung, ausbildungsplatz, azubi, zum, zur, als, für, 2026, 2027, etc.)
+    """
+    raw = str(text or "").strip().lower()
+    if not raw or raw in {"n/a", "k. a.", "k.a.", "none"}:
+        return ""
+    cleaned = re.sub(r"[\(\[\{]\s*[a-zA-Z0-9/\-\+\.\s]{1,12}\s*[\)\]\}]", " ", raw)
+    cleaned = re.sub(r"\b(m/w/d|w/m/d|d/m/w|m/f/d|gn|mwd|wmd|dmw|mfd)\b", " ", cleaned, flags=re.I)
+    cleaned = normalize_gender_inclusive_text(cleaned)
+    words = [w for w in re.split(r"[^a-zA-ZäöüÄÖÜß0-9\-]+", cleaned) if w]
+    core_words = []
+    for w in words:
+        if w not in GERMAN_STOP_WORDS and len(w) > 1 and not w.isdigit():
+            if w not in core_words:
+                core_words.append(w)
+    return " ".join(core_words).strip()
+
+
+def is_generic_only_title(title: str) -> bool:
+    """
+    Returns True if a job title contains only generic apprenticeship wrapper words
+    (e.g. 'Ausbildung 2027', 'Ausbildung 2026', 'Ausbildung 2027 - Praktikum möglich', 'N/A', '').
+    """
+    norm = normalize_occupation_term(title)
+    if not norm:
+        return True
+    # Check if remaining words are only generic adjectives like 'möglich', 'ab', 'herbst', 'august', 'september'
+    extra_noise = {
+        "möglich", "moeglich", "herbst", "sommer", "frühjahr", "winter",
+        "august", "september", "oktober", "ab", "start", "beginn", "frei", "freie", "offene",
+    }
+    rem = [w for w in norm.split() if w not in extra_noise]
+    return len(rem) == 0
+
+
+def detect_job_occupation(job: Dict[str, Any]) -> str:
+    """
+    Detects the specific German occupation from a job's structured fields, title, or description.
+    """
+    hauptberuf = str(job.get("hauptberuf") or job.get("beruf") or job.get("occupation") or "").strip()
+    if hauptberuf and hauptberuf.lower() not in {"n/a", "k. a.", "none"}:
+        return hauptberuf
+
+    title = str(job.get("title") or job.get("titel") or job.get("stellenangebotsTitel") or "").strip()
+    title_lower = normalize_gender_inclusive_text(title)
+    title_norm = normalize_umlauts(title_lower)
+
+    # Check if any known profession in KB matches the title
+    for kb_key, kb_data in PROFESSION_KNOWLEDGE_BASE.items():
+        for v in kb_data["variants"]:
+            v_norm = normalize_umlauts(v)
+            if (
+                re.search(r"\b" + re.escape(v) + r"\b", title_lower)
+                or re.search(r"\b" + re.escape(v_norm) + r"\b", title_norm)
+            ):
+                return kb_data.get("canonical", v)
+
+    # Check if title has a normalized occupation term (and isn't generic-only)
+    if not is_generic_only_title(title):
+        return normalize_occupation_term(title)
+
+    # Inspect description / metadata if title is generic
+    desc = " ".join(
+        str(job.get(k) or "")
+        for k in ("description", "snippet", "category", "breadcrumbs", "requirements", "tasks")
+    )
+    desc_lower = normalize_gender_inclusive_text(desc)
+    desc_norm = normalize_umlauts(desc_lower)
+    if desc_lower.strip():
+        for kb_key, kb_data in PROFESSION_KNOWLEDGE_BASE.items():
+            for v in kb_data["variants"]:
+                v_norm = normalize_umlauts(v)
+                if (
+                    re.search(r"\b" + re.escape(v) + r"\b", desc_lower)
+                    or re.search(r"\b" + re.escape(v_norm) + r"\b", desc_norm)
+                ):
+                    return kb_data.get("canonical", v)
+
+    return ""
+
+
+def _text_has_variant_or_token(text: str, token_meta: Dict[str, Any]) -> Tuple[bool, bool, str]:
+    """
+    Checks if `text` contains an exact core token or an equivalent variant.
+    Normalizes German gender-inclusive spellings (*in, :in, /in, /-in, _in, Binnen-I)
+    before word-boundary and compound matching.
+    Returns (is_exact_core, is_equivalent_variant, matched_term).
+    """
+    raw_text = str(text or "").strip()
+    if not raw_text:
+        return False, False, ""
+    t_lower = normalize_gender_inclusive_text(raw_text)
+    t_norm = normalize_umlauts(t_lower)
+
+    for core in token_meta.get("core_tokens", set()):
+        core_norm = normalize_umlauts(core)
+        if (
+            re.search(r"\b" + re.escape(core) + r"\b", t_lower)
+            or re.search(r"\b" + re.escape(core_norm) + r"\b", t_norm)
+        ):
+            return True, True, core
+
+    for v in token_meta.get("variants", set()):
+        v_norm = normalize_umlauts(v)
+        if (
+            re.search(r"\b" + re.escape(v) + r"\b", t_lower)
+            or re.search(r"\b" + re.escape(v_norm) + r"\b", t_norm)
+            or (len(v) >= 5 and (v in t_lower or v_norm in t_norm))
+        ):
+            return False, True, v
+
+    for core in token_meta.get("core_tokens", set()):
+        core_norm = normalize_umlauts(core)
+        if len(core) >= 4 and (core in t_lower or core_norm in t_norm):
+            return False, True, core
+
+    return False, False, ""
+
+
+def _text_has_conflict(text: str, token_meta: Dict[str, Any]) -> Tuple[bool, str]:
+    t_lower = str(text or "").lower().strip()
+    if not t_lower:
+        return False, ""
+    t_norm = normalize_umlauts(t_lower)
+    for c in token_meta.get("conflicts", set()):
+        c_norm = normalize_umlauts(c)
+        if (
+            re.search(r"\b" + re.escape(c) + r"\b", t_lower)
+            or re.search(r"\b" + re.escape(c_norm) + r"\b", t_norm)
+        ):
+            return True, c
+    return False, ""
+
+
+def score_occupation_relevance(job: Dict[str, Any], search_keyword: str) -> Dict[str, Any]:
+    """
+    Stage A — Fast discovery occupation relevance classification:
+    Classifies a job against `search_keyword` into one of 5 categories:
+    - exact_match (1.0): Exact occupation match in job title or structured occupation field.
+    - equivalent_occupation (0.95): Valid gender form, plural, synonym, or official variant.
+    - probable_match (0.85): Title is generic (e.g. 'Ausbildung 2027') AND structured metadata / description confirms occupation.
+    - uncertain (0.50): Generic title with insufficient metadata on card; requires Stage B detail verification.
+    - irrelevant (0.0): Different occupation or no evidence of requested occupation.
     """
     token_meta = extract_profession_tokens(search_keyword)
+    title = str(job.get("title") or job.get("titel") or job.get("stellenangebotsTitel") or "").strip()
+    hauptberuf = str(job.get("hauptberuf") or job.get("beruf") or job.get("occupation") or "").strip()
+    extra_meta = " ".join(
+        str(job.get(k) or "")
+        for k in ("description", "snippet", "category", "breadcrumbs", "requirements", "tasks")
+    ).strip()
+
+    detected_occ = detect_job_occupation(job)
+    req_occ = token_meta.get("normalized_occupation") or normalize_occupation_term(search_keyword)
+
     if token_meta["is_generic"]:
-        return True
+        res = {
+            "search_query": search_keyword,
+            "normalized_requested_occupation": req_occ,
+            "detected_job_occupation": detected_occ or title,
+            "occupation_match_type": "exact_match",
+            "relevance_score": 1.0,
+            "relevance_decision_reason": "Generic search query accepts all apprenticeship listings",
+        }
+        job.update(res)
+        return res
 
-    title_norm = str(title or "").lower().strip()
-    beruf_norm = str(hauptberuf or "").lower().strip()
-    combined_text = f"{title_norm} {beruf_norm}"
-    combined_norm = normalize_umlauts(combined_text)
+    title_exact, title_equiv, title_term = _text_has_variant_or_token(title, token_meta)
+    beruf_exact, beruf_equiv, beruf_term = _text_has_variant_or_token(hauptberuf, token_meta)
+    title_conflict, conflict_term = _text_has_conflict(f"{title} {hauptberuf}", token_meta)
 
-    # Check positive match: any variant or core token matches
-    has_variant = any(
-        re.search(r"\b" + re.escape(v) + r"\b", combined_text, re.I)
-        or re.search(r"\b" + re.escape(v) + r"\b", combined_norm, re.I)
-        or (len(v) >= 4 and (v in combined_text or v in combined_norm))
-        for v in token_meta["variants"]
-    )
+    # Check if a conflicting occupation appears in the title without the target occupation
+    if title_conflict and not (title_exact or title_equiv or beruf_exact or beruf_equiv):
+        res = {
+            "search_query": search_keyword,
+            "normalized_requested_occupation": req_occ,
+            "detected_job_occupation": detected_occ or conflict_term,
+            "occupation_match_type": "irrelevant",
+            "relevance_score": 0.0,
+            "relevance_decision_reason": f"Conflicting occupation '{conflict_term}' in title/beruf '{title}' does not match '{req_occ}'",
+        }
+        job.update(res)
+        return res
 
-    if not has_variant:
-        # Check if any core token is a substring of title words (e.g. "koch" in "beikoch", "informatik" in "fachinformatiker")
-        has_token = any(
-            t in combined_text or t in combined_norm
-            for t in token_meta["core_tokens"]
-            if len(t) >= 4
-        )
-        if not has_token:
-            return False
+    # Even if a substring matched, verify Koch vs Kaufmann conflict
+    if title_conflict and "koch" in token_meta["core_tokens"]:
+        combined_th = f"{title} {hauptberuf}".lower()
+        if not any(k in combined_th for k in ["koch", "köch", "koech", "beikoch", "jungkoch"]):
+            res = {
+                "search_query": search_keyword,
+                "normalized_requested_occupation": req_occ,
+                "detected_job_occupation": detected_occ or conflict_term,
+                "occupation_match_type": "irrelevant",
+                "relevance_score": 0.0,
+                "relevance_decision_reason": f"Conflicting occupation '{conflict_term}' without explicit Koch match",
+            }
+            job.update(res)
+            return res
 
-    # Conflict check: If conflict keywords are defined and present in the title,
-    # ensure that an explicit core variant is present to avoid false positives
-    # (e.g. "Kaufmann für Versicherungen" should NOT match "Koch")
-    has_conflict = any(
-        re.search(r"\b" + re.escape(c) + r"\b", combined_text, re.I)
-        or re.search(r"\b" + re.escape(c) + r"\b", combined_norm, re.I)
-        for c in token_meta["conflicts"]
-    )
+    generic_title = is_generic_only_title(title)
 
-    if has_conflict:
-        # For Koch, if title has Kaufmann and no Koch, reject!
-        if "koch" in token_meta["core_tokens"] and not any(k in combined_text for k in ["koch", "köch", "koech", "küch", "kuech"]):
-            return False
+    # Case 1: Title itself has exact match
+    if title_exact and not generic_title:
+        res = {
+            "search_query": search_keyword,
+            "normalized_requested_occupation": req_occ,
+            "detected_job_occupation": detected_occ or token_meta.get("canonical") or title_term,
+            "occupation_match_type": "exact_match",
+            "relevance_score": 1.0,
+            "relevance_decision_reason": f"Exact occupation token '{title_term}' matched in job title '{title}'",
+        }
+        job.update(res)
+        return res
 
-    return True
+    # Case 2: Title has equivalent occupation variant (gender form, plural, synonym, specialization)
+    if title_equiv and not generic_title:
+        res = {
+            "search_query": search_keyword,
+            "normalized_requested_occupation": req_occ,
+            "detected_job_occupation": detected_occ or token_meta.get("canonical") or title_term,
+            "occupation_match_type": "equivalent_occupation",
+            "relevance_score": 0.95,
+            "relevance_decision_reason": f"Equivalent occupation variant '{title_term}' matched in job title '{title}'",
+        }
+        job.update(res)
+        return res
+
+    # Case 3: Title is generic (e.g. 'Ausbildung 2027', 'N/A', '') -> check structured hauptberuf or description
+    if generic_title:
+        if beruf_exact or beruf_equiv:
+            canonical_occ = hauptberuf or token_meta.get("canonical") or beruf_term
+            if not title or title.lower() in {"n/a", "k. a.", "none"}:
+                job["title"] = f"Ausbildung {canonical_occ}"
+            elif canonical_occ.lower() not in title.lower():
+                job["title"] = f"{title} ({canonical_occ})"
+            res = {
+                "search_query": search_keyword,
+                "normalized_requested_occupation": req_occ,
+                "detected_job_occupation": canonical_occ,
+                "occupation_match_type": "probable_match",
+                "relevance_score": 0.85,
+                "relevance_decision_reason": f"Generic title '{title}' confirmed by structured occupation field '{hauptberuf}'",
+            }
+            job.update(res)
+            return res
+
+        meta_exact, meta_equiv, meta_term = _text_has_variant_or_token(extra_meta, token_meta)
+        meta_conflict, meta_conflict_term = _text_has_conflict(extra_meta, token_meta)
+        if (meta_exact or meta_equiv) and not meta_conflict:
+            canonical_occ = token_meta.get("canonical") or meta_term
+            if not title or title.lower() in {"n/a", "k. a.", "none"}:
+                job["title"] = f"Ausbildung {canonical_occ}"
+            elif canonical_occ.lower() not in title.lower():
+                job["title"] = f"{title} ({canonical_occ})"
+            res = {
+                "search_query": search_keyword,
+                "normalized_requested_occupation": req_occ,
+                "detected_job_occupation": canonical_occ,
+                "occupation_match_type": "probable_match",
+                "relevance_score": 0.85,
+                "relevance_decision_reason": f"Generic title '{title}' confirmed by job description/metadata ('{meta_term}')",
+            }
+            job.update(res)
+            return res
+
+        if meta_conflict and not (meta_exact or meta_equiv):
+            res = {
+                "search_query": search_keyword,
+                "normalized_requested_occupation": req_occ,
+                "detected_job_occupation": meta_conflict_term,
+                "occupation_match_type": "irrelevant",
+                "relevance_score": 0.0,
+                "relevance_decision_reason": f"Generic title '{title}' has conflicting occupation '{meta_conflict_term}' in metadata",
+            }
+            job.update(res)
+            return res
+
+        # Insufficient metadata on card -> mark uncertain for Stage B detail verification
+        res = {
+            "search_query": search_keyword,
+            "normalized_requested_occupation": req_occ,
+            "detected_job_occupation": detected_occ or "unknown",
+            "occupation_match_type": "uncertain",
+            "relevance_score": 0.50,
+            "relevance_decision_reason": f"Generic title '{title}' has insufficient card metadata; requires Stage B detail verification",
+        }
+        job.update(res)
+        return res
+
+    # Case 4: Non-generic title that did not match title, but structured hauptberuf matches
+    if beruf_exact or beruf_equiv:
+        res = {
+            "search_query": search_keyword,
+            "normalized_requested_occupation": req_occ,
+            "detected_job_occupation": hauptberuf or token_meta.get("canonical") or beruf_term,
+            "occupation_match_type": "probable_match",
+            "relevance_score": 0.85,
+            "relevance_decision_reason": f"Title '{title}' confirmed by structured occupation field '{hauptberuf}'",
+        }
+        job.update(res)
+        return res
+
+    # Otherwise: Non-generic title with no match in title or hauptberuf -> irrelevant
+    res = {
+        "search_query": search_keyword,
+        "normalized_requested_occupation": req_occ,
+        "detected_job_occupation": detected_occ or normalize_occupation_term(title) or "unmatched",
+        "occupation_match_type": "irrelevant",
+        "relevance_score": 0.0,
+        "relevance_decision_reason": f"Title '{title}' contains no evidence of requested occupation '{req_occ}'",
+    }
+    job.update(res)
+    return res
+
+
+_STAGE_B_SESSION = None
+_STAGE_B_LOCK = None
+
+
+def _get_stage_b_session():
+    global _STAGE_B_SESSION, _STAGE_B_LOCK
+    import threading
+    if _STAGE_B_LOCK is None:
+        _STAGE_B_LOCK = threading.Lock()
+    with _STAGE_B_LOCK:
+        if _STAGE_B_SESSION is None:
+            import requests
+            from requests.adapters import HTTPAdapter
+            s = requests.Session()
+            adapter = HTTPAdapter(pool_connections=16, pool_maxsize=16)
+            s.mount("http://", adapter)
+            s.mount("https://", adapter)
+            s.headers.update({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
+            _STAGE_B_SESSION = s
+        return _STAGE_B_SESSION
+
+
+def verify_ambiguous_job_relevance(
+    job: Dict[str, Any],
+    search_keyword: str,
+    session: Optional[Any] = None,
+    timeout: int = 5,
+) -> Dict[str, Any]:
+    """
+    Stage B — Job Detail Verification for 'uncertain' results (e.g. 'Ausbildung 2027').
+    Fetches and inspects the full job detail page (structured occupation fields, JSON-LD,
+    breadcrumbs, headings, and full job description).
+    Keeps the job ONLY if the requested occupation is confirmed; otherwise rejects it as 'irrelevant'.
+    """
+    token_meta = extract_profession_tokens(search_keyword)
+    req_occ = token_meta.get("normalized_occupation") or normalize_occupation_term(search_keyword)
+    title = str(job.get("title") or "").strip()
+
+    # First re-check any existing description/metadata fields on job
+    existing_detail = " ".join(
+        str(job.get(k) or "")
+        for k in ("hauptberuf", "beruf", "occupation", "description", "snippet", "category", "breadcrumbs", "requirements", "tasks", "full_text")
+    ).strip()
+
+    if existing_detail:
+        ex_exact, ex_equiv, ex_term = _text_has_variant_or_token(existing_detail, token_meta)
+        ex_conflict, ex_conflict_term = _text_has_conflict(existing_detail, token_meta)
+        if (ex_exact or ex_equiv) and not ex_conflict:
+            canonical_occ = token_meta.get("canonical") or ex_term
+            if is_generic_only_title(title):
+                if not title or title.lower() in {"n/a", "k. a.", "none"}:
+                    job["title"] = f"Ausbildung {canonical_occ}"
+                elif canonical_occ.lower() not in title.lower():
+                    job["title"] = f"{title} ({canonical_occ})"
+            res = {
+                "search_query": search_keyword,
+                "normalized_requested_occupation": req_occ,
+                "detected_job_occupation": canonical_occ,
+                "occupation_match_type": "probable_match",
+                "relevance_score": 0.85,
+                "relevance_decision_reason": f"Stage B confirmed '{canonical_occ}' via detail metadata ('{ex_term}')",
+            }
+            job.update(res)
+            return res
+
+    # If URL is available, inspect detail page via bounded HTTP fetch
+    detail_url = str(job.get("job_listing_url") or job.get("url") or job.get("apply_url") or "").strip()
+    if detail_url.startswith(("http://", "https://")):
+        try:
+            from bs4 import BeautifulSoup
+
+            http = session or _get_stage_b_session()
+            resp = http.get(
+                detail_url,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+                timeout=timeout,
+                allow_redirects=True,
+            )
+            if resp.status_code < 400 and resp.text:
+                html_text = resp.text
+                # Check Arbeitsagentur ng-state for hauptberuf / stellenangebotsbeschreibung
+                hb_match = re.search(r'"hauptberuf"\s*:\s*"([^"]+)"', html_text)
+                if hb_match:
+                    hb_val = hb_match.group(1).strip()
+                    job["hauptberuf"] = hb_val
+                    hb_exact, hb_equiv, hb_term = _text_has_variant_or_token(hb_val, token_meta)
+                    if hb_exact or hb_equiv:
+                        if is_generic_only_title(title):
+                            job["title"] = f"{title} ({hb_val})" if title and title.lower() not in {"n/a", "k. a."} else f"Ausbildung {hb_val}"
+                        res = {
+                            "search_query": search_keyword,
+                            "normalized_requested_occupation": req_occ,
+                            "detected_job_occupation": hb_val,
+                            "occupation_match_type": "probable_match",
+                            "relevance_score": 0.85,
+                            "relevance_decision_reason": f"Stage B confirmed structured hauptberuf '{hb_val}' on detail page",
+                        }
+                        job.update(res)
+                        return res
+
+                soup = BeautifulSoup(html_text, "html.parser")
+                for tag in soup(["script", "style", "noscript", "svg"]):
+                    tag.decompose()
+                page_text = " ".join(soup.get_text(" ", strip=True).split())[:8000]
+                p_exact, p_equiv, p_term = _text_has_variant_or_token(page_text, token_meta)
+                p_conflict, p_conflict_term = _text_has_conflict(page_text[:1500], token_meta)
+                if (p_exact or p_equiv) and not (p_conflict and not p_exact):
+                    canonical_occ = token_meta.get("canonical") or p_term
+                    if is_generic_only_title(title):
+                        job["title"] = f"{title} ({canonical_occ})" if title and title.lower() not in {"n/a", "k. a."} else f"Ausbildung {canonical_occ}"
+                    res = {
+                        "search_query": search_keyword,
+                        "normalized_requested_occupation": req_occ,
+                        "detected_job_occupation": canonical_occ,
+                        "occupation_match_type": "probable_match",
+                        "relevance_score": 0.85,
+                        "relevance_decision_reason": f"Stage B confirmed occupation '{p_term}' in detail page content",
+                    }
+                    job.update(res)
+                    return res
+        except Exception as exc:
+            logger.debug("Stage B detail verification fetch failed for %s: %s", detail_url, exc)
+
+    # Unconfirmed ambiguous listing -> reject before contact extraction and Excel export
+    res = {
+        "search_query": search_keyword,
+        "normalized_requested_occupation": req_occ,
+        "detected_job_occupation": "unconfirmed_generic",
+        "occupation_match_type": "irrelevant",
+        "relevance_score": 0.0,
+        "relevance_decision_reason": f"Stage B rejected generic title '{title}': occupation '{req_occ}' not confirmed on detail page",
+    }
+    job.update(res)
+    return res
+
+
+def is_profession_relevant(
+    title: str,
+    hauptberuf: str,
+    search_keyword: str,
+    description: str = "",
+) -> bool:
+    """
+    Checks if a job's title, hauptberuf, or description matches the searched profession.
+    Rejects clearly unrelated professions (e.g., Industriekaufmann or Hotelfachmann for Koch)
+    and unconfirmed generic titles (e.g., 'Ausbildung 2027' with no occupation evidence).
+    Accepts exact matches, equivalent German synonyms/variants, and probable matches.
+    """
+    sample_job = {
+        "title": title,
+        "hauptberuf": hauptberuf,
+        "description": description,
+    }
+    scored = score_occupation_relevance(sample_job, search_keyword)
+    return scored["occupation_match_type"] in {
+        "exact_match",
+        "equivalent_occupation",
+        "probable_match",
+    }
 
 
 
@@ -752,6 +1524,13 @@ def filter_and_deduplicate_jobs(
     exclusions: List[Dict[str, Any]] = []
 
     per_source_stats: Dict[str, Dict[str, int]] = {}
+    relevance_summary: Dict[str, int] = {
+        "exact_matches": 0,
+        "equivalent_occupation_matches": 0,
+        "probable_matches": 0,
+        "uncertain_results": 0,
+        "irrelevant_results_rejected": 0,
+    }
 
     for j in jobs:
         src = str((j.get("source") if isinstance(j, dict) else "") or "Unknown").strip()
@@ -767,7 +1546,38 @@ def filter_and_deduplicate_jobs(
             }
         per_source_stats[src]["raw"] += 1
 
-    for job in jobs:
+    # Pre-score Stage A and batch-verify Stage B ('uncertain') concurrently when multiple uncertain jobs exist
+    pre_scored_map: Dict[int, Dict[str, Any]] = {}
+    if keyword:
+        uncertain_pairs: List[Tuple[int, Dict[str, Any]]] = []
+        for idx_j, j_cand in enumerate(jobs):
+            if not isinstance(j_cand, dict):
+                continue
+            is_pot = j_cand.get("opportunity_type") == "POTENTIAL_EMPLOYER" or bool(j_cand.get("is_potential_employer"))
+            if not is_pot:
+                sc = score_occupation_relevance(j_cand, keyword)
+                pre_scored_map[idx_j] = sc
+                if sc["occupation_match_type"] == "uncertain":
+                    uncertain_pairs.append((idx_j, j_cand))
+
+        if len(uncertain_pairs) > 1:
+            from concurrent.futures import ThreadPoolExecutor
+            shared_sess = _get_stage_b_session()
+            with ThreadPoolExecutor(max_workers=min(8, len(uncertain_pairs))) as sb_pool:
+                futs = {
+                    idx_u: sb_pool.submit(verify_ambiguous_job_relevance, j_u, keyword, shared_sess)
+                    for idx_u, j_u in uncertain_pairs
+                }
+                for idx_u, fut_u in futs.items():
+                    try:
+                        pre_scored_map[idx_u] = (fut_u.result(), True)
+                    except Exception:
+                        pass
+        elif len(uncertain_pairs) == 1:
+            idx_u, j_u = uncertain_pairs[0]
+            pre_scored_map[idx_u] = (verify_ambiguous_job_relevance(j_u, keyword), True)
+
+    for idx_job, job in enumerate(jobs):
         if not isinstance(job, dict):
             continue
 
@@ -776,19 +1586,52 @@ def filter_and_deduplicate_jobs(
         hauptberuf = str(job.get("hauptberuf") or "").strip()
         company = str(job.get("company") or "k. A.").strip()
 
-        # 1. Profession Relevance Validation
+        # 1. Two-Stage Profession Relevance Validation (Stage A + Stage B)
         is_potential = job.get("opportunity_type") == "POTENTIAL_EMPLOYER" or bool(job.get("is_potential_employer"))
-        if keyword and not is_potential and not is_profession_relevant(title, hauptberuf, keyword):
-            per_source_stats[src]["rejected_profession"] += 1
-            exclusions.append({
-                "stage": "profession",
-                "source": src,
-                "title": title,
-                "company": company,
-                "location": str(job.get("location") or "k. A."),
-                "reason": f"Titel/Beruf '{title}' entspricht nicht dem gesuchten Berufsfeld '{keyword}'",
-            })
-            continue
+        if keyword and not is_potential:
+            pre_val = pre_scored_map.get(idx_job)
+            if isinstance(pre_val, tuple):
+                scored, was_uncertain = pre_val
+                if was_uncertain:
+                    relevance_summary["uncertain_results"] += 1
+            elif isinstance(pre_val, dict):
+                scored = pre_val
+            else:
+                scored = score_occupation_relevance(job, keyword)
+                if scored["occupation_match_type"] == "uncertain":
+                    relevance_summary["uncertain_results"] += 1
+                    scored = verify_ambiguous_job_relevance(job, keyword)
+            match_type = scored["occupation_match_type"]
+
+            if match_type == "exact_match":
+                relevance_summary["exact_matches"] += 1
+            elif match_type == "equivalent_occupation":
+                relevance_summary["equivalent_occupation_matches"] += 1
+            elif match_type == "probable_match":
+                relevance_summary["probable_matches"] += 1
+            else:
+                relevance_summary["irrelevant_results_rejected"] += 1
+                per_source_stats[src]["rejected_profession"] += 1
+                exclusions.append({
+                    "stage": "profession",
+                    "source": src,
+                    "title": title,
+                    "company": company,
+                    "location": str(job.get("location") or "k. A."),
+                    "occupation_match_type": match_type,
+                    "reason": scored.get("relevance_decision_reason")
+                    or f"Titel/Beruf '{title}' entspricht nicht dem gesuchten Berufsfeld '{keyword}'",
+                })
+                continue
+        else:
+            job.setdefault("search_query", keyword)
+            job.setdefault("normalized_requested_occupation", normalize_occupation_term(keyword))
+            job.setdefault("detected_job_occupation", detect_job_occupation(job) or title)
+            job.setdefault("occupation_match_type", "exact_match")
+            job.setdefault("relevance_score", 1.0)
+            job.setdefault("relevance_decision_reason", "Unfiltered or potential employer")
+            relevance_summary["exact_matches"] += 1
+        title = str(job.get("title") or title).strip()
 
         # 2. Location Cleaning & Validation
         loc_meta = clean_extracted_location(job.get("location", ""), job.get("city", ""))
@@ -895,12 +1738,13 @@ def filter_and_deduplicate_jobs(
             "date": sum(1 for e in exclusions if e["stage"] == "date"),
             "duplicate": sum(1 for e in exclusions if e["stage"] == "duplicate"),
         },
+        "relevance_summary": relevance_summary,
         "exclusions_by_source": per_source_stats,
         "exclusions": exclusions,
     }
 
     logger.info(
-        "Job filtering audit: %d/%d valid matching opportunities across %d sources. Excluded %d (loc: %d, prof: %d, date: %d, dupe: %d)",
+        "Job filtering audit: %d/%d valid matching opportunities across %d sources. Excluded %d (loc: %d, prof: %d, date: %d, dupe: %d) | Relevance: exact=%d, equiv=%d, probable=%d, uncertain=%d, rejected=%d",
         len(filtered),
         raw_total,
         len(raw_by_source),
@@ -909,6 +1753,11 @@ def filter_and_deduplicate_jobs(
         audit["exclusions_by_stage"]["profession"],
         audit["exclusions_by_stage"]["date"],
         audit["exclusions_by_stage"]["duplicate"],
+        relevance_summary["exact_matches"],
+        relevance_summary["equivalent_occupation_matches"],
+        relevance_summary["probable_matches"],
+        relevance_summary["uncertain_results"],
+        relevance_summary["irrelevant_results_rejected"],
     )
 
     if return_audit:

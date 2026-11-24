@@ -205,6 +205,41 @@
             hookResultText: byId("hookResultText"),
             hookInsertBtn: byId("hookInsertBtn"),
             hookCopyBtn: byId("hookCopyBtn"),
+            expQuickTab: document.getElementById("as-exp-quick-tab"),
+            expAdvancedTab: document.getElementById("as-exp-advanced-tab"),
+            quickGenPanel: document.getElementById("as-quick-generator-panel"),
+            advToolbar: document.getElementById("as-advanced-toolbar"),
+            advEditorWrapper: document.getElementById("as-advanced-editor-wrapper"),
+            toggleAdvEditor: document.getElementById("as-toggle-advanced-editor"),
+            quickClientSelect: document.getElementById("as-quick-client-select"),
+            quickCvCard: document.getElementById("as-quick-cv-card"),
+            quickCvAvatar: document.getElementById("as-quick-cv-avatar"),
+            quickCvName: document.getElementById("as-quick-cv-name"),
+            quickCvBadge: document.getElementById("as-quick-cv-badge"),
+            quickCvField: document.getElementById("as-quick-cv-field"),
+            quickCvLocation: document.getElementById("as-quick-cv-location"),
+            quickCvEmail: document.getElementById("as-quick-cv-email"),
+            quickCvExp: document.getElementById("as-quick-cv-exp"),
+            quickCvTarget: document.getElementById("as-quick-cv-target"),
+            quickCvSkillsRow: document.getElementById("as-quick-cv-skills-row"),
+            quickCompanyInput: document.getElementById("as-quick-company-input"),
+            quickPositionInput: document.getElementById("as-quick-position-input"),
+            quickCityInput: document.getElementById("as-quick-city-input"),
+            quickContactInput: document.getElementById("as-quick-contact-input"),
+            quickGenerateBtn: document.getElementById("as-quick-generate-btn"),
+            quickGenerateText: document.getElementById("as-quick-generate-text"),
+            quickGenStatus: document.getElementById("as-quick-gen-status"),
+            quickDownloadPdfBtn: document.getElementById("as-quick-download-pdf-btn"),
+            quickCopyTextBtn: document.getElementById("as-quick-copy-text-btn"),
+            quickPreviewWinBtn: document.getElementById("as-quick-preview-win-btn"),
+            aiEnginePill: document.getElementById("as-ai-engine-pill"),
+            quickRefineBar: document.getElementById("as-quick-refine-bar"),
+            btnRegenerate: document.getElementById("as-btn-regenerate"),
+            btnImprove: document.getElementById("as-btn-improve"),
+            btnConcise: document.getElementById("as-btn-concise"),
+            btnFormal: document.getElementById("as-btn-formal"),
+            btnNatural: document.getElementById("as-btn-natural"),
+            editorRefineStatus: document.getElementById("as-editor-refine-status"),
         };
 
         const requiredKeys = [
@@ -703,6 +738,7 @@
                     body: JSON.stringify({
                         session_id: state.sessionId,
                         row_index: clampedIndex,
+                        row_data: currentRow,
                         layout_options: getLayoutOptions(),
                     }),
                 });
@@ -717,6 +753,7 @@
                 }
 
                 const blob = await response.blob();
+                state.livePreviewBlob = blob;
                 state.livePreviewObjectUrl = URL.createObjectURL(blob);
 
                 if (els.livePreviewIframe) {
@@ -1208,64 +1245,170 @@
         }
 
         async function loadStudioClients() {
-            if (!els.clientSelect) return;
             try {
                 const res = await fetch("/api/clients");
                 if (!res.ok) return;
                 const data = await res.json();
                 const clients = Array.isArray(data.clients) ? data.clients : [];
                 
-                const currentVal = els.clientSelect.value;
-                els.clientSelect.innerHTML = '<option value="">Select candidate profile...</option>';
-                clients.forEach((c) => {
-                    const opt = document.createElement("option");
-                    opt.value = c.id;
-                    const name = c.name || c.contact?.full_name || c.id;
-                    const field = c.profile?.field ? ` (${c.profile.field})` : "";
-                    opt.textContent = `${name}${field}`;
-                    els.clientSelect.appendChild(opt);
-                });
-                if (currentVal && clients.some(c => c.id === currentVal)) {
-                    els.clientSelect.value = currentVal;
-                } else if (state.clientId && clients.some(c => c.id === state.clientId)) {
-                    els.clientSelect.value = state.clientId;
+                const populate = (selectEl) => {
+                    if (!selectEl) return;
+                    const currentVal = selectEl.value;
+                    const label = data.paid_supabase_count ? `Select paid client (${data.paid_supabase_count} from Supabase)...` : `Select candidate profile (${clients.length})...`;
+                    selectEl.innerHTML = `<option value="">${label}</option>`;
+                    clients.forEach((c) => {
+                        const opt = document.createElement("option");
+                        opt.value = c.id;
+                        const name = c.name || c.contact?.full_name || c.id;
+                        let field = c.field || c.profile?.field || "";
+                        if (field) {
+                            field = field.replace(/^ausbildung\s+als\s+/i, "Ausbildung ").trim();
+                            field = ` — ${field}`;
+                        }
+                        const payBadge = c.is_payed ? "✓ " : "";
+                        opt.textContent = `${payBadge}${name}${field}`;
+                        selectEl.appendChild(opt);
+                    });
+                    if (currentVal && clients.some(c => c.id === currentVal)) {
+                        selectEl.value = currentVal;
+                    } else if (state.clientId && clients.some(c => c.id === state.clientId)) {
+                        selectEl.value = state.clientId;
+                    }
+                };
+
+                populate(els.clientSelect);
+                populate(els.quickClientSelect);
+
+                // Auto-select candidate if active_client_id is available or defaults exist
+                const defaultId = state.clientId || data.active_client_id || (clients.length > 0 ? clients[0].id : null);
+                if (defaultId && !state.clientId) {
+                    if (els.clientSelect) els.clientSelect.value = defaultId;
+                    if (els.quickClientSelect) els.quickClientSelect.value = defaultId;
+                    onStudioClientSelected(defaultId).catch(() => {});
                 }
             } catch (_) {}
         }
 
         async function onStudioClientSelected(clientId) {
             state.clientId = clientId || null;
+            if (els.clientSelect && els.clientSelect.value !== (clientId || "")) {
+                els.clientSelect.value = clientId || "";
+            }
+            if (els.quickClientSelect && els.quickClientSelect.value !== (clientId || "")) {
+                els.quickClientSelect.value = clientId || "";
+            }
+
             if (!clientId) {
                 if (els.applicationSummary) els.applicationSummary.hidden = true;
+                if (els.quickCvCard) els.quickCvCard.hidden = true;
                 return;
+            }
+
+            if (els.quickCvCard) {
+                els.quickCvCard.hidden = false;
+                if (els.quickCvBadge) els.quickCvBadge.textContent = "⏳ Loading CV from Supabase...";
             }
 
             try {
                 const res = await fetch(`/api/clients/${encodeURIComponent(clientId)}`);
                 if (!res.ok) return;
                 const data = await res.json();
+                if (data.client_id) {
+                    state.clientId = data.client_id;
+                }
                 const client = data.client || {};
-                const contact = client.contact || {};
-                const profile = client.profile || {};
+                const applicant = data.applicant || client.applicant || {};
+                const contact = applicant.contact || client.contact || {};
+                const personal = applicant.personal || client.personal || {};
+                const profile = applicant.professional_profile || client.professional_profile || client.profile || data.profile || {};
+                const skillsObj = applicant.skills || client.skills || {};
                 const pkg = client.package || {};
 
+                const clientName = personal.full_name || client.name || contact.full_name || clientId;
+                const fieldName = profile.current_title || profile.headline || "Softwareentwickler";
+                const candCity = (contact.address && contact.address.city) || contact.city || "";
+                const candCountry = (contact.address && contact.address.country) || contact.country || "";
+                const candPlz = (contact.address && contact.address.postal_code) || contact.zip || "";
+                let fullLoc = "";
+                if (candCity && candCountry && !["deutschland", "germany"].includes(candCountry.toLowerCase())) {
+                    fullLoc = `${candCity}, ${candCountry}`;
+                } else if (candPlz && candCity) {
+                    fullLoc = `${candPlz} ${candCity}`;
+                } else {
+                    fullLoc = candCity || candCountry || "Deutschland";
+                }
+
+                const streetAddr = (contact.address && contact.address.street) ? `${contact.address.street} ${contact.address.house_number || ""}`.trim() : (contact.street || fullLoc);
+                const cityZip = candPlz ? `${candPlz} ${candCity}` : fullLoc;
+                const candEmail = contact.email || "";
+                const candPhone = contact.phone_display || contact.phone || "";
+                const yearsExp = profile.years_of_experience || (profile.experience_level === "Berufserfahren" ? 2 : 0);
+                const expLabel = yearsExp ? `${yearsExp} ${yearsExp === 1 ? 'Jahr' : 'Jahre'} Berufserfahrung` : (profile.experience_level || "Berufseinstieg");
+                const firstExp = (applicant.work_experience && applicant.work_experience[0]) || {};
+                const expDetail = (firstExp.job_title || firstExp.position) ? ` (${firstExp.job_title || firstExp.position})` : "";
+                const targetRole = profile.target_occupation || profile.target_title || "Ausbildung Fachinformatiker Anwendungsentwicklung";
+
                 // Update studio applicant banner if elements exist
-                if (els.summaryName) els.summaryName.textContent = client.name || contact.full_name || "Candidate";
-                if (els.summaryBereich) els.summaryBereich.textContent = profile.field || "General";
-                if (els.summaryEmail) els.summaryEmail.textContent = contact.email || "";
-                if (els.summaryWhatsapp) els.summaryWhatsapp.textContent = contact.phone || "";
-                if (els.summaryDocuments) els.summaryDocuments.textContent = `${(client.documents || []).length} Documents`;
+                if (els.summaryName) els.summaryName.textContent = clientName;
+                if (els.summaryBereich) els.summaryBereich.textContent = fieldName;
+                if (els.summaryEmail) els.summaryEmail.textContent = candEmail;
+                if (els.summaryWhatsapp) els.summaryWhatsapp.textContent = candPhone;
+                if (els.summaryDocuments) els.summaryDocuments.textContent = `${(client.documents || applicant.documents ? 1 : 0)} Dokumente`;
                 if (els.applicationSummary) els.applicationSummary.hidden = false;
+
+                // Update Quick CV card
+                if (els.quickCvName) els.quickCvName.textContent = clientName;
+                if (els.quickCvField) els.quickCvField.textContent = fieldName;
+                if (els.quickCvLocation) els.quickCvLocation.textContent = fullLoc || "Casablanca, Marokko";
+                if (els.quickCvEmail) els.quickCvEmail.textContent = candEmail || "—";
+                if (els.quickCvExp) els.quickCvExp.textContent = `${expLabel}${expDetail}`;
+                if (els.quickCvTarget) els.quickCvTarget.textContent = `Ziel: ${targetRole}`;
+                if (els.quickCvBadge) els.quickCvBadge.textContent = "✓ CV Parsed (Supabase)";
+
+                // Render CV skill tags
+                if (els.quickCvSkillsRow) {
+                    els.quickCvSkillsRow.innerHTML = "";
+                    const allSkills = [
+                        ...(skillsObj.programming_languages || []),
+                        ...(skillsObj.technologies_from_cv || []),
+                        ...(skillsObj.backend || []),
+                        ...(skillsObj.frontend || []),
+                        ...(skillsObj.tools || [])
+                    ];
+                    const uniqueSkills = Array.from(new Set(allSkills)).slice(0, 8);
+                    uniqueSkills.forEach((skill) => {
+                        const badge = document.createElement("span");
+                        badge.className = "as-skill-tag";
+                        badge.textContent = skill;
+                        els.quickCvSkillsRow.appendChild(badge);
+                    });
+                }
+                if (els.quickCvCard) els.quickCvCard.hidden = false;
+
+                // Pre-fill target vacancy inputs based on candidate profile
+                let targetPos = profile.target_occupation || "Fachinformatiker Anwendungsentwicklung";
+                if (!targetPos.toLowerCase().startsWith("ausbildung")) {
+                    targetPos = `Ausbildung ${targetPos}`;
+                }
+                if (els.quickPositionInput) {
+                    els.quickPositionInput.value = targetPos;
+                }
+                if (els.quickCityInput && (!els.quickCityInput.value.trim() || els.quickCityInput.value === "Köln")) {
+                    els.quickCityInput.value = "Köln";
+                }
+                if (els.quickCompanyInput && !els.quickCompanyInput.value.trim()) {
+                    els.quickCompanyInput.value = "Bechtle AG";
+                }
 
                 // Candidate placeholders to inject into session
                 const candidateFields = {
-                    "Bewerber_Name": client.name || contact.full_name || "",
-                    "Bewerber_Email": contact.email || "",
-                    "Bewerber_Telefon": contact.phone || "",
-                    "Bewerber_Strasse": contact.street || "",
-                    "Bewerber_PLZ_Ort": `${contact.zip || ""} ${contact.city || ""}`.trim(),
-                    "Bewerber_Titel": profile.target_title || profile.field || "",
-                    "Bewerber_Erfahrung": profile.experience_years ? `${profile.experience_years} Jahre` : ""
+                    "Bewerber_Name": clientName,
+                    "Bewerber_Email": candEmail,
+                    "Bewerber_Telefon": candPhone,
+                    "Bewerber_Strasse": streetAddr,
+                    "Bewerber_PLZ_Ort": cityZip,
+                    "Bewerber_Titel": targetRole,
+                    "Bewerber_Erfahrung": expLabel
                 };
 
                 // Add to state.columns if not present
@@ -1315,9 +1458,31 @@
                             jobs: state.previewRows
                         })
                     }).catch(() => {});
+                } else {
+                    const comp = (els.quickCompanyInput && els.quickCompanyInput.value.trim()) || "Bechtle AG";
+                    const pos = (els.quickPositionInput && els.quickPositionInput.value.trim()) || "Ausbildung Fachinformatiker Anwendungsentwicklung";
+                    const city = (els.quickCityInput && els.quickCityInput.value.trim()) || "Köln";
+                    fetch(`${API_BASE}/create-anschreibens/direct-jobs-bootstrap`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            client_id: clientId,
+                            jobs: [{
+                                company: comp,
+                                title: pos,
+                                location: city,
+                                contact_person: (els.quickContactInput && els.quickContactInput.value.trim()) || "",
+                                source: "Quick Studio"
+                            }]
+                        })
+                    }).then(r => r.ok ? r.json() : null).then(bData => {
+                        if (bData && bData.session) {
+                            applyLoadedSession(bData.session, `${comp} - ${pos}`);
+                        }
+                    }).catch(() => {});
                 }
 
-                showToast(`Candidate ${client.name || clientId} selected for cover letter`);
+                showToast(`Candidate ${clientName} selected for cover letter`);
             } catch (err) {
                 showToast("Error loading candidate profile");
             }
@@ -1399,15 +1564,31 @@
 
             await saveTemplate({ silent: true });
 
+            if (Array.isArray(state.previewRows) && state.previewRows.length > 0) {
+                try {
+                    await fetch(`${API_BASE}/create-anschreibens/sync-session-row`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            session_id: state.sessionId,
+                            row_index: 0,
+                            row_data: state.previewRows[0]
+                        })
+                    });
+                } catch (_e) {}
+            }
+
             clearInlineError();
             showProgress("Generating preview...", 45);
 
+            const curRow = (state.previewRows && state.previewRows[0]) || {};
             const response = await fetch(`${API_BASE}/preview-pdf`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     session_id: state.sessionId,
                     row_index: 0,
+                    row_data: curRow,
                     layout_options: getLayoutOptions(),
                 }),
             });
@@ -1438,6 +1619,20 @@
             }
 
             await saveTemplate({ silent: true });
+
+            if (Array.isArray(state.previewRows) && state.previewRows.length > 0) {
+                try {
+                    await fetch(`${API_BASE}/create-anschreibens/sync-session-row`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            session_id: state.sessionId,
+                            row_index: 0,
+                            row_data: state.previewRows[0]
+                        })
+                    });
+                } catch (_e) {}
+            }
 
             clearInlineError();
             showProgress("Generating PDFs...", 35);
@@ -2458,9 +2653,321 @@
 
             if (els.clientSelect) {
                 els.clientSelect.addEventListener("change", (e) => {
+                    if (els.quickClientSelect) els.quickClientSelect.value = e.target.value;
                     onStudioClientSelected(e.target.value).catch(() => {});
                 });
             }
+
+            function setStudioExperience(mode) {
+                if (mode === "advanced") {
+                    if (els.expQuickTab) els.expQuickTab.classList.remove("is-active");
+                    if (els.expAdvancedTab) els.expAdvancedTab.classList.add("is-active");
+                    if (els.quickGenPanel) els.quickGenPanel.hidden = true;
+                    if (els.advToolbar) els.advToolbar.hidden = false;
+                    if (els.advEditorWrapper) els.advEditorWrapper.hidden = false;
+                } else {
+                    if (els.expQuickTab) els.expQuickTab.classList.add("is-active");
+                    if (els.expAdvancedTab) els.expAdvancedTab.classList.remove("is-active");
+                    if (els.quickGenPanel) els.quickGenPanel.hidden = false;
+                    if (els.advToolbar) els.advToolbar.hidden = true;
+                    if (els.advEditorWrapper) els.advEditorWrapper.hidden = true;
+                }
+            }
+
+            if (els.expQuickTab) {
+                els.expQuickTab.addEventListener("click", () => setStudioExperience("quick"));
+            }
+            if (els.expAdvancedTab) {
+                els.expAdvancedTab.addEventListener("click", () => setStudioExperience("advanced"));
+            }
+            if (els.toggleAdvEditor) {
+                els.toggleAdvEditor.addEventListener("click", () => setStudioExperience("advanced"));
+            }
+
+            if (els.quickClientSelect) {
+                els.quickClientSelect.addEventListener("change", (e) => {
+                    const val = e.target.value;
+                    if (els.clientSelect) els.clientSelect.value = val;
+                    onStudioClientSelected(val).catch(() => {});
+                });
+            }
+
+            if (els.quickGenerateBtn) {
+                els.quickGenerateBtn.addEventListener("click", async () => {
+                    let clientId = (els.quickClientSelect ? els.quickClientSelect.value : "") || state.clientId;
+                    if (!clientId && els.quickClientSelect && els.quickClientSelect.options.length > 1) {
+                        clientId = els.quickClientSelect.options[1].value;
+                        els.quickClientSelect.value = clientId;
+                        if (els.clientSelect) els.clientSelect.value = clientId;
+                        await onStudioClientSelected(clientId);
+                    }
+                    if (!clientId) {
+                        showToast("Please select a candidate profile first.");
+                        return;
+                    }
+
+                    const company = (els.quickCompanyInput && els.quickCompanyInput.value.trim()) || "Bechtle AG";
+                    const position = (els.quickPositionInput && els.quickPositionInput.value.trim()) || "Ausbildung Fachinformatiker Anwendungsentwicklung";
+                    const city = (els.quickCityInput && els.quickCityInput.value.trim()) || "Köln";
+                    const contactPerson = (els.quickContactInput && els.quickContactInput.value.trim()) || "";
+
+                    els.quickGenerateBtn.disabled = true;
+                    if (els.quickGenerateText) els.quickGenerateText.textContent = "AI generating Anschreiben...";
+                    if (els.quickGenStatus) {
+                        els.quickGenStatus.hidden = false;
+                        els.quickGenStatus.textContent = "Analyzing candidate profile and synthesizing tailored DIN 5008 cover letter...";
+                    }
+
+                    try {
+                        const res = await fetch("/api/ai-generate-anschreiben", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                client_id: clientId,
+                                company: company,
+                                position: position,
+                                city: city,
+                                contact_person: contactPerson,
+                            }),
+                        });
+                        if (!res.ok) {
+                            const errData = await res.json().catch(() => ({}));
+                            throw new Error(errData.error || "Generation request failed.");
+                        }
+                        const data = await res.json();
+                        if (!data.success || !data.text) {
+                            throw new Error(data.error || "Could not generate cover letter text.");
+                        }
+
+                        if (els.templateEditor) {
+                            els.templateEditor.value = data.text;
+                        }
+                        state.templates[state.activeTemplateIndex] = data.text;
+                        persistActiveTemplateValue();
+                        renderTemplateList();
+                        clearInlineError();
+
+                        // Ensure backend session exists for PDF rendering
+                        if (!state.sessionId) {
+                            const bsRes = await fetch(`${API_BASE}/create-anschreibens/direct-jobs-bootstrap`, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                    client_id: clientId,
+                                    jobs: [{
+                                        company: company,
+                                        title: position,
+                                        location: city,
+                                        contact_person: contactPerson,
+                                        source: "Quick Studio",
+                                    }],
+                                }),
+                            });
+                            if (bsRes.ok) {
+                                const bsData = await bsRes.json();
+                                if (bsData.session) {
+                                    applyLoadedSession(bsData.session, `${company} - ${position}`);
+                                }
+                            }
+                        } else if (Array.isArray(state.previewRows) && state.previewRows.length > 0) {
+                            const row = state.previewRows[state.previewRowIndex || 0];
+                            if (row) {
+                                row["Unternehmen"] = company;
+                                row["Position"] = position;
+                                row["Titel"] = position;
+                                row["Ort"] = city;
+                                if (contactPerson) row["Ansprechpartner"] = contactPerson;
+                            }
+                        }
+
+                        await saveTemplate({ silent: true });
+                        await updateLivePreview(state.previewRowIndex || 0, false);
+                        if (els.quickRefineBar) els.quickRefineBar.style.display = "flex";
+                        showToast("✨ Tailored Anschreiben generated! Live preview ready.");
+                    } catch (err) {
+                        showToast(`Error: ${err.message || "Failed to generate Anschreiben"}`);
+                        showInlineError(err.message || "Failed to generate Anschreiben");
+                    } finally {
+                        els.quickGenerateBtn.disabled = false;
+                        if (els.quickGenerateText) els.quickGenerateText.textContent = "Generate Anschreiben (AI)";
+                        if (els.quickGenStatus) els.quickGenStatus.hidden = true;
+                    }
+                });
+            }
+
+            if (els.quickDownloadPdfBtn) {
+                els.quickDownloadPdfBtn.addEventListener("click", () => {
+                    if (state.livePreviewBlob) {
+                        const blobUrl = URL.createObjectURL(state.livePreviewBlob);
+                        const a = document.createElement("a");
+                        a.href = blobUrl;
+                        const cand = (els.quickCvName && els.quickCvName.textContent.trim()) || "Bewerber";
+                        const comp = (els.quickCompanyInput && els.quickCompanyInput.value.trim()) || "Unternehmen";
+                        a.download = `Anschreiben_${cand.replace(/\s+/g, "_")}_${comp.replace(/\s+/g, "_")}.pdf`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(blobUrl);
+                        showToast("📥 PDF downloaded successfully!");
+                    } else {
+                        generatePdfs().catch(() => {});
+                    }
+                });
+            }
+
+            if (els.quickCopyTextBtn) {
+                els.quickCopyTextBtn.addEventListener("click", () => {
+                    const txt = (els.templateEditor ? els.templateEditor.value : "").trim();
+                    if (!txt) {
+                        showToast("No cover letter text to copy yet. Click Generate first!");
+                        return;
+                    }
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(txt).then(() => {
+                            showToast("📋 Anschreiben text copied to clipboard!");
+                        }).catch(() => {
+                            showToast("Clipboard copy failed.");
+                        });
+                    } else {
+                        showToast("Clipboard copy not supported in this browser.");
+                    }
+                });
+            }
+
+            if (els.quickPreviewWinBtn) {
+                els.quickPreviewWinBtn.addEventListener("click", () => {
+                    if (state.livePreviewObjectUrl) {
+                        window.open(state.livePreviewObjectUrl, "_blank");
+                    } else {
+                        previewPdf().catch(() => {});
+                    }
+                });
+            }
+
+            async function loadAiStatus() {
+                if (!els.aiEnginePill) return;
+                try {
+                    const res = await fetch("/api/ai-status");
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (data.status === "configured" && data.ai_connected) {
+                            const prov = (data.active_provider || "AI").toUpperCase();
+                            const model = data.active_model || "";
+                            els.aiEnginePill.textContent = `🤖 ${prov} (${model}) • Ready`;
+                            els.aiEnginePill.className = "as-ai-status-pill is-connected";
+                        } else {
+                            els.aiEnginePill.textContent = `⚠️ Fallback Template Mode`;
+                            els.aiEnginePill.className = "as-ai-status-pill is-offline";
+                        }
+                    }
+                } catch (_e) {
+                    if (els.aiEnginePill) {
+                        els.aiEnginePill.textContent = `⚠️ AI Engine Offline`;
+                        els.aiEnginePill.className = "as-ai-status-pill is-offline";
+                    }
+                }
+            }
+
+            async function executeRefineAction(action) {
+                const currentText = (els.templateEditor ? els.templateEditor.value : "").trim();
+                if (!currentText) {
+                    showToast("Please generate or enter a cover letter first before polishing.");
+                    return;
+                }
+                const company = (els.quickCompanyInput && els.quickCompanyInput.value.trim()) || "Bechtle AG";
+                const position = (els.quickPositionInput && els.quickPositionInput.value.trim()) || "Ausbildung Fachinformatiker Anwendungsentwicklung";
+
+                const refineButtons = document.querySelectorAll(".as-refine-btn, .as-btn-refine-action");
+                refineButtons.forEach((btn) => { btn.disabled = true; });
+                if (els.editorRefineStatus) {
+                    els.editorRefineStatus.hidden = false;
+                    els.editorRefineStatus.textContent = `Polishing (${action})...`;
+                }
+                if (els.quickGenStatus) {
+                    els.quickGenStatus.hidden = false;
+                    els.quickGenStatus.textContent = `Refining letter with AI (${action})...`;
+                }
+
+                try {
+                    const res = await fetch("/api/ai-refine-anschreiben", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            text: currentText,
+                            action: action,
+                            company: company,
+                            position: position,
+                        }),
+                    });
+
+                    if (!res.ok) {
+                        const errData = await res.json().catch(() => ({}));
+                        throw new Error(errData.error || "Refinement request failed.");
+                    }
+
+                    const data = await res.json();
+                    if (!data.success || !data.text) {
+                        throw new Error(data.error || "Could not refine cover letter text.");
+                    }
+
+                    if (els.templateEditor) {
+                        els.templateEditor.value = data.text;
+                    }
+                    state.templates[state.activeTemplateIndex] = data.text;
+                    persistActiveTemplateValue();
+                    renderTemplateList();
+                    updateEditorStats();
+                    pushHistory(data.text);
+
+                    await saveTemplate({ silent: true });
+                    await updateLivePreview(state.previewRowIndex || 0, false);
+                    if (els.quickRefineBar) els.quickRefineBar.style.display = "flex";
+                    showToast(`✨ Cover letter polished (${action})!`);
+                } catch (err) {
+                    showToast(`Error: ${err.message || "Failed to refine letter"}`);
+                    showInlineError(err.message || "Failed to refine letter");
+                } finally {
+                    refineButtons.forEach((btn) => { btn.disabled = false; });
+                    if (els.editorRefineStatus) els.editorRefineStatus.hidden = true;
+                    if (els.quickGenStatus) els.quickGenStatus.hidden = true;
+                }
+            }
+
+            if (els.btnRegenerate) {
+                els.btnRegenerate.addEventListener("click", () => {
+                    if (els.quickGenerateBtn) els.quickGenerateBtn.click();
+                });
+            }
+            if (els.btnImprove) els.btnImprove.addEventListener("click", () => executeRefineAction("improve"));
+            if (els.btnConcise) els.btnConcise.addEventListener("click", () => executeRefineAction("concise"));
+            if (els.btnFormal) els.btnFormal.addEventListener("click", () => executeRefineAction("formal"));
+            if (els.btnNatural) els.btnNatural.addEventListener("click", () => executeRefineAction("natural"));
+
+            document.querySelectorAll(".as-btn-refine-action").forEach((btn) => {
+                btn.addEventListener("click", (e) => {
+                    const action = e.currentTarget.getAttribute("data-action") || "improve";
+                    executeRefineAction(action);
+                });
+            });
+
+            [els.quickCompanyInput, els.quickPositionInput, els.quickCityInput, els.quickContactInput].forEach((inp) => {
+                if (!inp) return;
+                inp.addEventListener("input", () => {
+                    if (Array.isArray(state.previewRows) && state.previewRows.length > 0) {
+                        const row = state.previewRows[state.previewRowIndex || 0];
+                        if (row) {
+                            if (els.quickCompanyInput) row["Unternehmen"] = els.quickCompanyInput.value.trim();
+                            if (els.quickPositionInput) {
+                                row["Position"] = els.quickPositionInput.value.trim();
+                                row["Titel"] = els.quickPositionInput.value.trim();
+                            }
+                            if (els.quickCityInput) row["Ort"] = els.quickCityInput.value.trim();
+                            if (els.quickContactInput) row["Ansprechpartner"] = els.quickContactInput.value.trim();
+                            scheduleLivePreviewUpdate();
+                        }
+                    }
+                });
+            });
 
             if (els.extractBtn) {
                 els.extractBtn.addEventListener("click", async () => {
@@ -2740,7 +3247,12 @@
         return {
             show() {
                 ensureInitialized();
+                clearInlineError();
                 loadStudioClients().catch(() => {});
+                loadAiStatus().catch(() => {});
+                if (els.templateEditor && els.templateEditor.value.trim() && els.quickRefineBar) {
+                    els.quickRefineBar.style.display = "flex";
+                }
 
                 // Check for direct session transferred from Search results
                 const directSessionRaw = window.sessionStorage.getItem("anschreiben:direct-session");

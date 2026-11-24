@@ -1,0 +1,802 @@
+<section id="whatsapp-section" class="app-section" data-section="whatsapp" {% if initial_section != "whatsapp" %}hidden{% endif %}>
+                    <div class="wa-container">
+                        <!-- Simplified Modern Header -->
+                        <header class="wa-header-card">
+                            <div class="wa-header-brand">
+                                <div class="wa-brand-icon">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                                    </svg>
+                                </div>
+                                <div class="wa-brand-info">
+                                    <h1 class="wa-brand-title">WhatsApp AI</h1>
+                                    <p class="wa-brand-subtitle">Customer Support Center</p>
+                                </div>
+                            </div>
+
+                            <div class="wa-header-controls">
+                                <div class="wa-sse-status-badge" id="wa-sse-indicator">
+                                    <span class="wa-pulse-dot"></span>
+                                    <span id="wa-sse-text">Connected</span>
+                                </div>
+                                <div class="wa-header-divider"></div>
+                                <button type="button" id="wa-btn-emergency-pause-header" class="wa-btn-emergency-pause" title="Emergency AI Pause: Immediately stops autonomous AI replies across all chats">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                                        <rect x="6" y="4" width="4" height="16" rx="1"></rect>
+                                        <rect x="14" y="4" width="4" height="16" rx="1"></rect>
+                                    </svg>
+                                    <span>Emergency AI Pause</span>
+                                </button>
+                            </div>
+                        </header>
+
+                        <!-- Compact Tab Navigation -->
+                        <nav class="wa-nav-tabs" role="tablist" aria-label="WhatsApp Support Navigation">
+                            <button type="button" class="wa-tab-btn active" data-wa-tab="inbox" role="tab" aria-selected="true">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                                    <polyline points="22,6 12,13 2,6"></polyline>
+                                </svg>
+                                <span>Support Inbox</span>
+                                <span id="wa-tab-unread-counter" class="wa-tab-badge" style="display:none;">0</span>
+                            </button>
+
+                            <button type="button" class="wa-tab-btn" data-wa-tab="overview" role="tab" aria-selected="false">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <line x1="18" y1="20" x2="18" y2="10"></line>
+                                    <line x1="12" y1="20" x2="12" y2="4"></line>
+                                    <line x1="6" y1="20" x2="6" y2="14"></line>
+                                </svg>
+                                <span>Overview &amp; Metrics</span>
+                            </button>
+
+                            <button type="button" class="wa-tab-btn" data-wa-tab="config" role="tab" aria-selected="false">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                                </svg>
+                                <span>AI Configuration</span>
+                            </button>
+
+                            <button type="button" class="wa-tab-btn" data-wa-tab="kb" role="tab" aria-selected="false">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                                    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+                                </svg>
+                                <span>Knowledge Base</span>
+                            </button>
+
+                            <button type="button" class="wa-tab-btn" data-wa-tab="setup" role="tab" aria-selected="false">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="4 17 10 11 4 5"></polyline>
+                                    <line x1="12" y1="19" x2="20" y2="19"></line>
+                                </svg>
+                                <span>Meta API &amp; Testing</span>
+                            </button>
+                        </nav>
+
+                        <!-- Tab View 1: Support Inbox (Two-Panel Layout) -->
+                        <div id="wa-view-inbox" class="wa-tab-view active">
+                            <div class="wa-inbox-workspace">
+                                <!-- Left Panel: Conversation Inbox (32%) -->
+                                <aside class="wa-pane-sidebar">
+                                    <div class="wa-sidebar-header">
+                                        <div class="wa-sidebar-search-box">
+                                            <svg class="wa-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <circle cx="11" cy="11" r="8"></circle>
+                                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                            </svg>
+                                            <input type="text" id="wa-search-conversations" class="wa-search-input" placeholder="Search name, phone, client ID...">
+                                        </div>
+                                        <div class="wa-filter-segmented" role="toolbar" aria-label="Filter conversations">
+                                            <button type="button" class="wa-filter-chip active" data-filter="all">All</button>
+                                            <button type="button" class="wa-filter-chip" data-filter="AI_ACTIVE">AI</button>
+                                            <button type="button" class="wa-filter-chip" data-filter="HUMAN_ACTIVE">Human</button>
+                                            <button type="button" class="wa-filter-chip" data-filter="ESCALATED">Escalated</button>
+                                            <button type="button" class="wa-filter-chip" data-filter="CLOSED">Closed</button>
+                                        </div>
+                                        <div class="wa-conv-list-meta">
+                                            <span id="wa-conv-total-count" class="wa-conv-counter">Loading chats...</span>
+                                            <button type="button" id="wa-btn-refresh-convs" class="wa-btn-ghost-icon" title="Refresh conversation list">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                    <polyline points="23 4 23 10 17 10"></polyline>
+                                                    <polyline points="1 20 1 14 7 14"></polyline>
+                                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div id="wa-conversations-list" class="wa-conv-list" role="list">
+                                        <!-- Rendered dynamically by static/spa/sections/whatsapp.js -->
+                                        <div class="wa-loading-state">
+                                            <div class="wa-spinner-sm"></div>
+                                            <span>Loading conversations...</span>
+                                        </div>
+                                    </div>
+                                </aside>
+
+                                <!-- Right Panel: Chat Workspace (68%) -->
+                                <main class="wa-chat-container" id="wa-chat-container">
+                                    <!-- Empty State (No Chat Selected) -->
+                                    <div id="wa-chat-placeholder" class="wa-chat-placeholder">
+                                        <div class="wa-placeholder-content">
+                                            <div class="wa-placeholder-icon">
+                                                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#4F46E5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                                                </svg>
+                                            </div>
+                                            <h3 class="wa-placeholder-title">Select a Conversation</h3>
+                                            <p class="wa-placeholder-text">Choose a customer thread from the inbox to review messages, assist candidates, or manage autonomous AI responses.</p>
+                                        </div>
+                                    </div>
+
+                                    <!-- Active Chat View -->
+                                    <div id="wa-chat-active-view" class="wa-chat-active-view" style="display:none;">
+                                        <!-- Chat Workspace Header -->
+                                        <header class="wa-chat-header" id="wa-chat-header">
+                                            <div class="wa-chat-header-main">
+                                                <div id="wa-header-avatar" class="wa-contact-avatar">?</div>
+                                                <div class="wa-contact-details">
+                                                    <div class="wa-contact-title-row">
+                                                        <h2 id="wa-header-name" class="wa-contact-name">&mdash;</h2>
+                                                        <span id="wa-header-mode-badge" class="wa-mode-badge mode-ai">AI Active</span>
+                                                    </div>
+                                                    <div class="wa-contact-sub-row">
+                                                        <span id="wa-header-phone" class="wa-contact-phone font-mono">&mdash;</span>
+                                                        <span class="wa-dot-sep">&bull;</span>
+                                                        <span id="wa-header-assigned" class="wa-contact-assigned">Autonomous AI</span>
+                                                        <span class="wa-dot-sep">&bull;</span>
+                                                        <span id="wa-header-window" class="wa-contact-window">24h Meta Window Active</span>
+                                                        <span id="wa-header-version" class="wa-contact-version font-mono" style="display:none;">v1</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="wa-chat-header-actions">
+                                                <button type="button" id="wa-btn-takeover" class="wa-btn-action wa-btn-takeover" title="Pause AI auto-replies and take over chat manually">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                                    <span>Human Takeover</span>
+                                                </button>
+                                                <button type="button" id="wa-btn-resume-ai" class="wa-btn-action wa-btn-resume-ai" title="Reactivate autonomous AI responses">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                                    <span>Resume AI</span>
+                                                </button>
+                                                <button type="button" id="wa-btn-escalate" class="wa-btn-action wa-btn-escalate" title="Flag conversation for senior human support">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                                                    <span>Escalate</span>
+                                                </button>
+                                                <button type="button" id="wa-btn-close-chat" class="wa-btn-action wa-btn-close" title="Mark conversation as resolved">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                                    <span>Close</span>
+                                                </button>
+                                                <button type="button" id="wa-btn-toggle-dossier" class="wa-btn-action wa-btn-dossier-toggle" title="Toggle Candidate Dossier &amp; Tools">
+                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+                                                    <span>Dossier</span>
+                                                </button>
+                                            </div>
+                                        </header>
+
+                                        <!-- Chat Timeline Workspace -->
+                                        <div class="wa-chat-body-layout">
+                                            <div class="wa-chat-main-column">
+                                                <!-- Message Bubble Timeline -->
+                                                <div id="wa-chat-timeline" class="wa-chat-timeline" role="log" aria-live="polite">
+                                                    <!-- Messages populated by whatsapp.js -->
+                                                </div>
+
+                                                <!-- AI Draft Suggestion Box -->
+                                                <div id="wa-draft-box" class="wa-draft-box" style="display:none;">
+                                                    <div class="wa-draft-header">
+                                                        <div class="wa-draft-label">
+                                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                                            <span>AI Suggested Response</span>
+                                                        </div>
+                                                        <div class="wa-draft-actions">
+                                                            <button type="button" id="wa-btn-use-draft" class="wa-btn-draft-accept">Insert Draft</button>
+                                                            <button type="button" id="wa-btn-dismiss-draft" class="wa-btn-draft-dismiss">&times;</button>
+                                                        </div>
+                                                    </div>
+                                                    <div id="wa-draft-text" class="wa-draft-body">&mdash;</div>
+                                                </div>
+
+                                                <!-- Reply Composer -->
+                                                <div class="wa-composer-wrapper">
+                                                    <div id="wa-composer-mode-hint" class="wa-composer-mode-hint">
+                                                        <span class="wa-hint-dot"></span>
+                                                        <span>Sending as Human Agent &bull; Client will receive via Meta Cloud API</span>
+                                                    </div>
+                                                    <form id="wa-composer-form" class="wa-composer-form" onsubmit="return false;">
+                                                        <button type="button" id="wa-btn-generate-draft" class="wa-btn-composer-tool" title="Generate AI Draft suggestion">
+                                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                                                            </svg>
+                                                            <span>AI Draft</span>
+                                                        </button>
+                                                        <textarea id="wa-composer-input" class="wa-composer-textarea" rows="2" placeholder="Type a message (Shift+Enter for newline, Enter to send)..."></textarea>
+                                                        <button type="submit" id="wa-btn-send-message" class="wa-btn-send">
+                                                            <span>Send</span>
+                                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                                                            </svg>
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </div>
+
+                                            <!-- Candidate Dossier Inspector Drawer -->
+                                            <aside id="wa-dossier-panel" class="wa-dossier-panel">
+                                                <div class="wa-dossier-header">
+                                                    <div class="wa-dossier-heading">
+                                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+                                                        <span>Candidate Dossier</span>
+                                                    </div>
+                                                    <span id="wa-dossier-verify-badge" class="wa-verify-badge unverified">Unverified</span>
+                                                </div>
+
+                                                <!-- Account Linking Control -->
+                                                <div id="wa-link-account-box" class="wa-dossier-section wa-link-box">
+                                                    <label class="wa-dossier-label">Link to JobScout Candidate</label>
+                                                    <div class="wa-link-inputs">
+                                                        <select id="wa-client-link-select" class="wa-select-sm">
+                                                            <option value="">Choose candidate...</option>
+                                                        </select>
+                                                        <button type="button" id="wa-btn-link-client" class="wa-btn-sm-primary">Link</button>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Dossier Details Container -->
+                                                <div id="wa-dossier-empty-state" class="wa-dossier-empty">
+                                                    <p>No candidate linked to this phone number yet.</p>
+                                                </div>
+
+                                                <div id="wa-dossier-details" class="wa-dossier-body" style="display:none;">
+                                                    <!-- Profile Overview Card -->
+                                                    <div class="wa-dossier-card">
+                                                        <div class="wa-dossier-profile-title">
+                                                            <h4 id="wa-dossier-name" class="wa-candidate-name">&mdash;</h4>
+                                                            <span id="wa-dossier-client-id" class="wa-badge-code">&mdash;</span>
+                                                        </div>
+                                                        <div class="wa-dossier-kv-grid">
+                                                            <div class="wa-kv-item">
+                                                                <span class="wa-kv-k">Email</span>
+                                                                <span id="wa-dossier-email" class="wa-kv-v">&mdash;</span>
+                                                            </div>
+                                                            <div class="wa-kv-item">
+                                                                <span class="wa-kv-k">Target Role</span>
+                                                                <span id="wa-dossier-profession" class="wa-kv-v">&mdash;</span>
+                                                            </div>
+                                                            <div class="wa-kv-item">
+                                                                <span class="wa-kv-k">Payment</span>
+                                                                <span id="wa-dossier-payment" class="wa-kv-v">&mdash;</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Escalation Alert Banner -->
+                                                    <div id="wa-dossier-escalation-reason-wrap" class="wa-escalation-banner" style="display:none;">
+                                                        <span class="wa-escalation-tag">Escalated</span>
+                                                        <div id="wa-dossier-escalation-reason" class="wa-escalation-text">&mdash;</div>
+                                                    </div>
+
+                                                    <!-- Application Activity Metrics -->
+                                                    <div class="wa-dossier-section">
+                                                        <h5 class="wa-dossier-subhead">Outreach &amp; Applications</h5>
+                                                        <div class="wa-dossier-metrics-grid">
+                                                            <div class="wa-metric-tile">
+                                                                <span class="wa-metric-num" id="wa-dossier-apps-sent">0</span>
+                                                                <span class="wa-metric-lbl">Sent</span>
+                                                            </div>
+                                                            <div class="wa-metric-tile">
+                                                                <span class="wa-metric-num" id="wa-dossier-apps-replied">0</span>
+                                                                <span class="wa-metric-lbl">Replies</span>
+                                                            </div>
+                                                            <div class="wa-metric-tile">
+                                                                <span class="wa-metric-num" id="wa-dossier-apps-interviews">0</span>
+                                                                <span class="wa-metric-lbl">Interviews</span>
+                                                            </div>
+                                                        </div>
+                                                        <div class="wa-status-row">
+                                                            <span class="wa-kv-k">Recent Status</span>
+                                                            <span id="wa-dossier-app-status" class="wa-status-pill">&mdash;</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Dataset Status -->
+                                                    <div class="wa-dossier-section">
+                                                        <h5 class="wa-dossier-subhead">Search Dataset</h5>
+                                                        <div class="wa-dataset-row">
+                                                            <span id="wa-dossier-dataset-badge" class="wa-badge-subtle">No Dataset</span>
+                                                            <span id="wa-dossier-dataset-detail" class="wa-dataset-txt">No active search dataset found</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Uploaded Documents -->
+                                                    <div class="wa-dossier-section">
+                                                        <h5 class="wa-dossier-subhead">Documents</h5>
+                                                        <ul id="wa-dossier-docs-list" class="wa-docs-list">
+                                                            <li class="wa-doc-empty">No documents uploaded</li>
+                                                        </ul>
+                                                    </div>
+
+                                                    <!-- AI Context Summary -->
+                                                    <div class="wa-dossier-section">
+                                                        <h5 class="wa-dossier-subhead">AI Dossier Summary</h5>
+                                                        <div id="wa-dossier-summary" class="wa-dossier-summary-box">&mdash;</div>
+                                                    </div>
+                                                </div>
+                                            </aside>
+                                        </div>
+                                    </div>
+                                </main>
+                            </div>
+                        </div>
+
+                        <!-- Tab View 2: Overview & Metrics -->
+                        <div id="wa-view-overview" class="wa-tab-view">
+                            <div class="wa-overview-workspace">
+                                <!-- Metrics Grid -->
+                                <div class="wa-kpi-grid">
+                                    <div class="wa-kpi-card">
+                                        <div class="wa-kpi-icon icon-emerald">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                                        </div>
+                                        <div class="wa-kpi-content">
+                                            <span class="wa-kpi-label">Messages Today</span>
+                                            <h3 class="wa-kpi-value" id="wa-metric-messages-today">0</h3>
+                                        </div>
+                                    </div>
+
+                                    <div class="wa-kpi-card">
+                                        <div class="wa-kpi-icon icon-indigo">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                        </div>
+                                        <div class="wa-kpi-content">
+                                            <span class="wa-kpi-label">AI Handled</span>
+                                            <h3 class="wa-kpi-value" id="wa-metric-ai-active">0</h3>
+                                        </div>
+                                    </div>
+
+                                    <div class="wa-kpi-card">
+                                        <div class="wa-kpi-icon icon-blue">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                                        </div>
+                                        <div class="wa-kpi-content">
+                                            <span class="wa-kpi-label">Human Agent Active</span>
+                                            <h3 class="wa-kpi-value" id="wa-metric-human-active">0</h3>
+                                        </div>
+                                    </div>
+
+                                    <div class="wa-kpi-card">
+                                        <div class="wa-kpi-icon icon-amber">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                                        </div>
+                                        <div class="wa-kpi-content">
+                                            <span class="wa-kpi-label">Takeover Rate</span>
+                                            <h3 class="wa-kpi-value" id="wa-metric-takeover-rate">0%</h3>
+                                        </div>
+                                    </div>
+
+                                    <div class="wa-kpi-card">
+                                        <div class="wa-kpi-icon icon-rose">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                                        </div>
+                                        <div class="wa-kpi-content">
+                                            <span class="wa-kpi-label">Escalations</span>
+                                            <h3 class="wa-kpi-value" id="wa-metric-escalations">0</h3>
+                                        </div>
+                                    </div>
+
+                                    <div class="wa-kpi-card">
+                                        <div class="wa-kpi-icon icon-slate">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 8 14"></polyline></svg>
+                                        </div>
+                                        <div class="wa-kpi-content">
+                                            <span class="wa-kpi-label">Avg AI Latency</span>
+                                            <h3 class="wa-kpi-value" id="wa-metric-latency">0ms</h3>
+                                        </div>
+                                    </div>
+
+                                    <div class="wa-kpi-card">
+                                        <div class="wa-kpi-icon icon-violet">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+                                        </div>
+                                        <div class="wa-kpi-content">
+                                            <span class="wa-kpi-label">Tokens Used</span>
+                                            <h3 class="wa-kpi-value" id="wa-metric-tokens">0</h3>
+                                        </div>
+                                    </div>
+
+                                    <div class="wa-kpi-card">
+                                        <div class="wa-kpi-icon icon-teal">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                                        </div>
+                                        <div class="wa-kpi-content">
+                                            <span class="wa-kpi-label">Est. AI Cost</span>
+                                            <h3 class="wa-kpi-value" id="wa-metric-ai-cost">$0.00</h3>
+                                        </div>
+                                    </div>
+
+                                    <div class="wa-kpi-card">
+                                        <div class="wa-kpi-icon icon-red">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                                        </div>
+                                        <div class="wa-kpi-content">
+                                            <span class="wa-kpi-label">Failed Messages</span>
+                                            <h3 class="wa-kpi-value" id="wa-metric-failed-messages">0</h3>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Audit Trail Table Card -->
+                                <div class="wa-card">
+                                    <div class="wa-card-header">
+                                        <div class="wa-card-heading">
+                                            <h3 class="wa-card-title">Real-time Concurrency &amp; Audit Trail</h3>
+                                            <p class="wa-card-desc">Immutable event log of routing decisions, locks, and autonomous replies</p>
+                                        </div>
+                                        <button type="button" id="wa-btn-refresh-audit" class="wa-btn-secondary-sm">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                                            <span>Refresh Log</span>
+                                        </button>
+                                    </div>
+                                    <div class="wa-table-responsive">
+                                        <table class="wa-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Timestamp</th>
+                                                    <th>Event Type</th>
+                                                    <th>Actor</th>
+                                                    <th>Phone / Client</th>
+                                                    <th>Details</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="wa-audit-table-body">
+                                                <tr><td colspan="5" class="wa-table-empty">Loading audit trail...</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tab View 3: AI Configuration -->
+                        <div id="wa-view-config" class="wa-tab-view">
+                            <div class="wa-config-workspace">
+                                <form id="wa-config-form" class="wa-config-form" onsubmit="return false;">
+                                    <div class="wa-card">
+                                        <div class="wa-card-header">
+                                            <div class="wa-card-heading">
+                                                <h3 class="wa-card-title">Autonomous Support Engine</h3>
+                                                <p class="wa-card-desc">Configure LLM parameters, brand tone, safety guardrails, and tool execution</p>
+                                            </div>
+                                            <div class="wa-toggle-item">
+                                                <label class="wa-switch">
+                                                    <input type="checkbox" id="wa-config-ai-enabled-toggle" checked>
+                                                    <span class="wa-slider round"></span>
+                                                </label>
+                                                <span class="wa-toggle-label">Autonomous Auto-Replies Active</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="wa-config-grid">
+                                            <div class="wa-form-group">
+                                                <label for="wa-config-provider" class="wa-field-label">AI Provider</label>
+                                                <select id="wa-config-provider" class="wa-form-select">
+                                                    <option value="gemini" selected>Google Gemini (Recommended)</option>
+                                                    <option value="openai">OpenAI</option>
+                                                    <option value="anthropic">Anthropic Claude</option>
+                                                </select>
+                                            </div>
+
+                                            <div class="wa-form-group">
+                                                <label for="wa-config-model" class="wa-field-label">Model</label>
+                                                <input type="text" id="wa-config-model" class="wa-form-input" value="gemini-2.5-flash">
+                                            </div>
+
+                                            <div class="wa-form-group">
+                                                <label for="wa-config-brand-voice" class="wa-field-label">Brand Voice Tone</label>
+                                                <select id="wa-config-brand-voice" class="wa-form-select">
+                                                    <option value="professional" selected>Professional &amp; Helpful</option>
+                                                    <option value="friendly">Warm &amp; Encouraging</option>
+                                                    <option value="concise">Direct &amp; Concise</option>
+                                                </select>
+                                            </div>
+
+                                            <div class="wa-form-group">
+                                                <label for="wa-config-max-tokens" class="wa-field-label">Max Tokens per Reply</label>
+                                                <input type="number" id="wa-config-max-tokens" class="wa-form-input" value="350" min="50" max="2000">
+                                            </div>
+                                        </div>
+
+                                        <div class="wa-fallback-card">
+                                            <div class="wa-fallback-main">
+                                                <div class="wa-fallback-icon">
+                                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                                                    </svg>
+                                                </div>
+                                                <div class="wa-fallback-text">
+                                                    <span class="wa-fallback-title">Automatic Provider Fallback</span>
+                                                    <span class="wa-fallback-desc">Enable automatic fallback to Gemini Flash if primary provider errors or rate limits</span>
+                                                </div>
+                                            </div>
+                                            <label class="wa-switch" for="wa-config-fallback-enabled" title="Toggle automatic fallback">
+                                                <input type="checkbox" id="wa-config-fallback-enabled" checked>
+                                                <span class="wa-slider round"></span>
+                                            </label>
+                                        </div>
+
+                                        <div class="wa-tools-section">
+                                            <div class="wa-tools-header">
+                                                <div class="wa-tools-header-info">
+                                                    <div class="wa-tools-header-title-row">
+                                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                                                        <h4 class="wa-section-title">Integrated Function Tools</h4>
+                                                        <span class="wa-badge-pill">Autonomous</span>
+                                                    </div>
+                                                    <p class="wa-section-desc">Allow AI to autonomously query database records while assisting candidates in real-time</p>
+                                                </div>
+                                            </div>
+                                            <div class="wa-tools-grid">
+                                                <label class="wa-tool-card" for="wa-tool-search-candidates">
+                                                    <div class="wa-tool-card-header">
+                                                        <div class="wa-tool-icon-wrap wa-icon-blue">
+                                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                                                <circle cx="9" cy="7" r="4"></circle>
+                                                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                                                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                                                            </svg>
+                                                        </div>
+                                                        <div class="wa-tool-toggle-wrap">
+                                                            <input type="checkbox" id="wa-tool-search-candidates" class="wa-tool-checkbox" data-tool="search_candidates" checked>
+                                                            <span class="wa-tool-custom-check">
+                                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                                                </svg>
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="wa-tool-info">
+                                                        <span class="wa-tool-name">Search Candidates</span>
+                                                        <span class="wa-tool-desc">Look up candidate profile, CV status, and contact details</span>
+                                                    </div>
+                                                </label>
+                                                <label class="wa-tool-card" for="wa-tool-check-applications">
+                                                    <div class="wa-tool-card-header">
+                                                        <div class="wa-tool-icon-wrap wa-icon-emerald">
+                                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                                                <polyline points="14 2 14 8 20 8"></polyline>
+                                                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                                                <polyline points="10 9 9 9 8 9"></polyline>
+                                                            </svg>
+                                                        </div>
+                                                        <div class="wa-tool-toggle-wrap">
+                                                            <input type="checkbox" id="wa-tool-check-applications" class="wa-tool-checkbox" data-tool="get_application_status" checked>
+                                                            <span class="wa-tool-custom-check">
+                                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                                                </svg>
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="wa-tool-info">
+                                                        <span class="wa-tool-name">Check Applications</span>
+                                                        <span class="wa-tool-desc">Retrieve application count, interviews, and employer response rates</span>
+                                                    </div>
+                                                </label>
+                                                <label class="wa-tool-card" for="wa-tool-check-invoices">
+                                                    <div class="wa-tool-card-header">
+                                                        <div class="wa-tool-icon-wrap wa-icon-amber">
+                                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                <line x1="12" y1="1" x2="12" y2="23"></line>
+                                                                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                                                            </svg>
+                                                        </div>
+                                                        <div class="wa-tool-toggle-wrap">
+                                                            <input type="checkbox" id="wa-tool-check-invoices" class="wa-tool-checkbox" data-tool="get_payment_info" checked>
+                                                            <span class="wa-tool-custom-check">
+                                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                                                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                                                </svg>
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="wa-tool-info">
+                                                        <span class="wa-tool-name">Check Invoices &amp; Revenue</span>
+                                                        <span class="wa-tool-desc">Verify billing status, invoice numbers, and payment confirmations</span>
+                                                    </div>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="wa-form-group">
+                                            <label for="wa-config-system-prompt" class="wa-field-label">System Instructions &amp; Safety Prompt</label>
+                                            <textarea id="wa-config-system-prompt" class="wa-form-textarea" rows="6" placeholder="Enter system instructions for WhatsApp customer support..."></textarea>
+                                        </div>
+
+                                        <div class="wa-card-footer">
+                                            <button type="button" id="wa-btn-save-config" class="wa-btn-primary">Save Configuration</button>
+                                            <span id="wa-config-save-status" class="wa-save-status"></span>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Tab View 4: Knowledge Base -->
+                        <div id="wa-view-kb" class="wa-tab-view">
+                            <div class="wa-kb-workspace">
+                                <div class="wa-card">
+                                    <div class="wa-card-header">
+                                        <div class="wa-card-heading">
+                                            <h3 class="wa-card-title">Customer Knowledge Base</h3>
+                                            <p class="wa-card-desc">Grounding facts, FAQ answers, and policies provided to the support AI</p>
+                                        </div>
+                                        <button type="button" id="wa-btn-add-kb" class="wa-btn-primary">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                                            <span>Add FAQ Entry</span>
+                                        </button>
+                                    </div>
+
+                                    <div class="wa-kb-toolbar">
+                                        <div class="wa-search-wrap">
+                                            <input type="text" id="wa-kb-search" class="wa-form-input" placeholder="Search knowledge base articles...">
+                                        </div>
+                                        <select id="wa-kb-category-filter" class="wa-form-select" style="max-width: 200px;">
+                                            <option value="all">All Categories</option>
+                                            <option value="pricing">Pricing &amp; Plans</option>
+                                            <option value="process">Application Process</option>
+                                            <option value="visum">Visa &amp; Relocation</option>
+                                            <option value="support">Technical Support</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="wa-table-responsive">
+                                        <table class="wa-table">
+                                            <thead>
+                                                <tr>
+                                                    <th>Category</th>
+                                                    <th>Topic / Title</th>
+                                                    <th>Keywords</th>
+                                                    <th>Content Preview</th>
+                                                    <th>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="wa-kb-table-body">
+                                                <tr><td colspan="5" class="wa-table-empty">Loading knowledge base...</td></tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tab View 5: Meta API & Testing -->
+                        <div id="wa-view-setup" class="wa-tab-view">
+                            <div class="wa-setup-workspace">
+                                <div class="wa-setup-grid">
+                                    <!-- Meta Cloud Credentials -->
+                                    <div class="wa-card">
+                                        <div class="wa-card-header">
+                                            <div class="wa-card-heading">
+                                                <h3 class="wa-card-title">Meta Cloud API Credentials</h3>
+                                                <p class="wa-card-desc">Official WhatsApp Business Cloud API connection configuration</p>
+                                            </div>
+                                        </div>
+
+                                        <div class="wa-form-group">
+                                            <label class="wa-field-label">Webhook Callback URL</label>
+                                            <div class="wa-input-action-group">
+                                                <input type="text" id="wa-setup-webhook-url" class="wa-form-input font-mono" readonly value="https://jobscout.app/api/whatsapp/webhook">
+                                                <button type="button" id="wa-btn-copy-webhook" class="wa-btn-secondary">Copy</button>
+                                            </div>
+                                            <div class="wa-field-hint">Paste into Meta App Dashboard under WhatsApp &gt; Configuration &gt; Webhook URL</div>
+                                        </div>
+
+                                        <div class="wa-form-group">
+                                            <label for="wa-setup-verify-token" class="wa-field-label">Verify Token</label>
+                                            <input type="text" id="wa-setup-verify-token" class="wa-form-input font-mono" value="jobscout_meta_verify_2026">
+                                        </div>
+
+                                        <div class="wa-form-group">
+                                            <label for="wa-setup-phone-id" class="wa-field-label">Phone Number ID</label>
+                                            <input type="text" id="wa-setup-phone-id" class="wa-form-input font-mono" placeholder="e.g. 109847293847291">
+                                        </div>
+
+                                        <div class="wa-form-group">
+                                            <label for="wa-setup-token" class="wa-field-label">System User Permanent Access Token</label>
+                                            <input type="password" id="wa-setup-token" class="wa-form-input font-mono" placeholder="EAAB...">
+                                        </div>
+
+                                        <div class="wa-card-footer">
+                                            <button type="button" id="wa-btn-save-credentials" class="wa-btn-primary">Save API Credentials</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Interactive Simulator -->
+                                    <div class="wa-card">
+                                        <div class="wa-card-header">
+                                            <div class="wa-card-heading">
+                                                <h3 class="wa-card-title">Test Simulator</h3>
+                                                <p class="wa-card-desc">Simulate inbound customer messages without needing a live Meta webhook</p>
+                                            </div>
+                                        </div>
+
+                                        <div class="wa-form-group">
+                                            <label for="wa-sim-from" class="wa-field-label">From Phone (WhatsApp ID)</label>
+                                            <input type="text" id="wa-sim-from" class="wa-form-input font-mono" value="+491512345678">
+                                        </div>
+
+                                        <div class="wa-form-group">
+                                            <label for="wa-sim-name" class="wa-field-label">Customer Name</label>
+                                            <input type="text" id="wa-sim-name" class="wa-form-input" value="Yassine Alami">
+                                        </div>
+
+                                        <div class="wa-form-group">
+                                            <label for="wa-sim-body" class="wa-field-label">Simulated Message</label>
+                                            <textarea id="wa-sim-body" class="wa-form-textarea" rows="3" placeholder="e.g. Hallo, ich brauche Hilfe bei meiner Bewerbung"></textarea>
+                                        </div>
+
+                                        <div class="wa-btn-row">
+                                            <button type="button" id="wa-btn-simulate-msg" class="wa-btn-primary">Send Test Message</button>
+                                            <button type="button" id="wa-btn-sim-quick-human" class="wa-btn-secondary">Test "Talk to Human"</button>
+                                        </div>
+
+                                        <div class="wa-sim-result-box">
+                                            <label class="wa-field-label">Simulation Response</label>
+                                            <pre id="wa-sim-result" class="wa-sim-pre">Simulation output will appear here...</pre>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- KB Modal Dialog -->
+                        <div id="wa-kb-modal" class="wa-modal-backdrop" style="display:none;">
+                            <div class="wa-modal-card">
+                                <div class="wa-modal-header">
+                                    <h3 id="wa-kb-modal-title" class="wa-modal-title">Add Knowledge Base Article</h3>
+                                    <button type="button" id="wa-btn-close-kb-modal" class="wa-btn-close-modal">&times;</button>
+                                </div>
+                                <form id="wa-kb-form" class="wa-modal-form" onsubmit="return false;">
+                                    <input type="hidden" id="wa-kb-form-id">
+
+                                    <div class="wa-form-group">
+                                        <label for="wa-kb-form-category" class="wa-field-label">Category</label>
+                                        <select id="wa-kb-form-category" class="wa-form-select">
+                                            <option value="pricing">Pricing &amp; Plans</option>
+                                            <option value="process">Application Process</option>
+                                            <option value="visum">Visa &amp; Relocation</option>
+                                            <option value="support">Technical Support</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="wa-form-group">
+                                        <label for="wa-kb-form-title" class="wa-field-label">Topic / Question Title</label>
+                                        <input type="text" id="wa-kb-form-title" class="wa-form-input" required placeholder="e.g. How does the Bewerbungs-Flatrate work?">
+                                    </div>
+
+                                    <div class="wa-form-group">
+                                        <label for="wa-kb-form-keywords" class="wa-field-label">Keywords (comma-separated)</label>
+                                        <input type="text" id="wa-kb-form-keywords" class="wa-form-input" placeholder="e.g. kosten, preis, flatrate, garantie">
+                                    </div>
+
+                                    <div class="wa-form-group">
+                                        <label for="wa-kb-form-content" class="wa-field-label">Article Answer Content</label>
+                                        <textarea id="wa-kb-form-content" class="wa-form-textarea" rows="4" required placeholder="Full answer text provided to AI and customer..."></textarea>
+                                    </div>
+
+                                    <div class="wa-modal-footer">
+                                        <button type="button" id="wa-btn-cancel-kb" class="wa-btn-secondary">Cancel</button>
+                                        <button type="submit" class="wa-btn-primary">Save Article</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </section>

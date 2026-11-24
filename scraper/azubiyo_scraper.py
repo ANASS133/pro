@@ -1,5 +1,6 @@
 import logging
 import re
+import time
 import urllib.parse
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -45,14 +46,23 @@ class AzubiyoScraper:
         "industriekaufmann": "industriekaufmann",
         "marketing": "kaufmann-marketingkommunikation",
         "pflege": "pflegefachmann",
+        "pflegefachfrau": "pflegefachmann",
+        "pflegefachmann": "pflegefachmann",
         "krankenpflege": "pflegefachmann",
+        "erzieher": "erzieher",
+        "erzieherin": "erzieher",
         "mechatroniker": "mechatroniker",
+        "mechatronikerin": "mechatroniker",
+        "elektroniker": "elektroniker",
+        "elektronikerin": "elektroniker",
         "kfz": "kfz-mechatroniker",
         "logistik": "fachkraft-lagerlogistik",
         "koch": "koch",
         "köchin": "koch",
         "bäcker": "baecker",
+        "bäckerin": "baecker",
         "verkäufer": "verkaeufer",
+        "verkäuferin": "verkaeufer",
     }
 
     def __init__(self, session: Optional[requests.Session] = None):
@@ -88,6 +98,10 @@ class AzubiyoScraper:
             for key, slug in self.PROFESSION_SLUG_MAP.items():
                 if key in primary_token or primary_token in key:
                     return slug
+            if primary_token.endswith("erin") and len(primary_token) > 5:
+                primary_token = primary_token[:-2]
+            elif primary_token.endswith("frau") and len(primary_token) > 5:
+                primary_token = primary_token[:-4] + "mann"
             return slugify_german(primary_token)
 
         if clean in self.PROFESSION_SLUG_MAP:
@@ -149,56 +163,71 @@ class AzubiyoScraper:
             max_jobs,
         )
 
+        max_pages = max(1, min(15, (int(max_jobs or 60) // 15) + 2))
+
         for target_url in candidate_urls:
             if len(all_jobs) >= max_jobs:
                 break
 
-            try:
-                logger.info("Trying Azubiyo URL: %s", target_url)
-                resp = self.session.get(target_url, timeout=12)
-                resp.encoding = "utf-8"
-
-                if resp.status_code != 200:
-                    logger.debug("Azubiyo URL %s returned HTTP %s", target_url, resp.status_code)
-                    continue
-
-                soup = bs4.BeautifulSoup(resp.text, "html.parser")
-                cards = soup.find_all("div", class_=lambda c: c and "job-offer-teaser" in c)
-                if not cards:
-                    cards = soup.find_all(
-                        "div",
-                        class_=lambda c: c and ("card" in c and any("job" in x.lower() for x in c)),
-                    )
-
-                if not cards:
-                    continue
-
-                page_jobs = self._parse_cards(cards)
-
-                # Filter and deduplicate
-                for job in page_jobs:
-                    ref = job.get("reference") or job.get("url")
-                    if not ref or ref in seen_refs:
-                        continue
-
-                    # If broad fallback URL was used, apply gentle check
-                    if search_kw and target_url.endswith("/aktuelle-ausbildungsplaetze/"):
-                        if not is_profession_relevant(job.get("title", ""), job.get("hauptberuf", ""), search_kw):
-                            continue
-
-                    seen_refs.add(ref)
-                    all_jobs.append(job)
-                    if len(all_jobs) >= max_jobs:
-                        break
-
-                logger.info("Found %s total valid jobs from %s", len(all_jobs), target_url)
-
-                if len(all_jobs) >= max_jobs or (len(all_jobs) > 0 and not target_url.endswith("/aktuelle-ausbildungsplaetze/")):
+            url_found_any = False
+            for page in range(1, max_pages + 1):
+                if len(all_jobs) >= max_jobs:
                     break
 
-            except Exception as exc:
-                logger.warning("Error querying Azubiyo URL %s: %s", target_url, exc)
-                continue
+                try:
+                    req_params = {"page": page} if page > 1 else None
+                    logger.info("Trying Azubiyo URL: %s (page=%s)", target_url, page)
+                    resp = self.session.get(target_url, params=req_params, timeout=12)
+                    resp.encoding = "utf-8"
+
+                    if resp.status_code != 200:
+                        logger.debug("Azubiyo URL %s page %s returned HTTP %s", target_url, page, resp.status_code)
+                        break
+
+                    soup = bs4.BeautifulSoup(resp.text, "html.parser")
+                    cards = soup.find_all("div", class_=lambda c: c and "job-offer-teaser" in c)
+                    if not cards:
+                        cards = soup.find_all(
+                            "div",
+                            class_=lambda c: c and ("card" in c and any("job" in x.lower() for x in c)),
+                        )
+
+                    if not cards:
+                        break
+
+                    page_jobs = self._parse_cards(cards)
+                    new_jobs_count = 0
+
+                    for job in page_jobs:
+                        ref = job.get("reference") or job.get("url")
+                        if not ref or ref in seen_refs:
+                            continue
+
+                        # If broad fallback URL was used, apply gentle check
+                        if search_kw and target_url.endswith("/aktuelle-ausbildungsplaetze/"):
+                            if not is_profession_relevant(job.get("title", ""), job.get("hauptberuf", ""), search_kw):
+                                continue
+
+                        seen_refs.add(ref)
+                        all_jobs.append(job)
+                        new_jobs_count += 1
+                        url_found_any = True
+                        if len(all_jobs) >= max_jobs:
+                            break
+
+                    logger.info("Found %s total valid jobs from %s (page=%s)", len(all_jobs), target_url, page)
+
+                    if new_jobs_count == 0 or len(all_jobs) >= max_jobs:
+                        break
+
+                    time.sleep(0.25)
+
+                except Exception as exc:
+                    logger.warning("Error querying Azubiyo URL %s page %s: %s", target_url, page, exc)
+                    break
+
+            if len(all_jobs) >= max_jobs or (url_found_any and not target_url.endswith("/aktuelle-ausbildungsplaetze/")):
+                break
 
         self.total_jobs_fetched = len(all_jobs)
         logger.info("Azubiyo fetch completed. Total jobs: %s", self.total_jobs_fetched)

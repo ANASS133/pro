@@ -1,0 +1,18 @@
+<section id="dashboard-section" class="app-section" data-section="dashboard" {% if initial_section
+                    !="dashboard" %}hidden{% endif %}>
+                    <div class="section-hero">
+                        <div>
+                            <span class="section-kicker">Dashboard</span>
+                            <h2>Saved Campaigns</h2>
+                            <p>Track email delivery progress, pause/continue active runs, and manage saved campaigns.
+                            </p>
+                        </div>
+                        <div class="hero-actions">
+                            <a href="{{ url_for('send_emails') }}" data-section-link="send-emails">New Campaign</a>
+                        </div>
+                    </div>
+
+                    <div id="dashboard-status" class="section-status" hidden></div>
+                    <div id="dashboard-empty" class="empty-state" hidden>No saved campaign templates yet.</div>
+                    <div id="dashboard-cards" class="cards-grid"></div>
+                </section>

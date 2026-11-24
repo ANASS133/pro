@@ -77,20 +77,31 @@ def fetch_webshare_proxies(
     proxies_found: List[Dict[str, Any]] = []
     seen_ips = set()
 
+    _geo_eu_other = {"NL", "BE", "FR", "LU", "PL", "CZ", "DK", "IT", "ES", "SE", "IE", "FI"}
+
+    def _geo_priority(country_code: str) -> int:
+        c = str(country_code or "").strip().upper()
+        if c == "DE":
+            return 0
+        if c in ("AT", "CH"):
+            return 1
+        if c in _geo_eu_other:
+            return 2
+        if c == "GB":
+            return 3
+        return 4
+
     # Attempt primary mode first, then fallback to backbone or unconstrained mode if needed
     modes_to_try = [mode] if mode else ["direct", "backbone"]
     if "backbone" not in modes_to_try:
         modes_to_try.append("backbone")
 
     for current_mode in modes_to_try:
-        if len(proxies_found) >= max_proxies:
-            break
-
         url = WEBSHARE_API_ENDPOINT
         params = {
             "mode": current_mode,
             "page": 1,
-            "page_size": 25,
+            "page_size": 50,
         }
 
         try:
@@ -113,9 +124,6 @@ def fetch_webshare_proxies(
                 continue
 
             for item in results:
-                if len(proxies_found) >= max_proxies:
-                    break
-
                 # Filter valid proxies
                 if not item.get("valid", True):
                     continue
@@ -145,9 +153,12 @@ def fetch_webshare_proxies(
                     "country_code": country,
                     "city_name": city,
                     "proxy_url": proxy_url,
-                    "profile_name": f"Webshare-{len(proxies_found) + 1} ({country})",
+                    "profile_name": "",
                     "protocol": "http",
                 })
+
+            if len(proxies_found) >= max_proxies and any(_geo_priority(p.get("country_code", "")) <= 1 for p in proxies_found):
+                break
 
         except requests.exceptions.RequestException as exc:
             logger.warning("Webshare API request error (mode=%s): %s", current_mode, exc)
@@ -155,6 +166,11 @@ def fetch_webshare_proxies(
         except Exception as exc:
             logger.exception("Unexpected error querying Webshare API: %s", exc)
             continue
+
+    proxies_found.sort(key=lambda p: _geo_priority(p.get("country_code", "")))
+    proxies_found = proxies_found[:max_proxies]
+    for idx, p_item in enumerate(proxies_found, start=1):
+        p_item["profile_name"] = f"Webshare-{idx} ({p_item.get('country_code', 'XX')})"
 
     logger.info("Webshare API provided %d distinct proxy endpoints.", len(proxies_found))
     return proxies_found

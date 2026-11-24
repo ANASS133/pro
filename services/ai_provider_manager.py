@@ -762,42 +762,84 @@ class AIProviderManager:
     # -------------------------------------------------------------------------
 
     def extract_cv_json(self, text: str, candidate_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Parses CV text into structured candidate JSON."""
+        """Parses CV text into structured candidate JSON with complete nested schema (work experience + education + skills)."""
         if not text or len(text.strip()) < 15:
             return None
 
-        prompt = f"""Extract all candidate details into valid JSON with this exact schema:
+        prompt = f"""You are an expert HR CV/Resume parser. Analyze the following CV text and extract ALL candidate details into valid JSON with this exact schema:
+
 {{
   "first_name": "First name",
   "last_name": "Last name",
   "full_name": "Full name",
-  "email": "Email",
-  "phone": "Phone with country code",
+  "email": "Email address",
+  "phone": "Phone number with country code",
   "date_of_birth": "YYYY-MM-DD or empty",
   "date_of_birth_display": "DD.MM.YYYY or empty",
   "place_of_birth": "City of birth or empty",
-  "nationality": "Nationality",
-  "gender": "male or female",
-  "salutation": "Herr or Frau",
-  "street": "Street name",
-  "house_number": "House number",
-  "postal_code": "Postal code",
-  "city": "City",
-  "country": "Country",
-  "current_title": "Target job title",
-  "headline": "Brief professional headline",
-  "summary_de": "Short German summary",
-  "skills": ["Skill1", "Skill2"],
-  "languages": [{{"language": "German", "language_de": "Deutsch", "level_de": "B2"}}]
+  "nationality": "Nationality or empty",
+  "gender": "male or female or empty",
+  "salutation": "Herr or Frau or empty",
+  "street": "Street name or empty",
+  "house_number": "House number or empty",
+  "postal_code": "Postal code or empty",
+  "city": "Candidate home city of residence (NEVER an institutional evaluation body or embassy address)",
+  "country": "Country of residence (e.g. Marokko, Deutschland)",
+  "current_title": "Current actual job title / occupation documented in CV",
+  "headline": "Brief professional headline (e.g. Softwareentwickler | Full-Stack-Entwickler)",
+  "summary_de": "Concise German profile summary (1-3 sentences)",
+  "work_experience": [
+    {{
+      "position": "Job title / role",
+      "employer": "Company or organization name",
+      "location": "City, Country or empty",
+      "start_date": "YYYY or MM.YYYY",
+      "end_date": "YYYY, MM.YYYY, or 'heute' / 'present'",
+      "responsibilities": ["Key responsibility or achievement 1", "Key responsibility or achievement 2"]
+    }}
+  ],
+  "education": [
+    {{
+      "degree": "Degree / diploma title (e.g. Licence Professionnelle en Génie Logiciel, Master, Techniker-Diplom, Baccalauréat)",
+      "institution": "University / school name",
+      "location": "City, Country or empty",
+      "start_date": "YYYY or empty",
+      "end_date": "YYYY or empty",
+      "field_of_study": "Field of study / specialization"
+    }}
+  ],
+  "certifications": [
+    {{
+      "name": "Certification or credential title",
+      "issuer": "Issuing authority or empty",
+      "year": "YYYY or empty"
+    }}
+  ],
+  "skills": ["Skill1", "Skill2", "Skill3"],
+  "languages": [
+    {{
+      "language": "German",
+      "language_de": "Deutsch",
+      "level": "B2",
+      "level_de": "B2 (fließend)"
+    }}
+  ]
 }}
+
+CRITICAL INSTRUCTIONS:
+1. Accurately extract and translate section meanings from German, French, and English (e.g. 'Expérience professionnelle' -> work_experience, 'Formation' -> education, 'Compétences' -> skills).
+2. Extract all documented work experience entries and academic degrees. Do not omit any documented positions or education.
+3. NEVER assign an institutional evaluation body (e.g. ZAB Zentralstelle für ausländisches Bildungswesen, 53117 Bonn) as the candidate's home address.
+4. Output ONLY valid JSON, no markdown formatting or commentary.
+
 CV TEXT:
-{text[:6000]}
+{text[:7500]}
 """
         res = self.complete(
             prompt=prompt,
-            system_prompt="You are an expert HR CV/Resume parser. Output only valid JSON.",
+            system_prompt="You are an expert HR CV/Resume parser. Output only valid JSON matching the exact schema.",
             json_mode=True,
-            max_output_tokens=900,
+            max_output_tokens=2500,
             candidate_id=candidate_id,
         )
 
@@ -811,56 +853,158 @@ CV TEXT:
                     parsed = json.loads(cleaned)
                 except Exception:
                     parsed = None
-            if parsed:
+            if parsed and isinstance(parsed, dict):
                 return {
                     "success": True,
                     "parsed_profile": parsed,
                     "first_name": parsed.get("first_name", ""),
                     "last_name": parsed.get("last_name", ""),
                     "email": parsed.get("email", ""),
-                    "model": res.get("model", "gpt-6-luna"),
+                    "model": res.get("model", "gpt-4o-mini"),
                     "usage": res.get("usage", {})
                 }
         return None
 
     def extract_cv_vision(self, image_bytes: bytes, candidate_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Extracts candidate data from scanned resume image."""
+        """Extracts candidate data from scanned or image-based resume using Vision AI."""
         if not image_bytes:
             return None
 
-        # For vision, if OpenAI is primary, call /v1/chat/completions with image_url
+        prompt = """You are an expert HR CV/Resume document analyzer. Analyze this scanned/image CV and extract all candidate details into valid JSON matching this exact schema:
+{
+  "first_name": "First name",
+  "last_name": "Last name",
+  "full_name": "Full name",
+  "email": "Email address",
+  "phone": "Phone number with country code",
+  "date_of_birth": "YYYY-MM-DD or empty",
+  "date_of_birth_display": "DD.MM.YYYY or empty",
+  "place_of_birth": "City of birth or empty",
+  "nationality": "Nationality or empty",
+  "gender": "male or female or empty",
+  "salutation": "Herr or Frau or empty",
+  "street": "Street name or empty",
+  "house_number": "House number or empty",
+  "postal_code": "Postal code or empty",
+  "city": "Candidate home city (NEVER an institutional address)",
+  "country": "Country of residence",
+  "current_title": "Professional title / occupation",
+  "headline": "Brief professional headline",
+  "summary_de": "German profile summary (1-2 sentences)",
+  "work_experience": [
+    {
+      "position": "Job title / role",
+      "employer": "Company or organization name",
+      "location": "City, Country or empty",
+      "start_date": "YYYY or MM.YYYY",
+      "end_date": "YYYY, MM.YYYY, or 'heute'",
+      "responsibilities": ["Responsibility or task 1"]
+    }
+  ],
+  "education": [
+    {
+      "degree": "Degree / diploma title",
+      "institution": "University / school name",
+      "location": "City, Country or empty",
+      "start_date": "YYYY or empty",
+      "end_date": "YYYY or empty",
+      "field_of_study": "Field of study"
+    }
+  ],
+  "certifications": [
+    {
+      "name": "Certification title",
+      "issuer": "Issuer or empty",
+      "year": "YYYY or empty"
+    }
+  ],
+  "skills": ["Skill1", "Skill2"],
+  "languages": [
+    {
+      "language": "German",
+      "language_de": "Deutsch",
+      "level": "B2",
+      "level_de": "B2"
+    }
+  ]
+}
+
+Never invent facts. Output ONLY valid JSON."""
+
+        # Tier 1: Try OpenAI Vision
         api_key = self.config.get("openai_api_key")
-        if not api_key:
-            return None
-
-        b64 = base64.b64encode(image_bytes).decode("utf-8")
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        prompt = "Extract all candidate profile details from this CV image into raw JSON (first_name, last_name, email, phone, city, skills, languages)."
-
-        payload = {
-            "model": "gpt-4o-mini" if "luna" in self.config.get("openai_model", "") else self.config.get("openai_model", "gpt-4o-mini"),
-            "messages": [
-                {"role": "system", "content": "You are a precise document extraction system. Output only raw JSON."},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+        if api_key:
+            try:
+                b64 = base64.b64encode(image_bytes).decode("utf-8")
+                headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+                payload = {
+                    "model": "gpt-4o-mini",
+                    "messages": [
+                        {"role": "system", "content": "You are a precise document extraction system. Output only raw JSON."},
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt},
+                                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
+                            ],
+                        },
                     ],
-                },
-            ],
-            "max_tokens": 800,
-            "response_format": {"type": "json_object"},
-        }
+                    "max_tokens": 2500,
+                    "response_format": {"type": "json_object"},
+                }
+                resp = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=35)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    content = data["choices"][0]["message"]["content"]
+                    parsed = json.loads(content)
+                    if parsed and isinstance(parsed, dict):
+                        return {
+                            "success": True,
+                            "parsed_profile": parsed,
+                            "first_name": parsed.get("first_name", ""),
+                            "last_name": parsed.get("last_name", ""),
+                            "email": parsed.get("email", ""),
+                            "model": "gpt-4o-mini",
+                        }
+            except Exception as e:
+                logger.warning("OpenAI Vision extraction failed: %s", e)
 
-        try:
-            resp = requests.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload, timeout=25)
-            if resp.status_code == 200:
-                data = resp.json()
-                content = data["choices"][0]["message"]["content"]
-                return json.loads(content)
-        except Exception as e:
-            logger.warning("Vision extraction failed: %s", e)
+        # Tier 2: Try Gemini Vision
+        gemini_key = self.config.get("gemini_api_key")
+        if gemini_key:
+            try:
+                b64 = base64.b64encode(image_bytes).decode("utf-8")
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_key}"
+                headers = {"Content-Type": "application/json"}
+                gemini_payload = {
+                    "contents": [{
+                        "parts": [
+                            {"text": prompt},
+                            {"inline_data": {"mime_type": "image/png", "data": b64}},
+                        ]
+                    }],
+                    "generationConfig": {
+                        "response_mime_type": "application/json",
+                        "maxOutputTokens": 2500,
+                    }
+                }
+                resp = requests.post(url, headers=headers, json=gemini_payload, timeout=35)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    text_resp = data["candidates"][0]["content"]["parts"][0]["text"]
+                    parsed = json.loads(text_resp)
+                    if parsed and isinstance(parsed, dict):
+                        return {
+                            "success": True,
+                            "parsed_profile": parsed,
+                            "first_name": parsed.get("first_name", ""),
+                            "last_name": parsed.get("last_name", ""),
+                            "email": parsed.get("email", ""),
+                            "model": "gemini-2.5-flash",
+                        }
+            except Exception as e:
+                logger.warning("Gemini Vision extraction failed: %s", e)
+
         return None
 
 

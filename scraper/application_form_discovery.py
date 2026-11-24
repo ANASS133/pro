@@ -698,6 +698,8 @@ def classify_application_method(
         return "postal", "Post / Schriftlich"
     if em in {"portal_login_required", "portal_login"}:
         return "portal_login_required", "Portal-Registrierung erforderlich"
+    if em in {"region_restricted", "regional_restricted"}:
+        return "region_restricted", "Regional beschränkt (Region-Restricted)"
     if em in {"none", "keine"}:
         return "none", "Keine"
     return "unknown", "Unbekannt"
@@ -761,6 +763,7 @@ def normalize_job_opportunity_row(
 
     # 4. Direct application URL / mailto correction
     raw_direct = str(row.get("direct_application_url") or "").strip()
+    demoted_employer_site = ""
     if "mailto:" in raw_direct.lower():
         m = re.search(r"mailto:([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})", raw_direct, re.I)
         if m and not email_val:
@@ -770,9 +773,11 @@ def normalize_job_opportunity_row(
                 email_val = cand_m
         direct_app_url = ""
     else:
-        is_dir_ok, clean_dir_url, _ = validate_application_url(raw_direct)
+        is_dir_ok, clean_dir_url, dir_reason = validate_application_url(raw_direct)
         if is_dir_ok:
             is_dir_ok, _ = is_url_compatible_with_job(clean_dir_url, company=company_str, job_listing_url=job_listing_url)
+        if not is_dir_ok and raw_direct.startswith(("http://", "https://")) and ("generic employer" in dir_reason.lower() or "career root" in dir_reason.lower()):
+            demoted_employer_site = raw_direct
         direct_app_url = clean_dir_url if is_dir_ok else ""
 
     # 5. Form discovery validation (reject generic portal roots like jobs.hogapage.de)
@@ -786,7 +791,12 @@ def normalize_job_opportunity_row(
         form_link = form_link if is_form_valid else ""
         raw_bewerbung_link = str(discovery_result.bewerbung_link or apply_url or job_listing_url or "").strip()
     else:
-        raw_has_form = bool(row.get("has_form") is True or str(row.get("has_form")).lower() in {"true", "1"})
+        raw_has_form = bool(
+            row.get("has_form") is True
+            or str(row.get("has_form")).lower() in {"true", "1"}
+            or row.get("application_method") == "form"
+            or row.get("extraction_status") == "verified_application_form"
+        )
         raw_form_link = str(row.get("form_link") or (row.get("direct_application_url") if raw_has_form else "") or "").strip()
         is_form_valid, form_link, _ = validate_form_link(raw_form_link, has_form=raw_has_form)
         if is_form_valid:
@@ -849,16 +859,58 @@ def normalize_job_opportunity_row(
         anrede = "Sehr geehrte Damen und Herren"
 
     email_type = str(row.get("email_type") or ("recruitment" if email_val else "")).strip()
-    employer_website = str(row.get("employer_website") or "").strip()
-    application_url_type = str(row.get("application_url_type") or ("direct_form" if has_form else ("postal" if app_method == "postal" else ("portal_login" if app_method == "portal_login_required" else "none")))).strip()
-    if not has_form and application_url_type == "direct_form":
-        application_url_type = "career_portal" if direct_app_url else "none"
+    employer_website = str(row.get("employer_website") or row.get("employer_website_url") or demoted_employer_site or "").strip()
+    application_url_type = str(
+        row.get("application_url_type")
+        or (
+            "direct_application_form"
+            if has_form
+            else (
+                "job_specific_application_page"
+                if direct_app_url
+                else (
+                    "generic_employer_website"
+                    if demoted_employer_site
+                    else (
+                        "postal"
+                        if app_method == "postal"
+                        else ("login_required" if app_method == "portal_login_required" else "none")
+                    )
+                )
+            )
+        )
+    ).strip()
+    if not has_form and application_url_type in {"direct_form", "direct_application_form"}:
+        application_url_type = "job_specific_application_page" if direct_app_url else ("generic_employer_website" if employer_website else "none")
 
+    if row.get("is_region_restricted") or row.get("validation_status") == "region_restricted" or existing_method in ("region_restricted", "regional_restricted"):
+        application_url_type = "region_restricted"
+        extraction_status = "region_restricted"
+        app_method = "region_restricted"
+        bewerbung_art = "Regional beschränkt (Region-Restricted)"
+    else:
+        required_documents = str(row.get("required_documents") or "").strip()
+        has_login_entry = bool(direct_app_url or form_link or (apply_url and apply_url != job_listing_url))
+        if app_method == "portal_login_required" and not has_login_entry:
+            app_method = "unknown"
+            bewerbung_art = "Unbekannt"
+            row["portal_login_required"] = False
+
+        default_status = "completed" if (email_val or has_form or direct_app_url or (app_method == "portal_login_required" and has_login_entry) or app_method == "postal") else "unresolved"
+        extraction_status = str(row.get("extraction_status") or default_status).strip()
+
+        # Enforce consistency invariants
+        if extraction_status == "verified_email" and not email_val:
+            extraction_status = "manual_review_required"
+        elif extraction_status == "verified_application_link" and not direct_app_url:
+            extraction_status = "manual_review_required"
+        elif extraction_status == "verified_application_form" and not (has_form or direct_app_url or form_link):
+            extraction_status = "manual_review_required"
+        elif app_method == "portal_login_required" and not has_login_entry:
+            extraction_status = "manual_review_required"
+        elif app_method == "portal_login_required" and extraction_status in ("unresolved", "failed"):
+            extraction_status = "completed"
     required_documents = str(row.get("required_documents") or "").strip()
-    default_status = "completed" if (email_val or has_form or direct_app_url or app_method in ("postal", "portal_login_required")) else "unresolved"
-    extraction_status = str(row.get("extraction_status") or default_status).strip()
-    if app_method == "portal_login_required" and extraction_status in ("unresolved", "failed"):
-        extraction_status = "completed"
     app_methods = row.get("application_methods") or ([app_method] if app_method not in ("unknown", "none") else [])
 
     out = {
@@ -890,6 +942,7 @@ def normalize_job_opportunity_row(
         "contact_person": contact_val,
         "job_listing_url": job_listing_url,
         "employer_website": employer_website,
+        "employer_website_url": employer_website,
         "direct_application_url": direct_app_url,
         "application_url_type": application_url_type,
         "required_documents": required_documents,
@@ -897,13 +950,19 @@ def normalize_job_opportunity_row(
         "application_methods": app_methods,
         "extraction_method": str(row.get("extraction_method") or "").strip(),
     }
-    # Preserve provenance and diagnostic metadata when present
+    # Preserve provenance, destination validation, and search relevance metadata when present
     for prov_key in (
         "email_source_url",
         "email_source_section",
         "email_verified",
         "application_url_source",
         "application_url_verified",
+        "application_url_original",
+        "application_url_final",
+        "application_url_validation_reason",
+        "application_url_redirect_chain",
+        "application_url_job_match",
+        "application_url_employer_match",
         "form_link_source",
         "form_link_verified",
         "phone_source",
@@ -914,8 +973,21 @@ def normalize_job_opportunity_row(
         "validation_reason",
         "contact_provenance",
         "raw_candidates",
+        "application_navigation_type",
+        "application_form_detected",
+        "application_form_selector",
+        "application_button_found",
+        "application_button_clicked",
+        "application_initial_url",
+        "application_final_url",
         "extraction_completed",
         "manual_review_reason",
+        "search_query",
+        "normalized_requested_occupation",
+        "detected_job_occupation",
+        "occupation_match_type",
+        "relevance_score",
+        "relevance_decision_reason",
     ):
         if prov_key in row:
             out[prov_key] = row[prov_key]

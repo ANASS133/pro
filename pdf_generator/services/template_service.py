@@ -5,6 +5,21 @@ from datetime import date
 from .html_template import is_html_template
 
 
+PLACEHOLDER_SYNONYM_GROUPS: Dict[str, List[str]] = {
+    "company": ["company", "unternehmen", "firma", "arbeitgeber", "arbeitsgeber", "betrieb", "empfaenger_firma"],
+    "position": ["position", "stelle", "beruf", "titel", "title", "job_title", "ausbildung", "hauptberuf", "angestrebte_stelle", "bewerber_titel"],
+    "city": ["city", "ort", "standort", "stadt", "location", "empfaenger_ort", "bewerber_stadt"],
+    "contact_person": ["contact_person", "ansprechpartner", "ansprechpartnerin", "kontakt", "kontaktperson", "z_hd", "empfaenger_name"],
+    "salutation": ["salutation", "anrede", "briefanrede"],
+    "candidate_name": ["candidate_name", "bewerber_name", "bewerber", "full_name", "name", "kandidat"],
+    "candidate_email": ["candidate_email", "bewerber_email", "email"],
+    "candidate_phone": ["candidate_phone", "bewerber_telefon", "phone", "telefon", "mobil", "handy"],
+    "candidate_street": ["candidate_street", "bewerber_strasse", "bewerber_str", "street", "strasse"],
+    "candidate_zip_city": ["candidate_zip_city", "bewerber_plz_ort", "plz_ort"],
+    "candidate_experience": ["candidate_experience", "bewerber_erfahrung", "erfahrung"],
+}
+
+
 class TemplateService:
     def __init__(self):
         self.placeholder_pattern = re.compile(r"{{\s*([^{}]+?)\s*}}")
@@ -103,6 +118,22 @@ class TemplateService:
         normalized = self._normalize_key(key)
         if normalized in normalized_lookup:
             return normalized_lookup[normalized]
+
+        # Synonym group resolution (e.g. {{Unternehmen}} -> row["company"], {{Position}} -> row["title"])
+        for _, syn_list in PLACEHOLDER_SYNONYM_GROUPS.items():
+            norm_syns = [self._normalize_key(s) for s in syn_list]
+            if lowered in syn_list or normalized in norm_syns:
+                for syn in syn_list:
+                    if syn in builtin_values and builtin_values[syn]:
+                        return builtin_values[syn]
+                    if syn in exact_lookup and exact_lookup[syn]:
+                        return exact_lookup[syn]
+                    if syn.lower() in lower_lookup and lower_lookup[syn.lower()]:
+                        return lower_lookup[syn.lower()]
+                    norm_s = self._normalize_key(syn)
+                    if norm_s in normalized_lookup and normalized_lookup[norm_s]:
+                        return normalized_lookup[norm_s]
+
         return ""
 
     def replace_placeholders(self, template, row_data, columns):
@@ -148,7 +179,23 @@ class TemplateService:
                 continue
             if self._normalize_key(key) in normalized_columns:
                 continue
-            missing.append(key)
+
+            # Check if any synonym is available in columns
+            has_synonym = False
+            k_low = key.lower()
+            k_norm = self._normalize_key(key)
+            for _, syn_list in PLACEHOLDER_SYNONYM_GROUPS.items():
+                norm_syns = [self._normalize_key(s) for s in syn_list]
+                if k_low in syn_list or k_norm in norm_syns:
+                    for syn in syn_list:
+                        if syn in exact_columns or syn.lower() in lower_columns or self._normalize_key(syn) in normalized_columns:
+                            has_synonym = True
+                            break
+                if has_synonym:
+                    break
+
+            if not has_synonym:
+                missing.append(key)
         return missing
 
     def extract_placeholders(self, template):

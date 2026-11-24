@@ -73,6 +73,26 @@ KNOWN_CORPORATE_GROUP_DOMAINS = {
     "gauselmann.de": ("gauselmann", "merkur", "adp merkur", "schloss benkhausen"),
     "gauselmann.softgarden.io": ("gauselmann", "merkur", "adp merkur", "schloss benkhausen"),
     "merkur.com": ("gauselmann", "merkur", "adp merkur", "schloss benkhausen"),
+    "a-rosa.de": ("a-rosa", "dsr hotel", "dsr "),
+    "dsr-hotelholding.de": ("a-rosa", "dsr hotel", "dsr "),
+    "schlossromrod-villaraab.team": ("schloss romrod", "smartig", "villa raab"),
+    "haus-edelberg.de": ("haus edelberg", "emeis"),
+    "haus-edelberg.softgarden.io": ("haus edelberg", "emeis"),
+    "senioren-park.de": ("senioren-park", "carpe diem"),
+    "carpediem-portal.de": ("senioren-park", "carpe diem"),
+    "modepark.de": ("modepark", "röther", "roether"),
+    "kik.de": ("kik",),
+    "dennree.de": ("dennree", "denns", "biomarkt"),
+    "alnatura.de": ("alnatura",),
+    "holab.de": ("hol' ab", "hol ab", "holab"),
+    "deichmann.com": ("deichmann",),
+    "deichmann.de": ("deichmann",),
+    "hornbach.de": ("hornbach",),
+    "netto-online.de": ("netto",),
+    "rossmann.de": ("rossmann",),
+    "dm.de": ("dm-drogerie", "dm drogerie"),
+    "aldi-sued.de": ("aldi",),
+    "aldi-nord.de": ("aldi",),
 }
 
 # Portal support / hotline phone numbers that must never be exported as employer phones
@@ -123,9 +143,13 @@ def is_email_compatible_with_employer(email: str, company: str, employer_website
     if is_portal_domain(domain):
         return False, f"Portal infrastructure email domain '{domain}' cannot be an employer email"
 
-    if any(bad in clean_email for bad in ("example.", "sentry.", "wix.", "noreply@", "no-reply@", "donotreply@", "datenschutz@")):
-        if not clean_email.startswith(("bewerbung@", "karriere@", "personal@", "jobs@", "hr@", "ausbildung@")):
-            return False, f"Non-application system/privacy address: {clean_email}"
+    local_part = clean_email.split("@")[0].strip()
+    if (
+        "widerruf" in local_part
+        or clean_email.startswith(("dsa@", "datenschutz@", "privacy@", "barrierefreiheit@", "hinweisgeber@", "noreply@", "no-reply@", "donotreply@", "do-not-reply@"))
+        or any(bad in clean_email for bad in ("example.", "sentry.", "wix."))
+    ):
+        return False, f"Non-application system/compliance/revocation address: {clean_email}"
 
     comp_lower = str(company or "").strip().lower()
     for edu_domain, allowed_keywords in EDUCATIONAL_ADVISOR_DOMAINS.items():
@@ -218,9 +242,15 @@ def classify_extraction_outcome(record: Dict[str, Any]) -> Tuple[str, bool]:
         if not (has_verified_email or has_verified_form or has_verified_link):
             return "manual_review_required", True
 
+    if record.get("validation_status") == "region_restricted" or raw_status == "region_restricted":
+        return "region_restricted", True
+
     email_val = str(record.get("email") or "").strip()
     has_email = bool(email_val and "@" in email_val and not email_val.lower().startswith("error"))
-    has_form = bool(record.get("has_form") and (record.get("form_link") or record.get("direct_application_url")))
+    has_form = bool(
+        (record.get("has_form") or record.get("application_method") == "form" or raw_status == "verified_application_form")
+        and (record.get("form_link") or record.get("direct_application_url"))
+    )
     has_link = bool(record.get("direct_application_url") and not has_form)
 
     if has_email:
@@ -229,6 +259,9 @@ def classify_extraction_outcome(record: Dict[str, Any]) -> Tuple[str, bool]:
         return "verified_application_form", True
     if has_link:
         return "verified_application_link", True
+
+    if raw_status in ("verified_email", "verified_application_form", "verified_application_link"):
+        return "manual_review_required", True
 
     return "no_contact_found", True
 
@@ -358,34 +391,86 @@ def attach_contact_provenance(
         record["contact_person_verified"] = False
         record.setdefault("contact_person_source", "")
 
-    # 4. Validate direct_application_url & form_link + provenance
+    # 4. Validate direct_application_url & form_link + provenance & destination classification
+    from services.application_url_validator import (
+        ApplicationDestinationType,
+        classify_and_validate_destination,
+    )
+
     direct_val = str(record.get("direct_application_url") or "").strip()
+    orig_app_url = str(record.get("application_url_original") or direct_val or record.get("employer_website") or "").strip()
+    record["application_url_original"] = orig_app_url
+
     if direct_val:
+        cls_res = classify_and_validate_destination(
+            direct_val,
+            company=company,
+            job_title=str(record.get("title") or ""),
+            search_keyword=str(record.get("search_query") or ""),
+            job_listing_url=listing_url,
+        )
         u_ok, u_err = is_url_compatible_with_job(direct_val, company=company, job_listing_url=listing_url)
-        if not u_ok:
+        record["application_url_final"] = cls_res.get("application_url_final") or direct_val
+        record["application_url_type"] = cls_res.get("application_url_type") or record.get("application_url_type") or ""
+        record["application_url_validation_reason"] = cls_res.get("application_url_validation_reason") or u_err or ""
+        if not record.get("application_url_redirect_chain"):
+            record["application_url_redirect_chain"] = cls_res.get("application_url_redirect_chain") or [direct_val]
+        record["application_url_job_match"] = bool(cls_res.get("application_url_job_match"))
+        record["application_url_employer_match"] = bool(cls_res.get("application_url_employer_match"))
+
+        if cls_res.get("employer_website_url") and not record.get("employer_website"):
+            record["employer_website"] = cls_res["employer_website_url"]
+        record["employer_website_url"] = str(record.get("employer_website") or cls_res.get("employer_website_url") or "").strip()
+
+        if not (u_ok and cls_res.get("application_url_verified")):
             record["direct_application_url"] = ""
             record["application_url_verified"] = False
-            reasons.append(u_err)
+            reasons.append(cls_res.get("application_url_validation_reason") or u_err)
         else:
             record["application_url_verified"] = True if application_url_verified is None else bool(application_url_verified)
             record["application_url_source"] = application_url_source or record.get("application_url_source") or listing_url
     else:
         record["application_url_verified"] = False
         record.setdefault("application_url_source", "")
+        record.setdefault("application_url_final", "")
+        record.setdefault("application_url_type", record.get("application_url_type") or "none")
+        record.setdefault("application_url_validation_reason", "")
+        record.setdefault("application_url_redirect_chain", [])
+        record.setdefault("application_url_job_match", False)
+        record.setdefault("application_url_employer_match", False)
+        record["employer_website_url"] = str(record.get("employer_website") or record.get("employer_website_url") or "").strip()
 
     form_val = str(record.get("form_link") or "").strip()
     if form_val:
         f_ok, clean_f, f_err = validate_form_link(form_val, has_form=bool(record.get("has_form", True)))
         u_ok, u_err = is_url_compatible_with_job(form_val, company=company, job_listing_url=listing_url)
-        if not (f_ok and u_ok):
+        cls_f = classify_and_validate_destination(
+            form_val,
+            company=company,
+            job_title=str(record.get("title") or ""),
+            search_keyword=str(record.get("search_query") or ""),
+            job_listing_url=listing_url,
+        )
+        if not (f_ok and u_ok and cls_f.get("application_url_verified")):
+            if cls_f.get("employer_website_url") and not record.get("employer_website"):
+                record["employer_website"] = cls_f["employer_website_url"]
+                record["employer_website_url"] = cls_f["employer_website_url"]
             record["form_link"] = ""
             record["has_form"] = False
             record["form_link_verified"] = False
-            reasons.append(f_err or u_err)
+            reasons.append(f_err or u_err or cls_f.get("application_url_validation_reason", ""))
         else:
             record["form_link"] = clean_f
             record["form_link_verified"] = True if form_link_verified is None else bool(form_link_verified)
             record["form_link_source"] = form_link_source or record.get("form_link_source") or listing_url
+            if not record.get("direct_application_url"):
+                record["direct_application_url"] = clean_f
+                record["application_url_final"] = clean_f
+                record["application_url_type"] = cls_f.get("application_url_type") or ApplicationDestinationType.DIRECT_APPLICATION_FORM.value
+                record["application_url_verified"] = True
+                record["application_url_validation_reason"] = cls_f.get("application_url_validation_reason") or "Verified form link"
+                record["application_url_job_match"] = bool(cls_f.get("application_url_job_match"))
+                record["application_url_employer_match"] = bool(cls_f.get("application_url_employer_match"))
     else:
         record["form_link_verified"] = False
         record.setdefault("form_link_source", "")
@@ -397,6 +482,8 @@ def attach_contact_provenance(
     )
     if validation_status:
         record["validation_status"] = validation_status
+    elif record.get("validation_status") == "region_restricted" or record.get("is_region_restricted"):
+        record["validation_status"] = "region_restricted"
     elif has_any_verified:
         record["validation_status"] = "verified"
     elif reasons:
@@ -404,7 +491,10 @@ def attach_contact_provenance(
     else:
         record["validation_status"] = record.get("validation_status") or "no_contact"
 
-    record["validation_reason"] = "; ".join(r for r in reasons if r) or record.get("validation_reason") or ""
+    if record.get("validation_status") == "region_restricted":
+        record["validation_reason"] = record.get("validation_reason") or "Applications for this position from your region aren't supported right now"
+    else:
+        record["validation_reason"] = "; ".join(r for r in reasons if r) or record.get("validation_reason") or ""
 
     # Structured provenance summary
     record["contact_provenance"] = {

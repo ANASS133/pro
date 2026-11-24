@@ -549,9 +549,20 @@ def validate_application_url(
 
     netloc = (parsed.netloc or "").lower()
     path = (parsed.path or "").strip("/")
+    query = (parsed.query or "").strip()
     if netloc in GENERIC_PORTAL_ROOTS:
         if not path or path in ("jobs", "de-de/jobs", "stellenangebote", "stellen", "jobsuche", "ausbildung"):
             return False, "", f"Generic portal root '{netloc}' is not a valid application URL"
+
+    # Reject login-only Arbeitsagentur vamJB manage page as a direct application URL
+    if "bewerbungverwalten.html" in path.lower():
+        return False, "", "Portal login-required page (bewerbungVerwalten.html) is not a direct application URL"
+
+    # Reject generic employer root homepages or generic career overview roots without job-specific path/query
+    from services.application_url_validator import _classify_structural_generic_homepage
+    is_gen, gen_type = _classify_structural_generic_homepage(raw)
+    if is_gen:
+        return False, "", f"Generic employer website or career root ({gen_type}): {raw}"
 
     return True, raw, ""
 

@@ -446,6 +446,22 @@
             });
         }
 
+        let monLogRenderScheduled = false;
+        let monLogRenderUi = null;
+
+        function scheduleTerminalRender(ui) {
+            monLogRenderUi = ui || monLogRenderUi;
+            if (monLogRenderScheduled) return;
+            monLogRenderScheduled = true;
+            const raf = (typeof window !== "undefined" && window.requestAnimationFrame)
+                ? window.requestAnimationFrame.bind(window)
+                : (cb) => setTimeout(cb, 16);
+            raf(() => {
+                monLogRenderScheduled = false;
+                renderTerminalLogs(monLogRenderUi);
+            });
+        }
+
         function logToConsole(ui, message, level = "info", sourceTag = "") {
             const timeStr = formatConsoleTime();
             monLogs.push({
@@ -454,7 +470,10 @@
                 source: sourceTag,
                 message: message,
             });
-            renderTerminalLogs(ui);
+            // Cap memory: keep the most recent 2000 log entries
+            if (monLogs.length > 2000) monLogs.splice(0, monLogs.length - 2000);
+            // Coalesce bursts of SSE events into one DOM rebuild per animation frame
+            scheduleTerminalRender(ui);
         }
 
         function setSearchProgress(ui, progressData) {

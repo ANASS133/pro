@@ -81,9 +81,6 @@ EXCEL_EXPORT_COLUMNS: List[str] = [
 
 load_dotenv()
 
-app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "change-me-local")
-
 from routes import (
     autofill_bp,
     enhancements_bp,
@@ -96,23 +93,40 @@ from routes import (
     ai_settings_bp,
     whatsapp_bp,
     conductor_bp,
+    cover_letters_bp,
+    search_bp,
 )
 from services.job_store import job_store
 from services.ai_provider_manager import ai_manager
 from services.profession_intelligence import profession_intelligence
 from services.geographic_batching import geographic_batching
+from services.pdf_session_store import _pdf_sessions, PDF_LAYOUT_DEFAULTS
+from services.search_state import search_cache, search_runs, search_runs_lock
 
-app.register_blueprint(health_bp)
-app.register_blueprint(jobs_bp)
-app.register_blueprint(pdf_bp)
-app.register_blueprint(enhancements_bp)
-app.register_blueprint(autofill_bp)
-app.register_blueprint(campaigns_bp)
-app.register_blueprint(clients_bp)
-app.register_blueprint(supabase_onboarding_bp)
-app.register_blueprint(ai_settings_bp)
-app.register_blueprint(whatsapp_bp)
-app.register_blueprint(conductor_bp)
+def create_app(config: Optional[Dict[str, Any]] = None) -> Flask:
+    """Application Factory for JobScout Flask backend."""
+    app_instance = Flask(__name__)
+    app_instance.secret_key = os.getenv("SECRET_KEY", "change-me-local")
+    if config:
+        app_instance.config.update(config)
+
+    app_instance.register_blueprint(health_bp)
+    app_instance.register_blueprint(jobs_bp)
+    app_instance.register_blueprint(pdf_bp)
+    app_instance.register_blueprint(enhancements_bp)
+    app_instance.register_blueprint(autofill_bp)
+    app_instance.register_blueprint(campaigns_bp)
+    app_instance.register_blueprint(clients_bp)
+    app_instance.register_blueprint(supabase_onboarding_bp)
+    app_instance.register_blueprint(ai_settings_bp)
+    app_instance.register_blueprint(whatsapp_bp)
+    app_instance.register_blueprint(conductor_bp)
+    app_instance.register_blueprint(cover_letters_bp)
+    app_instance.register_blueprint(search_bp)
+
+    return app_instance
+
+app = create_app()
 
 import sys
 from services.conductor_engine import conductor_engine
@@ -153,12 +167,7 @@ if not ai_manager.is_configured:
     logger.info("Central AI Provider Manager: Using local offline mode or awaiting key in AI Settings.")
 
 status_lock = threading.Lock()
-search_cache = {
-    "jobs": [],
-    "keyword": "",
-    "location": "",
-    "published_since": "all",
-}
+# search_cache imported from services.search_state
 
 extraction_status = {
     "is_running": False,
@@ -199,7 +208,7 @@ PROGRESS_DIR = DATA_DIR / "progress"
 DOWNLOAD_EXPORT_DIR = DATA_DIR / "exports"
 
 _pdf_backend_services = None
-_pdf_sessions: Dict[str, Dict] = {}
+# _pdf_sessions imported from services.pdf_session_store
 _email_sender_default = None
 _email_transfer_sessions: Dict[str, Dict] = {}
 email_send_jobs_lock = threading.Lock()
@@ -563,9 +572,17 @@ def _neutralize_excel_formula(value: Any) -> Any:
     return value
 
 
-def _build_excel_export_dataframe(records: Iterable[Dict]) -> pd.DataFrame:
+def _build_excel_export_dataframe(
+    records: Iterable[Dict],
+    include_diagnostic_columns: bool = False,
+) -> pd.DataFrame:
     """Project rich job records into the exact Excel-only 18-column contract after cross-employer contamination check."""
-    from services.contamination_detector import detect_and_clean_cross_employer_contamination
+    from services.contamination_detector import (
+        detect_and_clean_cross_employer_contamination,
+        is_url_compatible_with_job,
+    )
+    from services.data_validator import validate_application_url
+    from services.application_url_validator import is_structural_generic_homepage
 
     input_records = [dict(r) for r in (records or []) if isinstance(r, dict)]
     cleaned_records, _ = detect_and_clean_cross_employer_contamination(input_records)
@@ -584,7 +601,9 @@ def _build_excel_export_dataframe(records: Iterable[Dict]) -> pd.DataFrame:
         )
         normalized["employer_website"] = _first_valid_export_url(
             normalized.get("employer_website"),
+            normalized.get("employer_website_url"),
             raw_record.get("employer_website"),
+            raw_record.get("employer_website_url"),
             raw_record.get("website"),
             raw_record.get("company_website"),
         )
@@ -596,8 +615,19 @@ def _build_excel_export_dataframe(records: Iterable[Dict]) -> pd.DataFrame:
             normalized.get("direct_application_url"),
             normalized.get("form_link"),
         )
+        # Double-check that direct_application_url is never a generic employer homepage or internal portal /bewerben/ wrapper
+        if normalized["direct_application_url"]:
+            d_url = normalized["direct_application_url"]
+            is_app_valid, _, _ = validate_application_url(d_url)
+            is_azubiyo_wrapper = "azubiyo.de/stellenanzeigen/" in d_url.lower() and d_url.lower().rstrip("/").endswith("/bewerben")
+            if not is_app_valid or is_structural_generic_homepage(d_url) or is_azubiyo_wrapper:
+                if is_structural_generic_homepage(d_url) and not normalized["employer_website"]:
+                    normalized["employer_website"] = d_url
+                normalized["direct_application_url"] = ""
+                if normalized["form_link"] == d_url:
+                    normalized["form_link"] = ""
+
         if not normalized["direct_application_url"] and raw_record.get("validation_status") != "rejected_contamination":
-            from services.contamination_detector import is_url_compatible_with_job
             excluded_destinations = {
                 normalized.get("job_listing_url"),
                 normalized.get("employer_website"),
@@ -605,31 +635,87 @@ def _build_excel_export_dataframe(records: Iterable[Dict]) -> pd.DataFrame:
             for legacy_link in (raw_record.get("bewerbung_link"), raw_record.get("apply_url")):
                 candidate = _first_valid_export_url(legacy_link)
                 if candidate and candidate not in excluded_destinations:
+                    is_azubiyo_wrapper = "azubiyo.de/stellenanzeigen/" in candidate.lower() and candidate.lower().rstrip("/").endswith("/bewerben")
+                    if is_azubiyo_wrapper:
+                        continue
+                    if is_structural_generic_homepage(candidate):
+                        if not normalized["employer_website"]:
+                            normalized["employer_website"] = candidate
+                        continue
+                    ok_app, clean_cand, _ = validate_application_url(candidate)
+                    if not ok_app:
+                        continue
                     ok_leg, _ = is_url_compatible_with_job(
-                        candidate,
+                        clean_cand,
                         company=str(normalized.get("company") or ""),
                         job_listing_url=str(normalized.get("job_listing_url") or ""),
                     )
                     if ok_leg:
-                        normalized["direct_application_url"] = candidate
+                        normalized["direct_application_url"] = clean_cand
                         break
-        if (
-            normalized.get("direct_application_url")
-            and str(normalized.get("application_method") or "").lower() in {"", "none", "unknown"}
-        ):
-            normalized["application_method"] = "external_link"
+        if normalized.get("direct_application_url"):
+            if normalized.get("email"):
+                normalized["application_method"] = "both"
+            elif str(normalized.get("application_method") or "").lower() in {"", "none", "unknown"}:
+                normalized["application_method"] = "external_link"
 
         # Step 5 Excel Output Rule for Ausbildung.de: If email is found, application form/link columns must be empty
-        if str(normalized.get("source") or "").lower() == "ausbildung.de" and normalized.get("email"):
+        src_name = str(normalized.get("source") or "").lower()
+        if src_name == "ausbildung.de" and normalized.get("email"):
             normalized["direct_application_url"] = ""
             normalized["form_link"] = ""
 
+        # Enforce Section 4 mandatory consistency invariants for Excel export
+        ex_status = str(normalized.get("extraction_status") or "").strip().lower()
+        ap_method = str(normalized.get("application_method") or "").strip().lower()
+        has_em = bool(normalized.get("email") and "@" in str(normalized.get("email")))
+        has_app_url = bool(normalized.get("direct_application_url"))
+        has_fm = bool(normalized.get("form_link")) or has_app_url
+
+        if ex_status == "verified_email" and not has_em:
+            normalized["extraction_status"] = "manual_review_required"
+        elif ex_status == "verified_application_link" and not has_app_url:
+            normalized["extraction_status"] = "manual_review_required"
+        elif ex_status == "verified_application_form" and not has_fm:
+            normalized["extraction_status"] = "manual_review_required"
+
+        if ap_method == "portal_login_required" and not (has_app_url or has_fm):
+            normalized["application_method"] = "unknown"
+            normalized["bewerbung_art"] = "Unbekannt"
+            if normalized.get("extraction_status") in ("completed", "verified_application_link", "verified_application_form"):
+                normalized["extraction_status"] = "manual_review_required"
+
+        target_cols = list(EXCEL_EXPORT_COLUMNS)
+        if include_diagnostic_columns:
+            for extra_c in (
+                "application_url_original",
+                "application_url_final",
+                "application_url_type",
+                "application_url_verified",
+                "application_url_validation_reason",
+                "application_url_redirect_chain",
+                "application_url_job_match",
+                "application_url_employer_match",
+                "employer_website_url",
+                "search_query",
+                "normalized_requested_occupation",
+                "detected_job_occupation",
+                "occupation_match_type",
+                "relevance_score",
+                "relevance_decision_reason",
+            ):
+                if extra_c not in target_cols:
+                    target_cols.append(extra_c)
+
         rows.append({
             column: _neutralize_excel_formula(normalized.get(column, ""))
-            for column in EXCEL_EXPORT_COLUMNS
+            for column in target_cols
         })
 
-    return pd.DataFrame(rows, columns=EXCEL_EXPORT_COLUMNS)
+    final_cols = list(EXCEL_EXPORT_COLUMNS)
+    if include_diagnostic_columns and rows:
+        final_cols = list(rows[0].keys())
+    return pd.DataFrame(rows, columns=final_cols)
 
 
 def _write_spreadsheet_records(file_path: Path, records: List[Dict]) -> None:
@@ -674,23 +760,175 @@ def _build_job_dedupe_key(job: Dict) -> str:
     return f"obj:{id(job)}"
 
 
+def _is_placeholder_field_value(val: Any) -> bool:
+    if val is None:
+        return True
+    s = str(val).strip()
+    if not s:
+        return True
+    lower = s.lower()
+    if lower in {"n/a", "k. a.", "k.a.", "none", "null", "nan", "unbekannt", "unknown", "keine", "kein email gefunden"}:
+        return True
+    if lower.startswith("error:"):
+        return True
+    return False
+
+
+def _enrich_existing_record(target: Dict, incoming: Dict) -> bool:
+    """Fill missing/placeholder fields in `target` from `incoming`. Returns True if any field was enriched."""
+    changed = False
+    enrichable_fields = (
+        "email",
+        "phone",
+        "contact_person",
+        "arbeitsgeber",
+        "employer_website",
+        "direct_application_url",
+        "form_link",
+        "job_listing_url",
+        "postal_code",
+        "city",
+        "location",
+        "start_date",
+        "published_date",
+    )
+    for field in enrichable_fields:
+        incoming_val = incoming.get(field)
+        if _is_placeholder_field_value(incoming_val):
+            continue
+        if field == "email" and "@" not in str(incoming_val):
+            continue
+        if _is_placeholder_field_value(target.get(field)):
+            target[field] = incoming_val
+            changed = True
+
+    if changed:
+        rewritten = normalize_job_opportunity_row(target)
+        target.update(rewritten)
+    return changed
+
+
+def _extract_arbeitsagentur_ref_from_url(url_value: Any) -> str:
+    s = str(url_value or "").strip()
+    if not s:
+        return ""
+    m = re.search(r"/jobdetail/([^/?#]+)", s, flags=re.IGNORECASE)
+    return m.group(1).strip().lower() if m else ""
+
+
+def _build_known_job_index(existing_rows: List[Dict]) -> Dict[str, Set[str]]:
+    """Build fast O(1) lookup sets of URLs, reference IDs, and (company, title, city) tuples from existing dataset rows."""
+    urls: Set[str] = set()
+    refs: Set[str] = set()
+    tuples: Set[str] = set()
+    complete_keys: Set[str] = set()
+
+    for row in existing_rows or []:
+        if not isinstance(row, dict):
+            continue
+        has_valid_contact = (
+            (not _is_placeholder_field_value(row.get("email")) and "@" in str(row.get("email") or ""))
+            or not _is_placeholder_field_value(row.get("direct_application_url"))
+            or not _is_placeholder_field_value(row.get("form_link"))
+        )
+        dedupe_key = _build_job_dedupe_key(row)
+        if has_valid_contact:
+            complete_keys.add(dedupe_key)
+
+        for uf in ("job_listing_url", "url", "original_url", "apply_url"):
+            u = str(row.get(uf) or "").strip().lower().rstrip("/")
+            if u and u not in {"n/a", "none"}:
+                if has_valid_contact:
+                    urls.add(u)
+                ref_from_url = _extract_arbeitsagentur_ref_from_url(u)
+                if ref_from_url and has_valid_contact:
+                    refs.add(ref_from_url)
+
+        for rf in ("refnr", "reference", "job_id", "external_id"):
+            rv = str(row.get(rf) or "").strip().lower()
+            if rv and rv not in {"n/a", "none", "k. a."} and has_valid_contact:
+                refs.add(rv)
+
+        company = str(row.get("company") or "").strip().lower()
+        title = str(row.get("title") or "").strip().lower()
+        city = str(row.get("city") or row.get("location") or "").strip().lower()
+        if company and title and company not in {"n/a", "unbekannt"} and has_valid_contact:
+            tuples.add(f"{company}|{title}|{city}")
+
+    return {
+        "urls": urls,
+        "refs": refs,
+        "tuples": tuples,
+        "complete_keys": complete_keys,
+    }
+
+
+def _is_job_already_in_index(job_row: Dict, index: Dict[str, Set[str]]) -> bool:
+    """Return True if a scraped job listing already exists with valid contact info in the dataset."""
+    if not isinstance(job_row, dict) or not index:
+        return False
+
+    dk = _build_job_dedupe_key(job_row)
+    if dk in index.get("complete_keys", set()):
+        return True
+
+    for rf in ("reference", "refnr", "job_id", "external_id"):
+        rv = str(job_row.get(rf) or "").strip().lower()
+        if rv and rv not in {"n/a", "none", "k. a."} and rv in index.get("refs", set()):
+            return True
+
+    for uf in ("url", "job_listing_url", "original_url", "apply_url"):
+        u = str(job_row.get(uf) or "").strip().lower().rstrip("/")
+        if u and u in index.get("urls", set()):
+            return True
+        ref_from_url = _extract_arbeitsagentur_ref_from_url(u)
+        if ref_from_url and ref_from_url in index.get("refs", set()):
+            return True
+
+    company = str(job_row.get("company") or "").strip().lower()
+    title = str(job_row.get("title") or "").strip().lower()
+    city = str(job_row.get("city") or job_row.get("location") or "").strip().lower()
+    if company and title and f"{company}|{title}|{city}" in index.get("tuples", set()):
+        return True
+
+    return False
+
+
+def _row_needs_enrichment(row: Dict) -> bool:
+    """Return True if an existing spreadsheet row is missing an email and direct application URL, or had an extraction error."""
+    if not isinstance(row, dict):
+        return False
+    email_val = str(row.get("email") or "").strip()
+    has_valid_email = bool(email_val and "@" in email_val and not email_val.lower().startswith("error:"))
+    has_app_url = not _is_placeholder_field_value(row.get("direct_application_url")) or not _is_placeholder_field_value(row.get("form_link"))
+    if has_valid_email or has_app_url:
+        return False
+    has_crawlable_url = (
+        not _is_placeholder_field_value(row.get("job_listing_url"))
+        or not _is_placeholder_field_value(row.get("url"))
+        or not _is_placeholder_field_value(row.get("employer_website"))
+    )
+    return has_crawlable_url
+
+
 def _merge_job_records(existing_rows: List[Dict], new_rows: List[Dict]) -> List[Dict]:
     """
     Merges job opportunities while preserving ALL records regardless of email.
-    Excludes only genuine duplicate job opportunities.
+    When a duplicate vacancy key is encountered, enriches missing fields in the existing record.
     """
     merged: List[Dict] = []
-    seen_keys: Set[str] = set()
+    key_to_record: Dict[str, Dict] = {}
 
     for source_rows in (existing_rows or [], new_rows or []):
         for row in source_rows:
             if not isinstance(row, dict):
                 continue
-            key = _build_job_dedupe_key(row)
-            if key in seen_keys:
-                continue
-            seen_keys.add(key)
             normalized_row = normalize_job_opportunity_row(row)
+            key = _build_job_dedupe_key(normalized_row)
+            if key in key_to_record:
+                _enrich_existing_record(key_to_record[key], normalized_row)
+                continue
+            key_to_record[key] = normalized_row
             merged.append(normalized_row)
 
     return merged
@@ -713,12 +951,15 @@ def _get_running_ausbildungen_update_for_file(filename: str) -> Optional[Dict]:
     return None
 
 
-def _create_ausbildungen_update_job(file_path: Path) -> Dict:
+def _create_ausbildungen_update_job(file_path: Path, mode: str = "incremental") -> Dict:
     existing_rows = _load_spreadsheet_records(file_path)
     domain_name = _format_auto_export_domain_name(file_path)
     existing_row_count = len(existing_rows)
     job_id = str(uuid.uuid4())
     now = datetime.now().isoformat()
+    clean_mode = str(mode or "incremental").strip().lower()
+    if clean_mode not in {"incremental", "enrich", "clean"}:
+        clean_mode = "incremental"
 
     payload = {
         "job_id": job_id,
@@ -726,6 +967,7 @@ def _create_ausbildungen_update_job(file_path: Path) -> Dict:
         "file_path": str(file_path),
         "keyword": domain_name,
         "domain_name": domain_name,
+        "mode": clean_mode,
         "phase": "queued",
         "is_running": False,
         "stop_requested": False,
@@ -734,6 +976,11 @@ def _create_ausbildungen_update_job(file_path: Path) -> Dict:
         "captcha_needed": False,
         "current_index": 0,
         "total_jobs": 0,
+        "search_page": 0,
+        "search_fetched": 0,
+        "skipped_known": 0,
+        "rows_enriched": 0,
+        "duplicates_removed": 0,
         "emails_found": 0,
         "captchas_solved": 0,
         "failed": 0,
@@ -741,6 +988,7 @@ def _create_ausbildungen_update_job(file_path: Path) -> Dict:
         "new_rows_added": 0,
         "existing_rows": existing_row_count,
         "result_rows": existing_row_count,
+        "percent": 0,
         "last_error": "",
         "created_at": now,
         "updated_at": now,
@@ -2483,6 +2731,9 @@ def _is_job_finished(job_record: Dict) -> bool:
         return True
     if job_record.get("email_extracted") is True:
         return True
+    attempt_state = str(job_record.get("attempt_state") or "").lower()
+    if attempt_state in ("completed", "manual_required", "failed", "timed_out"):
+        return True
     status = str(job_record.get("extraction_status") or "").lower()
     if status in ("completed", "verified", "failed", "captcha_restricted", "manual_required", "timed_out", "done"):
         return True
@@ -2961,7 +3212,7 @@ def _run_auto_extraction_job(job_id: str):
             "failed": failed_count,
         }
 
-        from concurrent.futures import ThreadPoolExecutor, as_completed
+        from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
         from scraper.rate_limiter import extract_domain, GLOBAL_CIRCUIT_BREAKER
         from services.worker_network_router import (
             load_worker_network_profiles,
@@ -3000,26 +3251,48 @@ def _run_auto_extraction_job(job_id: str):
                     }
                 cj["active_workers"] = 0
 
-        available_worker_ids = []
-        for w_id in range(1, max_workers + 1):
+        def _init_single_worker(w_id: int):
             prof = worker_profiles[w_id]
             if prof.connection_status == "failed" and not prof.allow_direct_fallback:
                 logger.warning("Worker %s network route offline, skipping per fail-closed setting.", w_id)
-                continue
+                return w_id, None, None
             try:
-                w_extractor = WorkingEmailExtractor(
-                    captcha_userid=CAPTCHA_USERID,
-                    captcha_apikey=CAPTCHA_APIKEY,
-                    headless=True,
-                    known_emails=existing_emails,
-                    initial_stats=initial_stats if w_id == 1 else None,
-                    worker_id=w_id,
-                    network_profile=prof,
-                    job_id=job_id,
-                )
+                try:
+                    w_ext = WorkingEmailExtractor(
+                        captcha_userid=CAPTCHA_USERID,
+                        captcha_apikey=CAPTCHA_APIKEY,
+                        headless=True,
+                        known_emails=existing_emails,
+                        initial_stats=initial_stats if w_id == 1 else None,
+                        worker_id=w_id,
+                        network_profile=prof,
+                        job_id=job_id,
+                        lazy_driver=True,
+                    )
+                except TypeError:
+                    w_ext = WorkingEmailExtractor(
+                        captcha_userid=CAPTCHA_USERID,
+                        captcha_apikey=CAPTCHA_APIKEY,
+                        headless=True,
+                        known_emails=existing_emails,
+                        initial_stats=initial_stats if w_id == 1 else None,
+                        worker_id=w_id,
+                        network_profile=prof,
+                        job_id=job_id,
+                    )
+                return w_id, w_ext, None
+            except Exception as ext_err:
+                return w_id, None, ext_err
+
+        available_worker_ids = []
+        with ThreadPoolExecutor(max_workers=max(1, max_workers), thread_name_prefix="worker-init") as init_pool:
+            init_results = list(init_pool.map(_init_single_worker, range(1, max_workers + 1)))
+
+        for w_id, w_extractor, ext_err in init_results:
+            if w_extractor is not None:
                 worker_extractors[w_id] = w_extractor
                 available_worker_ids.append(w_id)
-            except Exception as ext_err:
+            elif ext_err is not None:
                 logger.error("Failed to init extractor for worker %s: %s", w_id, ext_err)
                 with auto_extraction_jobs_lock:
                     cj = auto_extraction_jobs.get(job_id)
@@ -3041,6 +3314,8 @@ def _run_auto_extraction_job(job_id: str):
             return
 
         completed_count = 0
+        finished_jobs_count = start_index
+        unclaimed_tasks = len(unfinished_indices)
         total_time_spent = 0.0
         progress_lock = threading.Lock()
         worker_assignment_lock = threading.Lock()
@@ -3049,7 +3324,11 @@ def _run_auto_extraction_job(job_id: str):
         for worker_id in available_worker_ids:
             worker_slots.put(worker_id)
 
+        worker_active_task: Dict[int, Dict[str, Any]] = {}
+        evicted_job_indices: set = set()
+
         def _worker_task_job(i, job_record):
+            nonlocal completed_count, finished_jobs_count, unclaimed_tasks, total_time_spent
             job_record = dict(job_record or {})
             with auto_extraction_jobs_lock:
                 current_job = auto_extraction_jobs.get(job_id)
@@ -3057,9 +3336,19 @@ def _run_auto_extraction_job(job_id: str):
                     return i, job_record
 
             w_id = worker_slots.get()
+            slot_released = False
+            with auto_extraction_jobs_lock:
+                current_job = auto_extraction_jobs.get(job_id)
+                if not current_job or not current_job.get("is_running") or current_job.get("paused") or current_job.get("stop_requested"):
+                    worker_slots.put(w_id)
+                    return i, job_record
+
             t0 = time.time()
             has_error = False
             processed = job_record
+            platform = "Arbeitsagentur"
+            job_title = "Apprenticeship Position"
+            company_name = f"Job #{i+1}"
 
             try:
                 worker_ext = worker_extractors.get(w_id)
@@ -3073,6 +3362,14 @@ def _run_auto_extraction_job(job_id: str):
                 now_str = datetime.now().strftime("%H:%M:%S")
 
                 with progress_lock:
+                    unclaimed_tasks = max(0, unclaimed_tasks - 1)
+                    worker_active_task[w_id] = {
+                        "start_ts": t0,
+                        "job_index": i,
+                        "company": company_name,
+                        "title": job_title,
+                        "driver_terminated": False,
+                    }
                     with auto_extraction_jobs_lock:
                         cj = auto_extraction_jobs.get(job_id)
                         if cj and "workers" in cj:
@@ -3091,6 +3388,8 @@ def _run_auto_extraction_job(job_id: str):
 
                 def report_worker_stage(stage_name: str):
                     with progress_lock:
+                        if w_id in worker_active_task:
+                            worker_active_task[w_id]["last_stage_ts"] = time.time()
                         with auto_extraction_jobs_lock:
                             cj_inner = auto_extraction_jobs.get(job_id)
                             if cj_inner and "workers" in cj_inner:
@@ -3115,7 +3414,7 @@ def _run_auto_extraction_job(job_id: str):
                             processed = worker_ext.process_job(job_record, profession_keyword=kw)
                         else:
                             raise
-                    is_manual = bool(processed.get("manual_review_required")) or processed.get("extraction_status") == "manual_required"
+                    is_manual = bool(processed.get("manual_review_required")) or processed.get("extraction_status") in ("manual_required", "manual_review_required")
                     processed["attempt_state"] = "manual_required" if is_manual else "completed"
                     processed["attempt_finished_at"] = datetime.now().isoformat()
                     processed["_extracted"] = not is_manual
@@ -3142,7 +3441,18 @@ def _run_auto_extraction_job(job_id: str):
                     processed["extracted"] = True
             finally:
                 elapsed_job = time.time() - t0
-                worker_slots.put(w_id)
+                with progress_lock:
+                    # Only remove our own tracking entry; after eviction the slot may already serve another job.
+                    active_info = worker_active_task.get(w_id)
+                    if active_info and active_info.get("job_index") == i:
+                        worker_active_task.pop(w_id, None)
+                    was_evicted = i in evicted_job_indices
+                if not was_evicted and not slot_released:
+                    worker_slots.put(w_id)
+                    slot_released = True
+
+            if i in evicted_job_indices:
+                return i, jobs[i]
 
             raw_method = str(processed.get("extraction_method") or "fast_http").lower()
             if "selenium" in raw_method or processed.get("extraction_status") == "captcha_restricted":
@@ -3162,35 +3472,45 @@ def _run_auto_extraction_job(job_id: str):
             domain_name = extract_domain(job_url) if job_url else "unknown"
             is_rate_limited, _ = GLOBAL_CIRCUIT_BREAKER.is_cooling_down(domain_name)
 
-            nonlocal completed_count, total_time_spent
+            should_checkpoint = False
+            cj_snapshot = None
             with progress_lock:
+                if i in evicted_job_indices:
+                    return i, jobs[i]
+                was_already_finished = _is_job_finished(jobs[i])
                 completed_count += 1
                 total_time_spent += elapsed_job
                 jobs[i] = processed
-                curr_idx = min(len(jobs), total_jobs_count - len([j for j in jobs if not _is_job_finished(j)]))
+                if not was_already_finished and _is_job_finished(processed):
+                    finished_jobs_count += 1
+                curr_idx = min(len(jobs), finished_jobs_count)
                 avg_time = round(total_time_spent / completed_count, 2) if completed_count else 0.0
                 remaining_jobs = max(0, len(jobs) - curr_idx)
-                active_count = max(1, min(actual_workers, remaining_jobs))
                 throughput_per_second = completed_count / max(0.001, total_time_spent / actual_workers)
                 est_rem_seconds = round(remaining_jobs / throughput_per_second, 0) if throughput_per_second > 0 else 0
+                should_checkpoint = (completed_count % 5 == 0)
 
                 with auto_extraction_jobs_lock:
                     cj = auto_extraction_jobs.get(job_id)
                     if not cj:
                         return i, processed
 
+                    is_manual = (
+                        bool(processed.get("manual_review_required"))
+                        or processed.get("extraction_status") == "manual_required"
+                        or processed.get("attempt_state") == "manual_required"
+                    )
                     if "workers" in cj and f"worker_{w_id}" in cj["workers"]:
                         w_state = cj["workers"][f"worker_{w_id}"]
-                        is_manual = processed.get("extraction_status") == "manual_required"
                         w_state["completed_count"] = int(w_state.get("completed_count") or 0) + 1
                         w_state["method"] = method_used
                         w_state["last_activity"] = datetime.now().strftime("%H:%M:%S")
 
-                        if is_manual:
+                        if is_manual and unclaimed_tasks == 0:
                             w_state["status"] = "manual_required"
                             w_state["current_stage"] = "Manual Review"
                             w_state["current_job"] = f"Manual review: {company_name[:20]}"
-                        elif remaining_jobs > 0:
+                        elif unclaimed_tasks > 0:
                             w_state["status"] = "waiting"
                             w_state["current_stage"] = "Waiting for task..."
                             w_state["current_job"] = f"Finished {company_name[:25]}"
@@ -3210,20 +3530,20 @@ def _run_auto_extraction_job(job_id: str):
                     cj["throughput_jobs_per_minute"] = round(throughput_per_second * 60, 2)
                     cj["last_progress_at"] = datetime.now().isoformat()
 
-                    if processed.get("extraction_status") == "manual_required":
+                    if is_manual:
                         review_queue = cj.setdefault("manual_review_queue", [])
                         if not any(item.get("job_index") == i for item in review_queue if isinstance(item, dict)):
                             review_queue.append({
                                 "job_index": i,
                                 "job": processed,
-                                "reason": processed.get("manual_review_reason") or "Human verification required",
+                                "reason": processed.get("manual_review_reason") or processed.get("application_url_validation_reason") or "Human verification required",
                                 "checkpointed_at": datetime.now().isoformat(),
                                 "state": "manual_required",
                             })
 
                     norm_email = email_val.lower().strip().strip(".,;:") if email_val else ""
                     is_new_email = False
-                    if norm_email and "@" in norm_email and "error" not in norm_email:
+                    if norm_email and "@" in norm_email and not norm_email.startswith("error:"):
                         if norm_email not in unique_emails_seen:
                             unique_emails_seen.add(norm_email)
                             cj["emails_found"] = len(unique_emails_seen)
@@ -3331,47 +3651,174 @@ def _run_auto_extraction_job(job_id: str):
                     elif cj.get("is_running"):
                         cj["status_label"] = "Running"
 
-                if completed_count % 5 == 0:
-                    any_ext = next(iter(worker_extractors.values()), None)
-                    if any_ext:
-                        any_ext.save_progress(jobs, curr_idx - 1, custom_stats=cj)
-                    _save_auto_extraction_jobs_to_disk()
+                    search_run_id = cj.get("search_run_id") if cj else ""
+                    if should_checkpoint:
+                        cj_snapshot = dict(cj)
 
-                # Sync into originating search run
-                search_run_id = cj.get("search_run_id") if cj else ""
-                if search_run_id:
-                    with search_runs_lock:
-                        s_run = search_runs.get(search_run_id)
-                        if s_run and isinstance(s_run.get("jobs"), list):
-                            if i < len(s_run["jobs"]):
-                                s_run["jobs"][i].update(processed)
-                # Only update search_cache if it currently points to THIS search run
-                if search_run_id and search_cache.get("search_run_id") == search_run_id:
-                    with status_lock:
-                        cache_jobs = search_cache.get("jobs") or []
-                        if i < len(cache_jobs):
-                            cache_jobs[i].update(processed)
+            # Perform disk checkpointing and search_run syncing outside progress_lock
+            if should_checkpoint and cj_snapshot is not None:
+                any_ext = next(iter(worker_extractors.values()), None)
+                if any_ext:
+                    any_ext.save_progress(jobs, curr_idx - 1, custom_stats=cj_snapshot)
+                _save_auto_extraction_jobs_to_disk()
+
+            if search_run_id:
+                with search_runs_lock:
+                    s_run = search_runs.get(search_run_id)
+                    if s_run and isinstance(s_run.get("jobs"), list):
+                        if i < len(s_run["jobs"]):
+                            s_run["jobs"][i].update(processed)
+            if search_run_id and search_cache.get("search_run_id") == search_run_id:
+                with status_lock:
+                    cache_jobs = search_cache.get("jobs") or []
+                    if i < len(cache_jobs):
+                        cache_jobs[i].update(processed)
 
             return i, processed
 
         actual_workers = max(1, len(available_worker_ids))
-        with ThreadPoolExecutor(max_workers=actual_workers) as pool:
+        task_timeout = float(os.getenv("AUTO_EXTRACTION_TASK_TIMEOUT", "75.0"))
+        pool = ThreadPoolExecutor(max_workers=max(actual_workers * 2, actual_workers + 2))
+        try:
             futures = {pool.submit(_worker_task_job, idx, jobs[idx]): idx for idx in unfinished_indices}
-            for fut in as_completed(futures):
-                idx, res = fut.result()
-                jobs[idx] = res
+            pending_futures = set(futures.keys())
+            idx_to_future = {idx: fut for fut, idx in futures.items()}
+
+            while pending_futures:
+                done_futs, pending_futures = wait(pending_futures, timeout=0.5, return_when=FIRST_COMPLETED)
+                for fut in done_futs:
+                    try:
+                        idx, res = fut.result()
+                        if idx not in evicted_job_indices:
+                            jobs[idx] = res
+                    except Exception as fut_err:
+                        idx = futures.get(fut)
+                        logger.error("[AutoJob %s] Future failed for index %s: %s", job_id[:8], idx, fut_err)
+
                 with auto_extraction_jobs_lock:
                     current_job = auto_extraction_jobs.get(job_id)
-                    if current_job and (not current_job.get("is_running") or current_job.get("paused") or current_job.get("stop_requested")):
-                        logger.info(
-                            "[AutoJob %s] Cooperative interruption triggered (paused=%s, stop=%s); cancelling unstarted futures.",
-                            job_id[:8],
-                            current_job.get("paused"),
-                            current_job.get("stop_requested"),
-                        )
-                        for f in futures:
-                            f.cancel()
-                        break
+                    should_interrupt = bool(
+                        current_job
+                        and (not current_job.get("is_running") or current_job.get("paused") or current_job.get("stop_requested"))
+                    )
+                if should_interrupt:
+                    logger.info(
+                        "[AutoJob %s] Cooperative interruption triggered (paused=%s, stop=%s); cancelling unstarted futures.",
+                        job_id[:8],
+                        current_job.get("paused") if current_job else None,
+                        current_job.get("stop_requested") if current_job else None,
+                    )
+                    for f in list(pending_futures):
+                        f.cancel()
+                    break
+
+                # Watchdog check for stalled tasks
+                now_ts = time.time()
+                stalled_workers_to_recover = []
+                workers_with_live_challenge: set = set()
+                with progress_lock:
+                    has_active_tasks = bool(worker_active_task)
+                if has_active_tasks:
+                    try:
+                        from services.manual_captcha_service import get_manual_captcha_manager
+                        for ch in get_manual_captcha_manager().get_challenges_for_job(job_id, active_only=True):
+                            if ch.get("status") in ("pending", "failed"):
+                                workers_with_live_challenge.add(ch.get("worker_id"))
+                    except Exception:
+                        pass
+                with progress_lock:
+                    for w_id, active_meta in list(worker_active_task.items()):
+                        elapsed_w = now_ts - float(active_meta.get("start_ts") or now_ts)
+                        # A human-visible CAPTCHA challenge legitimately blocks up to its own 300s expiry.
+                        effective_timeout = max(task_timeout, 330.0) if w_id in workers_with_live_challenge else task_timeout
+                        if elapsed_w >= effective_timeout:
+                            stalled_workers_to_recover.append((w_id, dict(active_meta), elapsed_w))
+
+                for w_id, active_meta, elapsed_w in stalled_workers_to_recover:
+                    stalled_idx = active_meta["job_index"]
+                    logger.warning(
+                        "[AutoJob %s] Watchdog recovering stalled Worker %s on job #%s (%s) after %.1fs (timeout=%.1fs)",
+                        job_id[:8],
+                        w_id,
+                        stalled_idx,
+                        active_meta.get("company"),
+                        elapsed_w,
+                        task_timeout,
+                    )
+                    # 1. Cancel any pending manual CAPTCHA wait for this worker
+                    try:
+                        from services.manual_captcha_service import get_manual_captcha_manager
+                        mgr = get_manual_captcha_manager()
+                        for ch in mgr.get_challenges_for_job(job_id, active_only=True):
+                            if ch.get("worker_id") == w_id:
+                                mgr.skip_or_mark_manual(ch["challenge_id"], reason="Worker task timed out (watchdog)")
+                    except Exception:
+                        pass
+
+                    # 2. First attempt: close hung WebDriver to unblock socket/renderer wait
+                    if not active_meta.get("driver_terminated"):
+                        with progress_lock:
+                            if w_id in worker_active_task:
+                                worker_active_task[w_id]["driver_terminated"] = True
+                                worker_active_task[w_id]["terminated_at"] = now_ts
+                        w_ext = worker_extractors.get(w_id)
+                        if w_ext and getattr(w_ext, "driver", None):
+                            try:
+                                w_ext.driver.quit()
+                            except Exception:
+                                pass
+                            finally:
+                                w_ext.driver = None
+                        continue
+
+                    # 3. Second attempt (after grace period): force-evict wedged task and replenish worker slot
+                    term_at = float(active_meta.get("terminated_at") or now_ts)
+                    if now_ts - term_at >= min(2.0, task_timeout * 0.25):
+                        with progress_lock:
+                            evicted_job_indices.add(stalled_idx)
+                            worker_active_task.pop(w_id, None)
+                            timed_out_row = dict(jobs[stalled_idx] or {})
+                            timed_out_row["extraction_status"] = "timed_out"
+                            timed_out_row["attempt_state"] = "timed_out"
+                            timed_out_row["attempt_finished_at"] = datetime.now().isoformat()
+                            timed_out_row["_extracted"] = True
+                            timed_out_row["extracted"] = True
+                            timed_out_row["email_extracted"] = False
+                            if not _is_job_finished(jobs[stalled_idx]):
+                                finished_jobs_count += 1
+                            jobs[stalled_idx] = timed_out_row
+                            completed_count += 1
+                            curr_idx = min(len(jobs), finished_jobs_count)
+                            with auto_extraction_jobs_lock:
+                                cj = auto_extraction_jobs.get(job_id)
+                                if cj:
+                                    cj["current_index"] = curr_idx
+                                    cj["failed"] = int(cj.get("failed") or 0) + 1
+                                    cj["last_progress_at"] = datetime.now().isoformat()
+                                    if "workers" in cj and f"worker_{w_id}" in cj["workers"]:
+                                        ws = cj["workers"][f"worker_{w_id}"]
+                                        ws["status"] = "waiting" if unclaimed_tasks > 0 else "idle"
+                                        ws["current_stage"] = "Waiting for task..." if unclaimed_tasks > 0 else "Idle"
+                                        ws["current_job"] = f"Timed out {str(active_meta.get('company') or '')[:20]}"
+                                    cj["active_workers"] = sum(1 for w in cj.get("workers", {}).values() if w.get("status") == "working")
+                        worker_slots.put(w_id)
+                        wedged_fut = idx_to_future.get(stalled_idx)
+                        if wedged_fut in pending_futures:
+                            pending_futures.discard(wedged_fut)
+        finally:
+            # Let in-flight (non-evicted) tasks finish so their results are persisted, but never block forever.
+            in_flight = [f for f, f_idx in futures.items() if not f.done() and f_idx not in evicted_job_indices]
+            if in_flight:
+                wait(in_flight, timeout=task_timeout)
+                for f in in_flight:
+                    if f.done() and not f.cancelled():
+                        try:
+                            r_idx, r_res = f.result()
+                            if r_idx not in evicted_job_indices:
+                                jobs[r_idx] = r_res
+                        except Exception:
+                            pass
+            pool.shutdown(wait=False, cancel_futures=True)
 
         # Run cross-employer contamination detector across all processed jobs
         try:
@@ -3488,6 +3935,14 @@ def _run_auto_extraction_job(job_id: str):
                 pass
 
 
+def _is_ausbildungen_job_stopped(job_id: str) -> bool:
+    with ausbildungen_update_jobs_lock:
+        job = ausbildungen_update_jobs.get(job_id)
+        if not job:
+            return True
+        return (not bool(job.get("is_running"))) or bool(job.get("stop_requested"))
+
+
 def _run_ausbildungen_update_job(job_id: str):
     extractor = None
     try:
@@ -3497,6 +3952,7 @@ def _run_ausbildungen_update_job(job_id: str):
                 return
             file_path = Path(str(job.get("file_path") or ""))
             keyword = str(job.get("keyword") or "").strip()
+            mode = str(job.get("mode") or "incremental").strip().lower()
             job["phase"] = "loading"
             job["is_running"] = True
             job["stop_requested"] = False
@@ -3504,6 +3960,7 @@ def _run_ausbildungen_update_job(job_id: str):
             job["continue_requested"] = False
             job["captcha_needed"] = False
             job["last_error"] = ""
+            job["percent"] = 2
             job["updated_at"] = datetime.now().isoformat()
 
         if not file_path.exists():
@@ -3511,20 +3968,218 @@ def _run_ausbildungen_update_job(job_id: str):
 
         existing_rows = _load_spreadsheet_records(file_path)
         existing_emails = _extract_valid_emails_from_records(existing_rows)
+
+        # ------------------------------------------------------------------
+        # MODE 1: CLEAN & DEDUPLICATE (Instant In-Place Cleanup & Enrichment)
+        # ------------------------------------------------------------------
+        if mode == "clean":
+            _set_ausbildungen_update_job(
+                job_id,
+                phase="cleaning",
+                existing_rows=len(existing_rows),
+                total_jobs=len(existing_rows),
+                current_index=0,
+                percent=25,
+            )
+            cleaned_input: List[Dict] = []
+            repaired_count = 0
+            for idx, r in enumerate(existing_rows):
+                row_copy = dict(r)
+                raw_em = str(row_copy.get("email") or "").strip()
+                if raw_em.lower().startswith("error:") or (raw_em and "@" not in raw_em):
+                    row_copy["email"] = ""
+                    repaired_count += 1
+                cleaned_input.append(row_copy)
+
+            deduped_rows = _merge_job_records(cleaned_input, [])
+            duplicates_removed = max(len(existing_rows) - len(deduped_rows), 0)
+            valid_emails_after = len(_extract_valid_emails_from_records(deduped_rows))
+
+            _set_ausbildungen_update_job(job_id, phase="saving", percent=85)
+            _write_spreadsheet_records(file_path, deduped_rows)
+            _invalidate_export_files_cache()
+
+            _set_ausbildungen_update_job(
+                job_id,
+                phase="completed",
+                is_running=False,
+                paused=False,
+                continue_requested=False,
+                captcha_needed=False,
+                current_index=len(existing_rows),
+                total_jobs=len(existing_rows),
+                emails_found=valid_emails_after,
+                rows_enriched=repaired_count,
+                duplicates_removed=duplicates_removed,
+                new_rows_added=0,
+                result_rows=len(deduped_rows),
+                percent=100,
+                finished_at=datetime.now().isoformat(),
+            )
+            return
+
+        # ------------------------------------------------------------------
+        # MODE 2: ENRICH INCOMPLETE ROWS (Re-crawl rows missing emails/links)
+        # ------------------------------------------------------------------
+        if mode == "enrich":
+            candidate_indices = [
+                i for i, r in enumerate(existing_rows) if _row_needs_enrichment(r)
+            ]
+            skipped_complete = max(len(existing_rows) - len(candidate_indices), 0)
+            _set_ausbildungen_update_job(
+                job_id,
+                phase="extracting",
+                existing_rows=len(existing_rows),
+                result_rows=len(existing_rows),
+                total_jobs=len(candidate_indices),
+                current_index=0,
+                skipped_known=skipped_complete,
+                percent=10 if candidate_indices else 100,
+            )
+
+            if not candidate_indices:
+                _set_ausbildungen_update_job(
+                    job_id,
+                    phase="completed",
+                    is_running=False,
+                    percent=100,
+                    finished_at=datetime.now().isoformat(),
+                )
+                return
+
+            extractor = WorkingEmailExtractor(
+                captcha_userid=CAPTCHA_USERID,
+                captcha_apikey=CAPTCHA_APIKEY,
+                headless=True,
+                known_emails=existing_emails,
+            )
+
+            rows_enriched = 0
+            duplicate_emails = 0
+            checkpoint_interval = 25
+
+            for pos, row_idx in enumerate(candidate_indices):
+                if _is_ausbildungen_job_stopped(job_id):
+                    break
+
+                target_row = dict(existing_rows[row_idx])
+                if not target_row.get("url") and target_row.get("job_listing_url"):
+                    target_row["url"] = target_row["job_listing_url"]
+
+                try:
+                    processed = extractor.process_job(target_row, profession_keyword=keyword)
+                    normalized_email = _normalize_email(processed.get("email"))
+                    has_valid_email = bool(normalized_email and "@" in normalized_email)
+
+                    if has_valid_email:
+                        if normalized_email in existing_emails:
+                            duplicate_emails += 1
+                        else:
+                            existing_emails.add(normalized_email)
+                            extractor.stats["emails_found"] = int(extractor.stats.get("emails_found") or 0) + 1
+
+                    prepared_single = _prepare_download_jobs([processed])
+                    enriched_candidate = prepared_single[0] if prepared_single else processed
+                    if _enrich_existing_record(existing_rows[row_idx], enriched_candidate):
+                        rows_enriched += 1
+
+                    extractor.stats["processed"] = int(extractor.stats.get("processed") or 0) + 1
+                except Exception as exc:
+                    logger.error("Ausbildungen enrich row %s failed: %s", row_idx, exc)
+                    extractor.stats["failed"] = int(extractor.stats.get("failed") or 0) + 1
+
+                pct = min(95, 10 + int(((pos + 1) / max(len(candidate_indices), 1)) * 85))
+                _set_ausbildungen_update_job(
+                    job_id,
+                    current_index=pos + 1,
+                    emails_found=int(extractor.stats.get("emails_found") or 0),
+                    rows_enriched=rows_enriched,
+                    captchas_solved=int(extractor.stats.get("captchas_solved") or 0),
+                    failed=int(extractor.stats.get("failed") or 0),
+                    duplicate_emails=duplicate_emails,
+                    percent=pct,
+                    phase="extracting",
+                )
+
+                if rows_enriched > 0 and (pos + 1) % checkpoint_interval == 0:
+                    try:
+                        _write_spreadsheet_records(file_path, existing_rows)
+                        _invalidate_export_files_cache()
+                    except Exception as ck_err:
+                        logger.warning("Checkpoint save failed: %s", ck_err)
+
+            _set_ausbildungen_update_job(job_id, phase="saving", percent=96)
+            if rows_enriched > 0:
+                _write_spreadsheet_records(file_path, existing_rows)
+                _invalidate_export_files_cache()
+
+            stop_requested = _is_ausbildungen_job_stopped(job_id)
+            _set_ausbildungen_update_job(
+                job_id,
+                phase="stopped" if stop_requested else "completed",
+                is_running=False,
+                paused=False,
+                continue_requested=False,
+                captcha_needed=False,
+                rows_enriched=rows_enriched,
+                result_rows=len(existing_rows),
+                percent=100,
+                finished_at=datetime.now().isoformat(),
+            )
+            return
+
+        # ------------------------------------------------------------------
+        # MODE 3: INCREMENTAL (Find New Listings + Skip Known Before Crawl)
+        # ------------------------------------------------------------------
         _set_ausbildungen_update_job(
             job_id,
             phase="searching",
             existing_rows=len(existing_rows),
             result_rows=len(existing_rows),
+            percent=5,
         )
 
+        def _on_search_progress(info: Dict[str, Any]):
+            fetched_cnt = int(info.get("total_fetched") or 0)
+            page_num = int(info.get("page") or 1)
+            _set_ausbildungen_update_job(
+                job_id,
+                phase="searching",
+                search_page=page_num,
+                search_fetched=fetched_cnt,
+                percent=min(25, 5 + page_num * 2),
+            )
+
         scraper = EnhancedJobScraper()
-        fetched_jobs = scraper.fetch_all_jobs(keyword, "", max_jobs=DEFAULT_MAX_JOBS)
+        try:
+            fetched_jobs = scraper.fetch_all_jobs(
+                keyword,
+                "",
+                max_jobs=DEFAULT_MAX_JOBS,
+                progress_callback=_on_search_progress,
+                should_stop=lambda: _is_ausbildungen_job_stopped(job_id),
+            )
+        except TypeError:
+            fetched_jobs = scraper.fetch_all_jobs(keyword, "", max_jobs=DEFAULT_MAX_JOBS)
+
+        # Pre-filter already-known complete jobs BEFORE visiting websites
+        known_index = _build_known_job_index(existing_rows)
+        jobs_to_process: List[Dict] = []
+        skipped_known = 0
+        for candidate in fetched_jobs or []:
+            if _is_job_already_in_index(candidate, known_index):
+                skipped_known += 1
+            else:
+                jobs_to_process.append(candidate)
+
         _set_ausbildungen_update_job(
             job_id,
             phase="extracting",
-            total_jobs=len(fetched_jobs),
+            search_fetched=len(fetched_jobs or []),
+            skipped_known=skipped_known,
+            total_jobs=len(jobs_to_process),
             current_index=0,
+            percent=25 if jobs_to_process else 95,
         )
 
         extractor = WorkingEmailExtractor(
@@ -3535,7 +4190,10 @@ def _run_ausbildungen_update_job(job_id: str):
         )
 
         duplicate_emails = 0
-        for index, job_row in enumerate(fetched_jobs):
+        processed_jobs: List[Dict] = []
+        checkpoint_interval = 25
+
+        for index, job_row in enumerate(jobs_to_process):
             with ausbildungen_update_jobs_lock:
                 job = ausbildungen_update_jobs.get(job_id)
                 if not job:
@@ -3565,16 +4223,17 @@ def _run_ausbildungen_update_job(job_id: str):
                         logger.debug("Autofill queue routing: %s", q_err)
 
                 extractor.stats["processed"] = int(extractor.stats.get("processed") or 0) + 1
-                fetched_jobs[index] = processed
+                processed_jobs.append(processed)
             except Exception as exc:
                 logger.error("Ausbildungen update job row %s failed: %s", index, exc)
                 job_row["email"] = f"ERROR: {exc}"
                 job_row["phone"] = None
                 job_row["arbeitsgeber"] = None
                 job_row["email_extracted"] = False
-                fetched_jobs[index] = job_row
+                processed_jobs.append(job_row)
                 extractor.stats["failed"] = int(extractor.stats.get("failed") or 0) + 1
 
+            pct = min(95, 25 + int(((index + 1) / max(len(jobs_to_process), 1)) * 70))
             _set_ausbildungen_update_job(
                 job_id,
                 current_index=index + 1,
@@ -3584,15 +4243,28 @@ def _run_ausbildungen_update_job(job_id: str):
                 duplicate_emails=duplicate_emails,
                 paused=False,
                 captcha_needed=False,
+                percent=pct,
                 phase="extracting",
             )
 
-        new_rows = _prepare_download_jobs(fetched_jobs)
-        merged_rows = _merge_records_by_email(existing_rows, new_rows)
+            if len(processed_jobs) > 0 and (index + 1) % checkpoint_interval == 0:
+                try:
+                    interim_new = _prepare_download_jobs(processed_jobs)
+                    interim_merged = _merge_records_by_email(existing_rows, interim_new)
+                    if len(interim_merged) >= len(existing_rows):
+                        _write_spreadsheet_records(file_path, interim_merged)
+                        _invalidate_export_files_cache()
+                except Exception as ck_err:
+                    logger.warning("Incremental checkpoint save failed: %s", ck_err)
 
-        _set_ausbildungen_update_job(job_id, phase="saving")
-        if len(merged_rows) != len(existing_rows):
+        new_rows = _prepare_download_jobs(processed_jobs)
+        merged_rows = _merge_records_by_email(existing_rows, new_rows)
+        new_rows_added = max(len(merged_rows) - len(existing_rows), 0)
+
+        _set_ausbildungen_update_job(job_id, phase="saving", percent=96)
+        if new_rows_added > 0 or len(processed_jobs) > 0:
             _write_spreadsheet_records(file_path, merged_rows)
+            _invalidate_export_files_cache()
 
         with ausbildungen_update_jobs_lock:
             job = ausbildungen_update_jobs.get(job_id)
@@ -3607,8 +4279,9 @@ def _run_ausbildungen_update_job(job_id: str):
             paused=False,
             continue_requested=False,
             captcha_needed=False,
-            new_rows_added=max(len(merged_rows) - len(existing_rows), 0),
+            new_rows_added=new_rows_added,
             result_rows=len(merged_rows),
+            percent=100,
             finished_at=datetime.now().isoformat(),
         )
     except Exception as exc:
@@ -3694,6 +4367,7 @@ def ausbildungen_availability_api():
 def start_ausbildungen_update():
     data = request.get_json(silent=True) or {}
     filename = str(data.get("filename") or "").strip()
+    mode = str(data.get("mode") or "incremental").strip().lower()
     if not filename:
         return jsonify({"success": False, "message": "Dateiname fehlt"}), 400
 
@@ -3703,6 +4377,7 @@ def start_ausbildungen_update():
             {
                 "success": True,
                 "job_id": existing_job.get("job_id"),
+                "mode": existing_job.get("mode") or "incremental",
                 "message": "Update laeuft bereits",
             }
         )
@@ -3712,7 +4387,7 @@ def start_ausbildungen_update():
         return jsonify({"success": False, "message": "Exportdatei nicht gefunden"}), 404
 
     try:
-        payload = _create_ausbildungen_update_job(file_path)
+        payload = _create_ausbildungen_update_job(file_path, mode=mode)
     except Exception as exc:
         return jsonify({"success": False, "message": str(exc)}), 500
 
@@ -3727,6 +4402,7 @@ def start_ausbildungen_update():
         {
             "success": True,
             "job_id": payload.get("job_id"),
+            "mode": payload.get("mode"),
             "message": "Update gestartet",
         }
     )
@@ -4563,6 +5239,8 @@ def create_anschreibens_direct_jobs_bootstrap_api():
     return jsonify({
         "success": True,
         "session_id": session_id,
+        "client_id": client_id,
+        "client_name": client_name,
         "session": payload,
         "redirect_url": f"/create-anschreibens?session_id={session_id}",
     })
@@ -9146,6 +9824,14 @@ def pdf_preview_pdf():
         if row_index < 0 or row_index >= len(rows):
             return jsonify({"error": "row_index out of range"}), 400
 
+        # Synchronize updated vacancy and candidate row data if passed directly in preview request
+        incoming_row = data.get("row_data")
+        if incoming_row and isinstance(incoming_row, dict):
+            rows[row_index].update(incoming_row)
+        for key in ["company", "Unternehmen", "Firma", "position", "Position", "city", "Ort", "contact_person", "Ansprechpartner"]:
+            if data.get(key):
+                rows[row_index][key] = str(data[key]).strip()
+
         row_data = rows[row_index]
         active_template_index = int(session_data.get("active_template_index", 0) or 0)
         if 0 <= active_template_index < len(templates) and templates[active_template_index].strip():
@@ -9184,6 +9870,76 @@ def pdf_preview_pdf():
         )
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/create-anschreibens/sync-session-row", methods=["POST"])
+def api_create_anschreibens_sync_session_row():
+    """
+    Synchronizes frontend vacancy and candidate inputs into the active PDF session row.
+    Ensures that company, position, city, contact person, and candidate fields are
+    immediately reflected in ReportLab rendering and TemplateService substitution.
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        session_id = str(data.get("session_id") or "").strip()
+        row_index = int(data.get("row_index", 0))
+        row_data = data.get("row_data") or {}
+
+        if not session_id or session_id not in _pdf_sessions:
+            return jsonify({"success": False, "error": "PDF session not found"}), 404
+
+        session = _pdf_sessions[session_id]
+        rows = session.setdefault("rows", [])
+        if row_index < 0:
+            return jsonify({"success": False, "error": "Invalid row_index"}), 400
+
+        while len(rows) <= row_index:
+            rows.append({})
+
+        comp = str(data.get("company") or row_data.get("company") or row_data.get("Unternehmen") or "").strip()
+        pos = str(data.get("position") or row_data.get("position") or row_data.get("Position") or "").strip()
+        city = str(data.get("city") or row_data.get("city") or row_data.get("Ort") or "").strip()
+        contact = str(data.get("contact_person") or row_data.get("contact_person") or row_data.get("Ansprechpartner") or "").strip()
+
+        target_row = rows[row_index]
+        if comp:
+            target_row["company"] = comp
+            target_row["Unternehmen"] = comp
+            target_row["Firma"] = comp
+            target_row["arbeitgeber"] = comp
+        if pos:
+            target_row["position"] = pos
+            target_row["Position"] = pos
+            target_row["title"] = pos
+            target_row["job_title"] = pos
+            target_row["stelle"] = pos
+        if city:
+            target_row["city"] = city
+            target_row["Ort"] = city
+            target_row["location"] = city
+            target_row["standort"] = city
+        if contact:
+            target_row["contact_person"] = contact
+            target_row["Ansprechpartner"] = contact
+            target_row["ansprechpartner"] = contact
+
+        for k, v in row_data.items():
+            target_row[k] = v
+
+        cols = session.setdefault("columns", [])
+        for k in target_row.keys():
+            if k not in cols:
+                cols.append(k)
+
+        return jsonify({
+            "success": True,
+            "session_id": session_id,
+            "row_index": row_index,
+            "updated_row": target_row
+        })
+    except Exception as exc:
+        logger.error("api_sync_session_row error: %s", exc)
+        return jsonify({"success": False, "error": str(exc)}), 500
 
 
 @app.route("/api/generate-pdfs", methods=["POST"])
@@ -9977,6 +10733,166 @@ def ai_templatize():
     except Exception as exc:
         logger.error("AI templatize error: %s", exc)
         return jsonify({"error": f"KI-Verarbeitung fehlgeschlagen: {exc}"}), 500
+
+
+@app.route("/api/ai-status", methods=["GET"])
+def api_ai_status():
+    """Returns real-time status and active configuration of the AI engine."""
+    from services.ai_provider_manager import ai_manager
+    provider = getattr(ai_manager, "config", {}).get("primary_provider", "openai")
+    model = (
+        getattr(ai_manager, "config", {}).get("openai_model", "gpt-4o-mini")
+        if provider == "openai"
+        else getattr(ai_manager, "config", {}).get("gemini_model", "gemini-2.5-flash")
+    )
+    is_configured = getattr(ai_manager, "is_configured", False)
+    return jsonify({
+        "success": True,
+        "is_configured": is_configured,
+        "primary_provider": provider,
+        "active_model": model,
+        "status": "connected" if is_configured else "offline",
+        "description": f"AI Engine: {provider.upper()} ({model})",
+    })
+
+
+@app.route("/api/ai-generate-anschreiben", methods=["POST"])
+def api_ai_generate_anschreiben():
+    """
+    Generates an individualized, high-quality German cover letter (DIN 5008)
+    using CoverLetterEngine with job analysis, evidence selection, and QA validation.
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        client_id = str(data.get("client_id") or "").strip()
+        company = str(data.get("company") or "Unternehmen").strip()
+        position = str(data.get("position") or "Auszubildender").strip()
+        city = str(data.get("city") or "Deutschland").strip()
+        contact_person = str(data.get("contact_person") or "").strip()
+        job_description = str(data.get("job_description") or data.get("vacancy_text") or "").strip()
+        mode = str(data.get("mode") or "ai").lower()
+
+        from services.client_manager import client_manager
+        client_data = {}
+        if client_id:
+            client_data = client_manager.get_client(client_id) or {}
+            if not client_data:
+                from services.onboarding_tracker import onboarding_tracker
+                rec = onboarding_tracker.get_record(client_id)
+                if rec and rec.get("client_id"):
+                    client_data = client_manager.get_client(rec["client_id"]) or {}
+            if not client_data:
+                try:
+                    from services.supabase_service import supabase_service
+                    from services.onboarding_service import candidate_onboarding_service
+                    sup_app = supabase_service.get_application(client_id)
+                    if sup_app:
+                        onb = candidate_onboarding_service.onboard_candidate(client_id)
+                        actual_cid = onb.get("client_id")
+                        if actual_cid:
+                            client_data = client_manager.get_client(actual_cid) or {}
+                except Exception:
+                    pass
+
+        # If user explicitly requests deterministic template mode instead of AI
+        if mode == "template":
+            applicant = client_data.get("applicant") or client_data
+            personal = applicant.get("personal") or {}
+            full_name = data.get("candidate_name") or personal.get("full_name") or "Bewerber"
+            email = data.get("candidate_email") or applicant.get("contact", {}).get("email") or ""
+            phone = data.get("candidate_phone") or applicant.get("contact", {}).get("phone_display") or ""
+            city_cand = applicant.get("contact", {}).get("address", {}).get("city") or "Casablanca"
+            country_cand = applicant.get("contact", {}).get("address", {}).get("country") or "Marokko"
+            location_header = f"{city_cand}, {country_cand}"
+            today_str = datetime.now().strftime("%d.%m.%Y")
+            salutation = f"Sehr geehrte(r) {contact_person}," if contact_person else "Sehr geehrte Damen und Herren,"
+            betreff = f"Bewerbung um einen Ausbildungsplatz als {position}" if "ausbildung" in position.lower() else f"Bewerbung als {position}"
+            tpl_text = (
+                f"{full_name}\n{location_header}\n{email} | {phone}\n\n"
+                f"{company}\n{'z. H. ' + contact_person if contact_person else 'Personalabteilung'}\n{city}\n\n"
+                f"{city_cand}, den {today_str}\n\n"
+                f"{betreff}\n\n"
+                f"{salutation}\n\n"
+                f"gerne bewerbe ich mich bei {company} auf die ausgeschriebene Position als {position}.\n\n"
+                f"Mit freundlichen Grüßen\n\n{full_name}"
+            )
+            return jsonify({
+                "success": True,
+                "text": tpl_text,
+                "is_ai_generated": False,
+                "generation_mode": "template_mode",
+                "engine_used": "deterministic_template",
+                "model": "deterministic_template",
+                "word_count": len(tpl_text.split()),
+                "candidate": {"name": full_name, "city": city_cand},
+                "target": {"company": company, "position": position, "city": city},
+            })
+
+        # Execute CoverLetterEngine AI Generation
+        from services.cover_letter_engine import CoverLetterEngine
+
+        candidate_overrides = {
+            "candidate_name": data.get("candidate_name"),
+            "candidate_email": data.get("candidate_email"),
+            "candidate_phone": data.get("candidate_phone"),
+            "candidate_address": data.get("candidate_address"),
+        }
+
+        result = CoverLetterEngine.generate_cover_letter(
+            candidate_profile=client_data,
+            company=company,
+            position=position,
+            city=city,
+            contact_person=contact_person,
+            job_description=job_description,
+            candidate_overrides=candidate_overrides,
+        )
+
+        status_code = 200 if result.get("success") else 503
+        return jsonify(result), status_code
+
+    except Exception as exc:
+        logger.error("api_ai_generate_anschreiben error: %s", exc)
+        return jsonify({"success": False, "is_ai_generated": False, "generation_mode": "error", "error": str(exc)}), 500
+
+
+@app.route("/api/ai-refine-anschreiben", methods=["POST"])
+def api_ai_refine_anschreiben():
+    """
+    Executes bounded, targeted refinement of existing cover letter text
+    via CoverLetterEngine: 'improve', 'concise', 'formal', 'natural'.
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        text = str(data.get("text") or "").strip()
+        action = str(data.get("action") or "improve").strip().lower()
+        candidate_name = str(data.get("candidate_name") or "").strip()
+        company = str(data.get("company") or "").strip()
+        position = str(data.get("position") or "").strip()
+        location_header = str(data.get("location_header") or "").strip()
+
+        if not text:
+            return jsonify({"success": False, "error": "Kein Text zur Überarbeitung übergeben."}), 400
+
+        from services.cover_letter_engine import CoverLetterEngine
+        refined = CoverLetterEngine.refine_letter(
+            existing_text=text,
+            action=action,
+            candidate_name=candidate_name,
+            company=company,
+            position=position,
+            location_header=location_header,
+        )
+
+        status_code = 200 if refined.get("success") else 502
+        return jsonify(refined), status_code
+
+    except Exception as exc:
+        logger.error("api_ai_refine_anschreiben error: %s", exc)
+        return jsonify({"success": False, "error": str(exc)}), 500
+    except Exception as exc:
+        logger.error("api_ai_generate_anschreiben error: %s", exc)
+        return jsonify({"success": False, "error": str(exc)}), 500
 
 
 # ---------------------------------------------------------------------------

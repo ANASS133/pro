@@ -39,7 +39,7 @@ BROWSER_HEADER_PROFILES: List[Dict[str, str]] = [
         ),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language": "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Encoding": "gzip, deflate",
         "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
         "Sec-Ch-Ua-Mobile": "?0",
         "Sec-Ch-Ua-Platform": '"Windows"',
@@ -59,7 +59,7 @@ BROWSER_HEADER_PROFILES: List[Dict[str, str]] = [
         ),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
         "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Encoding": "gzip, deflate",
         "Sec-Ch-Ua": '"Chromium";v="125", "Google Chrome";v="125", "Not.A/Brand";v="24"',
         "Sec-Ch-Ua-Mobile": "?0",
         "Sec-Ch-Ua-Platform": '"Windows"',
@@ -79,7 +79,7 @@ BROWSER_HEADER_PROFILES: List[Dict[str, str]] = [
         ),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
         "Accept-Language": "de,de-DE;q=0.9,en;q=0.8,en-GB;q=0.7,en-US;q=0.6",
-        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Encoding": "gzip, deflate",
         "Sec-Ch-Ua": '"Chromium";v="124", "Microsoft Edge";v="124", "Not-A.Brand";v="99"',
         "Sec-Ch-Ua-Mobile": "?0",
         "Sec-Ch-Ua-Platform": '"Windows"',
@@ -99,7 +99,7 @@ BROWSER_HEADER_PROFILES: List[Dict[str, str]] = [
         ),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language": "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Encoding": "gzip, deflate",
         "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
         "Sec-Ch-Ua-Mobile": "?0",
         "Sec-Ch-Ua-Platform": '"macOS"',
@@ -198,8 +198,10 @@ class DomainCircuitBreaker:
                 self._cooldowns.pop(domain, None)
         return False, 0.0
 
-    def throttle_domain(self, domain_or_url: str, min_interval_seconds: float = 0.5) -> None:
-        """Enforce a minimum spacing between requests to the same domain."""
+    def throttle_domain(self, domain_or_url: str, min_interval_seconds: float = 0.5) -> float:
+        """Enforce a minimum spacing between requests to the same domain. Returns seconds slept."""
+        if min_interval_seconds <= 0:
+            return 0.0
         domain = extract_domain(domain_or_url)
         now = time.time()
         sleep_needed = 0.0
@@ -212,6 +214,7 @@ class DomainCircuitBreaker:
 
         if sleep_needed > 0:
             time.sleep(sleep_needed)
+        return sleep_needed
 
     def clear(self, domain_or_url: Optional[str] = None) -> None:
         """Reset circuit breaker for a domain or all domains."""
@@ -282,7 +285,7 @@ def safe_http_get(
     circuit_breaker: Optional[DomainCircuitBreaker] = None,
     allow_cooldown_skip: bool = True,
     apply_jitter: bool = True,
-    min_domain_interval: float = 0.4,
+    min_domain_interval: float = 0.2,
     verify: bool = False,
     **kwargs,
 ) -> Optional[requests.Response]:
@@ -309,9 +312,10 @@ def safe_http_get(
             return None
 
     # 2. Concurrency Throttle & Micro-Jitter (Idea C)
-    cb.throttle_domain(domain, min_interval_seconds=min_domain_interval)
-    if apply_jitter:
-        apply_micro_jitter(0.15, 0.45)
+    # Only apply micro-jitter if domain throttling did not already pace this request
+    slept = cb.throttle_domain(domain, min_interval_seconds=min_domain_interval)
+    if apply_jitter and slept < 0.05:
+        apply_micro_jitter(0.04, 0.12)
 
     # 3. Headers Rotation (Idea D)
     req_headers = get_rotated_browser_headers(headers)

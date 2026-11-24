@@ -1,0 +1,583 @@
+<section id="autofill-section" class="app-section" data-section="autofill" {% if initial_section
+                    !="autofill" %}hidden{% endif %}>
+                    <div class="af-hub-wrapper">
+                        <!-- Modern SaaS Header -->
+                        <header class="af-hero">
+                            <div class="af-hero-left">
+                                <div class="af-breadcrumb">
+                                    <span class="af-kicker-badge">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2.5">
+                                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                                        </svg>
+                                        AI Autofill &amp; Extension Hub
+                                    </span>
+                                </div>
+                                <h2 class="af-hero-title">Bewerberprofile &amp; Form Sandbox</h2>
+                                <p class="af-hero-desc">Manage candidate profiles, application documents, and test
+                                    automated form filling in the interactive form sandbox.</p>
+                            </div>
+                            <div class="af-hero-right">
+                                <span class="af-status-badge" id="autofill-backend-badge"
+                                    title="Lokaler AI Backend Server">
+                                    <span class="af-status-pulse"></span>
+                                    <span>Port 5000 Verbunden</span>
+                                </span>
+                                <div class="af-hero-actions">
+                                    <a href="/test-form" target="_blank" rel="noopener noreferrer" class="af-btn-ghost">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                            <polyline points="15 3 21 3 21 9"></polyline>
+                                            <line x1="10" y1="14" x2="21" y2="3"></line>
+                                        </svg>
+                                        <span>Deutsches Formular</span>
+                                    </a>
+                                    <a href="/french-form" target="_blank" rel="noopener noreferrer"
+                                        class="af-btn-ghost">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                                            <polyline points="15 3 21 3 21 9"></polyline>
+                                            <line x1="10" y1="14" x2="21" y2="3"></line>
+                                        </svg>
+                                        <span>French Form</span>
+                                    </a>
+                                </div>
+                            </div>
+                        </header>
+
+                        <!-- Toast / Status Message Bar -->
+                        <div id="autofill-status-bar" class="af-status-bar" hidden role="alert"></div>
+
+                        <!-- Two-Panel Workspace Grid -->
+                        <div class="af-workspace-grid">
+                            <!-- Left Panel: Profile Editor & Documents -->
+                            <div class="af-col-profile">
+                                <div class="af-card">
+                                    <!-- Card Header -->
+                                    <div class="af-card-header">
+                                        <div class="af-card-title-group">
+                                            <div class="af-card-icon">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2">
+                                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                                    <circle cx="12" cy="7" r="4"></circle>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <h3 class="af-card-title">Candidate Profile</h3>
+                                                <p class="af-card-subtitle">Candidate data, contact details and
+                                                    documents</p>
+                                            </div>
+                                        </div>
+                                        <div class="af-header-actions">
+                                            <span id="autofill-unsaved-badge" class="af-unsaved-badge" hidden>
+                                                <span class="af-unsaved-dot"></span> Nicht gespeichert
+                                            </span>
+                                            <button type="button" id="autofill-btn-import-cv" class="af-btn-secondary"
+                                                title="Analyze CV (PDF) and auto-populate candidate profile">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2">
+                                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                                    <polyline points="17 8 12 3 7 8"></polyline>
+                                                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                                                </svg>
+                                                <span>⚡ CV importieren</span>
+                                            </button>
+                                            <input type="file" id="af-cv-file-input" accept=".pdf"
+                                                style="display:none;" />
+                                            <button type="button" id="autofill-btn-set-active" class="af-btn-secondary"
+                                                title="Set as active candidate for all campaigns">
+                                                <span>⭐ Aktivieren</span>
+                                            </button>
+                                            <button type="button" id="autofill-btn-new-profile" class="af-btn-secondary"
+                                                title="Neues Profil erstellen">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2.5">
+                                                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                                                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                                                </svg>
+                                                <span>Neu</span>
+                                            </button>
+                                            <button type="button" id="autofill-btn-save-profile" class="af-btn-primary">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2">
+                                                    <path
+                                                        d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z">
+                                                    </path>
+                                                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                                                    <polyline points="7 3 7 8 15 8"></polyline>
+                                                </svg>
+                                                <span>Save Profile</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Candidate Quick Selector & Identity Banner -->
+                                    <div class="af-candidate-selector-bar">
+                                        <div class="af-candidate-avatar-wrap">
+                                            <div class="af-candidate-avatar" id="candidate-avatar">AS</div>
+                                        </div>
+                                        <div class="af-candidate-info">
+                                            <div class="af-candidate-name-row">
+                                                <h4 class="af-candidate-name" id="candidate-display-name">Anass Sibbi
+                                                </h4>
+                                                <span class="af-pill-doc" id="candidate-doc-count">0 Dokumente</span>
+                                            </div>
+                                            <p class="af-candidate-meta" id="candidate-display-meta">Softwareentwickler
+                                                &bull; Deutsch (de)</p>
+                                        </div>
+                                        <div class="af-profile-dropdown-wrap">
+                                            <label for="autofill-profile-selector" class="sr-only">Profil
+                                                wechseln</label>
+                                            <select id="autofill-profile-selector" class="af-profile-select">
+                                                <option value="">Lade Profile...</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <!-- Tab Navigation (6 Tabs with Icons) -->
+                                    <nav class="af-tabs-bar" aria-label="Profilbereiche">
+                                        <button type="button" class="af-tab-btn is-active" data-hub-tab="personal">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2">
+                                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                                <circle cx="12" cy="7" r="4"></circle>
+                                            </svg>
+                                            <span>Personal</span>
+                                        </button>
+                                        <button type="button" class="af-tab-btn" data-hub-tab="contact">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2">
+                                                <path
+                                                    d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z">
+                                                </path>
+                                                <polyline points="22,6 12,13 2,6"></polyline>
+                                            </svg>
+                                            <span>Kontakt &amp; Adresse</span>
+                                        </button>
+                                        <button type="button" class="af-tab-btn" data-hub-tab="professional">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2">
+                                                <rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect>
+                                                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path>
+                                            </svg>
+                                            <span>Beruf &amp; Skills</span>
+                                        </button>
+                                        <button type="button" class="af-tab-btn" data-hub-tab="documents">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2">
+                                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z">
+                                                </path>
+                                                <polyline points="14 2 14 8 20 8"></polyline>
+                                                <line x1="16" y1="13" x2="8" y2="13"></line>
+                                                <line x1="16" y1="17" x2="8" y2="17"></line>
+                                            </svg>
+                                            <span>Dokumente &amp; CV</span>
+                                        </button>
+                                        <button type="button" class="af-tab-btn" data-hub-tab="corrections">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2">
+                                                <circle cx="12" cy="12" r="3"></circle>
+                                                <path
+                                                    d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+                                                </path>
+                                            </svg>
+                                            <span>Korrekturen</span>
+                                        </button>
+                                        <button type="button" class="af-tab-btn" data-hub-tab="rawjson">
+                                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2">
+                                                <polyline points="16 18 22 12 16 6"></polyline>
+                                                <polyline points="8 6 2 12 8 18"></polyline>
+                                            </svg>
+                                            <span>JSON</span>
+                                        </button>
+                                    </nav>
+
+                                    <!-- Tab 1: Personal -->
+                                    <div class="hub-tab-pane af-tab-pane is-active" data-hub-pane="personal">
+                                        <div class="af-form-grid">
+                                            <div class="af-form-group">
+                                                <label for="af-profile-id" class="af-label">Profil-ID
+                                                    (Dateiname)</label>
+                                                <input type="text" id="af-profile-id" class="af-input af-input-readonly"
+                                                    placeholder="z. B. anass_sibbi" required readonly>
+                                                <span class="af-input-hint">Eindeutiger System-Bezeichner</span>
+                                            </div>
+                                            <div class="af-form-group">
+                                                <label for="af-profile-language" class="af-label">Profil-Sprache</label>
+                                                <select id="af-profile-language" class="af-select">
+                                                    <option value="de">Deutsch (de)</option>
+                                                    <option value="fr">French (fr)</option>
+                                                    <option value="en">Englisch (en)</option>
+                                                </select>
+                                                <span class="af-input-hint">Primary Form Language</span>
+                                            </div>
+                                            <div class="af-form-group">
+                                                <label for="af-first-name" class="af-label">Vorname</label>
+                                                <input type="text" id="af-first-name" class="af-input"
+                                                    placeholder="z. B. Max">
+                                            </div>
+                                            <div class="af-form-group">
+                                                <label for="af-last-name" class="af-label">Nachname</label>
+                                                <input type="text" id="af-last-name" class="af-input"
+                                                    placeholder="z. B. Mustermann">
+                                            </div>
+                                            <div class="af-form-group full-width">
+                                                <label for="af-full-name" class="af-label">Full Name</label>
+                                                <input type="text" id="af-full-name" class="af-input"
+                                                    placeholder="z. B. Max Mustermann">
+                                            </div>
+                                            <div class="af-form-group">
+                                                <label for="af-dob" class="af-label">Geburtsdatum</label>
+                                                <input type="date" id="af-dob" class="af-input">
+                                            </div>
+                                            <div class="af-form-group">
+                                                <label for="af-pob" class="af-label">Geburtsort</label>
+                                                <input type="text" id="af-pob" class="af-input"
+                                                    placeholder="z. B. Köln">
+                                            </div>
+                                            <div class="af-form-group">
+                                                <label for="af-nationality" class="af-label">Nationality</label>
+                                                <input type="text" id="af-nationality" class="af-input"
+                                                    placeholder="z. B. Deutsch / Marokkanisch">
+                                            </div>
+                                            <div class="af-form-group">
+                                                <label for="af-gender" class="af-label">Geschlecht</label>
+                                                <select id="af-gender" class="af-select">
+                                                    <option value="male">Male</option>
+                                                    <option value="female">Weiblich</option>
+                                                    <option value="other">Divers / keine Angabe</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Tab 2: Contact & Address -->
+                                    <div class="hub-tab-pane af-tab-pane" data-hub-pane="contact">
+                                        <div class="af-form-grid">
+                                            <div class="af-form-group">
+                                                <label for="af-email" class="af-label">E-Mail-Adresse</label>
+                                                <input type="email" id="af-email" class="af-input"
+                                                    placeholder="name@domain.com">
+                                            </div>
+                                            <div class="af-form-group">
+                                                <label for="af-phone" class="af-label">Telefon / Mobil</label>
+                                                <input type="tel" id="af-phone" class="af-input"
+                                                    placeholder="+49 170 1234567">
+                                            </div>
+                                            <div class="af-form-group">
+                                                <label for="af-street" class="af-label">Street</label>
+                                                <input type="text" id="af-street" class="af-input"
+                                                    placeholder="Sample Street">
+                                            </div>
+                                            <div class="af-form-group">
+                                                <label for="af-house-no" class="af-label">Hausnummer</label>
+                                                <input type="text" id="af-house-no" class="af-input" placeholder="12a">
+                                            </div>
+                                            <div class="af-form-group">
+                                                <label for="af-postal" class="af-label">Postleitzahl</label>
+                                                <input type="text" id="af-postal" class="af-input" placeholder="50667">
+                                            </div>
+                                            <div class="af-form-group">
+                                                <label for="af-city" class="af-label">Stadt</label>
+                                                <input type="text" id="af-city" class="af-input" placeholder="Köln">
+                                            </div>
+                                            <div class="af-form-group">
+                                                <label for="af-country" class="af-label">Land</label>
+                                                <input type="text" id="af-country" class="af-input"
+                                                    placeholder="Deutschland">
+                                            </div>
+                                            <div class="af-form-group">
+                                                <label for="af-country-code" class="af-label">Country Code (ISO)</label>
+                                                <input type="text" id="af-country-code" class="af-input"
+                                                    placeholder="DE">
+                                            </div>
+                                            <div class="af-form-group full-width">
+                                                <label for="af-linkedin" class="af-label">LinkedIn Profil-URL</label>
+                                                <input type="url" id="af-linkedin" class="af-input"
+                                                    placeholder="https://linkedin.com/in/username">
+                                            </div>
+                                            <div class="af-form-group full-width">
+                                                <label for="af-portfolio" class="af-label">Portfolio / Eigene
+                                                    Website</label>
+                                                <input type="url" id="af-portfolio" class="af-input"
+                                                    placeholder="https://meine-seite.de">
+                                            </div>
+                                            <div class="af-form-group full-width">
+                                                <label for="af-github" class="af-label">GitHub URL</label>
+                                                <input type="url" id="af-github" class="af-input"
+                                                    placeholder="https://github.com/username">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Tab 3: Professional & Skills -->
+                                    <div class="hub-tab-pane af-tab-pane" data-hub-pane="professional">
+                                        <div class="af-form-grid">
+                                            <div class="af-form-group full-width">
+                                                <label for="af-current-title" class="af-label">Aktueller Stellentitel /
+                                                    Rolle</label>
+                                                <input type="text" id="af-current-title" class="af-input af-input-lg"
+                                                    placeholder="z. B. Senior Softwareentwickler / Azubi Fachinformatiker">
+                                            </div>
+                                            <div class="af-form-group full-width">
+                                                <label for="af-headline" class="af-label">Application Headline</label>
+                                                <input type="text" id="af-headline" class="af-input"
+                                                    placeholder="z. B. Leidenschaftlicher Entwickler mit Fokus auf moderne Web-Apps">
+                                            </div>
+                                            <div class="af-form-group full-width">
+                                                <label for="af-summary" class="af-label">Profile Summary (Cover Letter
+                                                    Snippet)</label>
+                                                <textarea id="af-summary" class="af-textarea" rows="4"
+                                                    placeholder="Kurze Beschreibung Ihrer Erfahrungen, Schwerpunkte und Qualifikationen..."></textarea>
+                                            </div>
+                                            <div class="af-form-group full-width">
+                                                <label for="af-primary-fields" class="af-label">Schwerpunkte &amp;
+                                                    Fachgebiete (kommagetrennt)</label>
+                                                <input type="text" id="af-primary-fields" class="af-input"
+                                                    placeholder="z. B. Python, React, Flask, TypeScript, Docker">
+                                                <span class="af-input-hint">These skills are matched against form fields
+                                                    and dropdowns.</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Tab 4: Documents & CV Vault -->
+                                    <div class="hub-tab-pane af-tab-pane" data-hub-pane="documents">
+                                        <div class="af-doc-vault">
+                                            <div class="af-doc-dropzone-box">
+                                                <label for="af-file-upload-input" class="af-doc-dropzone">
+                                                    <div class="af-drop-icon">
+                                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
+                                                            stroke="currentColor" stroke-width="2">
+                                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                                            <polyline points="17 8 12 3 7 8"></polyline>
+                                                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                                                        </svg>
+                                                    </div>
+                                                    <span class="af-drop-text">Upload Document or CV</span>
+                                                    <span class="af-drop-sub">Supports PDF, JPG, PNG &bull; Linked
+                                                        directly to this candidate dossier</span>
+                                                    <input type="file" id="af-file-upload-input"
+                                                        accept=".pdf,.jpg,.jpeg,.png" style="display:none;">
+                                                </label>
+                                            </div>
+                                            <div class="af-doc-list" id="af-document-list">
+                                                <div class="doc-empty-state">No documents uploaded.</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Tab 5: Learned Corrections -->
+                                    <div class="hub-tab-pane af-tab-pane" data-hub-pane="corrections">
+                                        <div class="af-corrections-wrap">
+                                            <div class="af-corrections-header">
+                                                <div>
+                                                    <h4 class="af-section-title">Learned Field Mappings</h4>
+                                                    <p class="af-section-desc">Rules and corrections learned
+                                                        automatically when filling forms via the Chrome extension.</p>
+                                                </div>
+                                                <button type="button" id="af-btn-clear-corrections"
+                                                    class="af-btn-danger af-btn-sm">Delete all</button>
+                                            </div>
+                                            <div class="af-corrections-list" id="af-corrections-list">
+                                                <div class="doc-empty-state">Keine Korrekturen gespeichert.</div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Tab 6: Raw JSON Editor -->
+                                    <div class="hub-tab-pane af-tab-pane" data-hub-pane="rawjson">
+                                        <div class="af-json-editor-wrap">
+                                            <div class="af-json-toolbar">
+                                                <span class="af-json-badge">JSON-Struktur</span>
+                                                <span class="af-json-hint">Direkte Anpassung der Kandidatendaten</span>
+                                            </div>
+                                            <textarea id="af-raw-json" class="af-json-textarea" rows="16"
+                                                spellcheck="false"></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Right Panel: Form Sandbox & Extension Live Test -->
+                            <div class="af-col-sandbox">
+                                <div class="af-card af-sandbox-card" id="af-sandbox-card">
+                                    <!-- Sandbox Header -->
+                                    <div class="af-card-header af-sandbox-header">
+                                        <div class="af-card-title-group">
+                                            <div class="af-card-icon af-icon-sandbox">
+                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2">
+                                                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                                    <line x1="8" y1="21" x2="16" y2="21"></line>
+                                                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                                                </svg>
+                                            </div>
+                                            <div>
+                                                <h3 class="af-card-title">Form Sandbox</h3>
+                                                <p class="af-card-subtitle">Real-time test environment for the Chrome
+                                                    Extension</p>
+                                            </div>
+                                        </div>
+                                        <div class="af-sandbox-top-actions">
+                                            <button type="button" id="btn-expand-sandbox" class="af-icon-btn"
+                                                title="Vollbild / Normalansicht umschalten">
+                                                <svg class="expand-icon" width="15" height="15" viewBox="0 0 24 24"
+                                                    fill="none" stroke="currentColor" stroke-width="2">
+                                                    <polyline points="15 3 21 3 21 9"></polyline>
+                                                    <polyline points="9 21 3 21 3 15"></polyline>
+                                                    <line x1="21" y1="3" x2="14" y2="10"></line>
+                                                    <line x1="3" y1="21" x2="10" y2="14"></line>
+                                                </svg>
+                                                <svg class="shrink-icon" width="15" height="15" viewBox="0 0 24 24"
+                                                    fill="none" stroke="currentColor" stroke-width="2" hidden>
+                                                    <polyline points="4 14 10 14 10 20"></polyline>
+                                                    <polyline points="20 10 14 10 14 4"></polyline>
+                                                    <line x1="14" y1="10" x2="21" y2="3"></line>
+                                                    <line x1="10" y1="14" x2="3" y2="21"></line>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Sandbox Controls Bar -->
+                                    <div class="af-sandbox-toolbar">
+                                        <div class="af-segmented-control" role="tablist">
+                                            <button type="button" class="af-seg-btn is-active" id="btn-load-de-form"
+                                                role="tab" aria-selected="true">
+                                                <span>Deutsch (/test-form)</span>
+                                            </button>
+                                            <button type="button" class="af-seg-btn" id="btn-load-fr-form" role="tab"
+                                                aria-selected="false">
+                                                <span>Français (/french-form)</span>
+                                            </button>
+                                        </div>
+                                        <div class="af-sandbox-actions">
+                                            <button type="button" id="btn-autofill-sandbox-now" class="af-btn-primary"
+                                                onclick="if(window.autofillSandboxForm){window.autofillSandboxForm();}else{console.warn('autofillSandboxForm not ready');}"
+                                                style="display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 11.5px; font-weight: 600; background: #0284c7; color: #fff; border-radius: 6px; border: none; cursor: pointer; transition: all 0.15s ease;"
+                                                title="Füllt das Sandbox-Testformular sofort mit den Profildaten des aktiven Bewerbers aus">
+                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2.5">
+                                                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                                                </svg>
+                                                <span>⚡ Sandbox ausfüllen</span>
+                                            </button>
+                                            <span class="af-url-pill" id="af-current-sandbox-url">/test-form</span>
+                                            <button type="button" id="btn-refresh-sandbox" class="af-icon-btn"
+                                                title="Reload Form">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2">
+                                                    <path d="M23 4v6h-6"></path>
+                                                    <path d="M1 20v-6h6"></path>
+                                                    <path
+                                                        d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15">
+                                                    </path>
+                                                </svg>
+                                            </button>
+                                            <a href="/test-form" id="link-open-sandbox-tab" target="_blank"
+                                                rel="noopener noreferrer" class="af-icon-btn" title="Open in New Tab">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                                                    stroke="currentColor" stroke-width="2">
+                                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6">
+                                                    </path>
+                                                    <polyline points="15 3 21 3 21 9"></polyline>
+                                                    <line x1="10" y1="14" x2="21" y2="3"></line>
+                                                </svg>
+                                            </a>
+                                        </div>
+                                    </div>
+
+                                    <!-- Extension Testing Banner -->
+                                    <div class="af-extension-banner">
+                                        <div class="af-banner-icon">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                                                stroke="currentColor" stroke-width="2.5">
+                                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                                            </svg>
+                                        </div>
+                                        <div class="af-banner-text">
+                                            <strong>Live Extension Test:</strong>
+                                            <span>Open the extension or press
+                                                <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd>, to automatically fill this
+                                                test form!</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Browser Frame Container -->
+                                    <div class="af-browser-frame">
+                                        <div class="af-browser-topbar">
+                                            <div class="af-browser-dots">
+                                                <span class="dot dot-red"></span>
+                                                <span class="dot dot-yellow"></span>
+                                                <span class="dot dot-green"></span>
+                                            </div>
+                                            <div class="af-browser-address" id="af-browser-address-text">
+                                                http://localhost:5000/test-form</div>
+                                            <div class="af-browser-status">
+                                                <span class="af-live-pill">Sandbox Live</span>
+                                            </div>
+                                        </div>
+                                        <div class="af-iframe-wrap">
+                                            <iframe id="autofill-sandbox-iframe" src="/test-form"
+                                                title="JobScout Autofill Test Formular"></iframe>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bottom Card: Application History Log -->
+                        <div class="af-card af-history-card">
+                            <div class="af-card-header">
+                                <div class="af-card-title-group">
+                                    <div class="af-card-icon af-icon-history">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <polyline points="12 6 12 12 16 14"></polyline>
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <h3 class="af-card-title">Application History &amp; Log</h3>
+                                        <p class="af-card-subtitle">History of all applications submitted via the
+                                            Autofill extension or automated workflow.</p>
+                                    </div>
+                                </div>
+                                <button type="button" id="autofill-refresh-history" class="af-btn-secondary">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2">
+                                        <path d="M23 4v6h-6"></path>
+                                        <path d="M1 20v-6h6"></path>
+                                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15">
+                                        </path>
+                                    </svg>
+                                    <span>Refresh</span>
+                                </button>
+                            </div>
+                            <div class="af-history-table-container">
+                                <table class="af-history-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Stellentitel / Rolle</th>
+                                            <th>Unternehmen / Portal</th>
+                                            <th>Profil</th>
+                                            <th>Felder</th>
+                                            <th>Datum / Status</th>
+                                            <th style="text-align: right;">Aktion</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="autofill-history-body">
+                                        <tr>
+                                            <td colspan="6" class="af-history-empty">Loading application history...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
